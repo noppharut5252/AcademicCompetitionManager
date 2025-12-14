@@ -1,6 +1,4 @@
 
-
-
 import { AppData, User } from '../types';
 import { getMockData } from './mockData';
 
@@ -127,6 +125,22 @@ export const updateTeamResult = async (teamId: string, score: number, rank: stri
         return result.status === 'success';
     } catch (e) {
         console.error("Update Score failed", e);
+        return false;
+    }
+}
+
+export const updateTeamStatus = async (teamId: string, status: string, reason: string = ''): Promise<boolean> => {
+    try {
+        const response = await fetch(`${API_URL}?action=updateTeamStatus&teamId=${encodeURIComponent(teamId)}&status=${encodeURIComponent(status)}&reason=${encodeURIComponent(reason)}`, {
+            method: 'GET',
+            mode: 'cors'
+        });
+        
+        if (!response.ok) return false;
+        const result = await response.json();
+        return result.status === 'success';
+    } catch (e) {
+        console.error("Update Status failed", e);
         return false;
     }
 }
