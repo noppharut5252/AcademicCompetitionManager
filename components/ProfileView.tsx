@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { User, AppData } from '../types';
-import { User as UserIcon, Save, School, Shield, Mail, Phone, Loader2, Link as LinkIcon, CheckCircle } from 'lucide-react';
+import { User as UserIcon, Save, School, Shield, Mail, Phone, Loader2, Link as LinkIcon, CheckCircle, AlertCircle } from 'lucide-react';
 import { linkLineAccount } from '../services/api';
 import { initLiff, loginLiff } from '../services/liff';
 
@@ -111,7 +111,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user, data, onUpdateUser }) =
                 <div className="w-full pt-4 mt-2 border-t border-gray-100">
                      <div className="mb-2 text-xs text-gray-400 font-medium uppercase tracking-wider text-left">LINE Connection</div>
                      {user.userline_id ? (
-                         <div className="flex items-center justify-center p-3 bg-green-50 text-green-700 rounded-lg text-sm font-medium">
+                         <div className="flex items-center justify-center p-3 bg-green-50 text-green-700 rounded-lg text-sm font-medium border border-green-100">
                              <CheckCircle className="w-4 h-4 mr-2" />
                              เชื่อมต่อแล้ว
                          </div>
@@ -119,7 +119,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user, data, onUpdateUser }) =
                          <button 
                             onClick={handleLinkLine}
                             disabled={isLinking}
-                            className="w-full flex items-center justify-center p-3 bg-[#06C755] text-white rounded-lg text-sm font-medium hover:bg-[#05b34c] transition-colors disabled:opacity-70"
+                            className="w-full flex items-center justify-center p-3 bg-[#06C755] text-white rounded-lg text-sm font-medium hover:bg-[#05b34c] transition-colors disabled:opacity-70 shadow-sm"
                          >
                              {isLinking ? <Loader2 className="w-4 h-4 animate-spin" /> : <LinkIcon className="w-4 h-4 mr-2" />}
                              เชื่อมต่อกับ LINE
@@ -190,8 +190,21 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user, data, onUpdateUser }) =
                         </div>
 
                         {message && (
-                            <div className={`p-3 rounded-lg text-sm flex items-center ${message.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
-                                {message.text}
+                            <div className={`
+                                p-4 rounded-lg text-sm flex items-start shadow-sm animate-in fade-in slide-in-from-top-2 duration-300
+                                ${message.type === 'success' 
+                                    ? 'bg-green-50 text-green-800 border-l-4 border-green-500' 
+                                    : 'bg-red-50 text-red-800 border-l-4 border-red-500'}
+                            `}>
+                                {message.type === 'success' ? (
+                                    <CheckCircle className="w-5 h-5 mr-3 flex-shrink-0 text-green-600" />
+                                ) : (
+                                    <AlertCircle className="w-5 h-5 mr-3 flex-shrink-0 text-red-600" />
+                                )}
+                                <div>
+                                    <p className="font-semibold">{message.type === 'success' ? 'สำเร็จ' : 'ข้อผิดพลาด'}</p>
+                                    <p className="mt-1 text-xs opacity-90">{message.text}</p>
+                                </div>
                             </div>
                         )}
 
@@ -215,3 +228,4 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user, data, onUpdateUser }) =
 };
 
 export default ProfileView;
+
