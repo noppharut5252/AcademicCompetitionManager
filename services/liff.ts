@@ -54,166 +54,117 @@ export const shareScoreResult = async (
   score: string | number, 
   medal: string,
   rank: string
-) => {
-    // @ts-ignore
-    if (!liff.isInClient()) {
-        alert("ฟีเจอร์นี้ใช้งานได้เฉพาะบนแอปพลิเคชัน LINE เท่านั้น");
-        return;
-    }
-
-    const medalColor = (medal === 'Gold') ? '#E6B800' : (medal === 'Silver') ? '#A0A0A0' : (medal === 'Bronze') ? '#CD7F32' : '#333333';
+): Promise<{ success: boolean; method: 'line' | 'share' | 'copy' | 'error' }> => {
     const medalThai = (medal === 'Gold') ? 'เหรียญทอง' : (medal === 'Silver') ? 'เหรียญเงิน' : (medal === 'Bronze') ? 'เหรียญทองแดง' : 'เข้าร่วม';
+    const rankText = rank ? ` (ลำดับที่ ${rank})` : '';
+    const textSummary = `🏆 ผลการแข่งขัน: ${activityName}\nทีม: ${teamName}\nโรงเรียน: ${schoolName}\n\n⭐ คะแนน: ${score}\n🏅 รางวัล: ${medalThai}${rankText}`;
 
-    const flexMessage = {
-        type: "flex",
-        altText: `ผลการแข่งขัน: ${teamName}`,
-        contents: {
-            "type": "bubble",
-            "body": {
-              "type": "box",
-              "layout": "vertical",
-              "contents": [
-                {
-                  "type": "text",
-                  "text": "ประกาศผลการแข่งขัน",
-                  "weight": "bold",
-                  "color": "#1DB446",
-                  "size": "xs"
-                },
-                {
-                  "type": "text",
-                  "text": activityName,
-                  "weight": "bold",
-                  "size": "lg",
-                  "margin": "md",
-                  "wrap": true
-                },
-                {
-                  "type": "separator",
-                  "margin": "lg"
-                },
-                {
+    // 1. Try LINE Flex Message
+    // @ts-ignore
+    if (typeof liff !== 'undefined' && liff.isInClient() && liff.isApiAvailable('shareTargetPicker')) {
+        const medalColor = (medal === 'Gold') ? '#E6B800' : (medal === 'Silver') ? '#A0A0A0' : (medal === 'Bronze') ? '#CD7F32' : '#333333';
+        
+        const flexMessage = {
+            type: "flex",
+            altText: `ผลการแข่งขัน: ${teamName}`,
+            contents: {
+                "type": "bubble",
+                "body": {
                   "type": "box",
                   "layout": "vertical",
-                  "margin": "lg",
-                  "spacing": "sm",
                   "contents": [
+                    { "type": "text", "text": "ประกาศผลการแข่งขัน", "weight": "bold", "color": "#1DB446", "size": "xs" },
+                    { "type": "text", "text": activityName, "weight": "bold", "size": "lg", "margin": "md", "wrap": true },
+                    { "type": "separator", "margin": "lg" },
                     {
-                      "type": "text",
-                      "text": teamName,
-                      "weight": "bold",
-                      "size": "md",
-                      "wrap": true
+                      "type": "box",
+                      "layout": "vertical",
+                      "margin": "lg",
+                      "spacing": "sm",
+                      "contents": [
+                        { "type": "text", "text": teamName, "weight": "bold", "size": "md", "wrap": true },
+                        { "type": "text", "text": schoolName, "size": "xs", "color": "#666666", "wrap": true }
+                      ]
                     },
                     {
-                      "type": "text",
-                      "text": schoolName,
-                      "size": "xs",
-                      "color": "#666666",
-                      "wrap": true
-                    }
+                      "type": "box",
+                      "layout": "vertical",
+                      "contents": [
+                        { "type": "text", "text": String(score), "size": "5xl", "weight": "bold", "color": "#333333", "align": "center" },
+                        { "type": "text", "text": "คะแนน (Score)", "size": "xxs", "color": "#aaaaaa", "align": "center" }
+                      ],
+                      "margin": "xl"
+                    },
+                    {
+                      "type": "box",
+                      "layout": "horizontal",
+                      "contents": [
+                        { "type": "text", "text": "รางวัล:", "flex": 1, "color": "#555555", "size": "sm" },
+                        { "type": "text", "text": medalThai, "flex": 2, "weight": "bold", "align": "end", "color": medalColor, "size": "sm" }
+                      ],
+                      "margin": "lg"
+                    },
+                    rank ? {
+                       "type": "box",
+                       "layout": "horizontal",
+                       "contents": [
+                         { "type": "text", "text": "ลำดับที่:", "flex": 1, "color": "#555555", "size": "sm" },
+                         { "type": "text", "text": rank, "flex": 2, "weight": "bold", "align": "end", "color": "#333333", "size": "sm" }
+                       ],
+                       "margin": "sm"
+                    } : { "type": "spacer", "size": "xs" }
                   ]
                 },
-                {
+                "footer": {
                   "type": "box",
                   "layout": "vertical",
                   "contents": [
                     {
-                      "type": "text",
-                      "text": String(score),
-                      "size": "5xl",
-                      "weight": "bold",
-                      "color": "#333333",
-                      "align": "center"
-                    },
-                    {
-                      "type": "text",
-                      "text": "คะแนน (Score)",
-                      "size": "xxs",
-                      "color": "#aaaaaa",
-                      "align": "center"
+                      "type": "button",
+                      "style": "link",
+                      "height": "sm",
+                      "action": {
+                        "type": "uri",
+                        "label": "ดูรายละเอียดเพิ่มเติม",
+                        "uri": window.location.href
+                      }
                     }
-                  ],
-                  "margin": "xl"
-                },
-                {
-                  "type": "box",
-                  "layout": "horizontal",
-                  "contents": [
-                    {
-                      "type": "text",
-                      "text": "รางวัล:",
-                      "flex": 1,
-                      "color": "#555555",
-                      "size": "sm"
-                    },
-                    {
-                      "type": "text",
-                      "text": medalThai,
-                      "flex": 2,
-                      "weight": "bold",
-                      "align": "end",
-                      "color": medalColor,
-                      "size": "sm"
-                    }
-                  ],
-                  "margin": "lg"
-                },
-                rank ? {
-                   "type": "box",
-                   "layout": "horizontal",
-                   "contents": [
-                     {
-                       "type": "text",
-                       "text": "ลำดับที่:",
-                       "flex": 1,
-                       "color": "#555555",
-                       "size": "sm"
-                     },
-                     {
-                       "type": "text",
-                       "text": rank,
-                       "flex": 2,
-                       "weight": "bold",
-                       "align": "end",
-                       "color": "#333333",
-                       "size": "sm"
-                     }
-                   ],
-                   "margin": "sm"
-                } : { "type": "spacer", "size": "xs" }
-              ]
-            },
-            "footer": {
-              "type": "box",
-              "layout": "vertical",
-              "contents": [
-                {
-                  "type": "button",
-                  "style": "link",
-                  "height": "sm",
-                  "action": {
-                    "type": "uri",
-                    "label": "ดูรายละเอียดเพิ่มเติม",
-                    "uri": "https://liff.line.me/" + LIFF_ID
-                  }
+                  ]
                 }
-              ]
-            }
-          }
-    };
+              }
+        };
 
-    try {
-        // @ts-ignore
-        if (liff.isApiAvailable('shareTargetPicker')) {
+        try {
             // @ts-ignore
             await liff.shareTargetPicker([flexMessage]);
-        } else {
-             // Fallback or alert
-             alert("อุปกรณ์ของท่านไม่รองรับการแชร์ข้อความ");
+            return { success: true, method: 'line' };
+        } catch (error) {
+            console.error("LINE Share failed", error);
+            // Fallback to Web Share
         }
-    } catch (error) {
-        console.error("Share failed", error);
-        alert("เกิดข้อผิดพลาดในการแชร์");
+    }
+
+    // 2. Try Web Share API (Mobile Browsers)
+    if (navigator.share) {
+        try {
+            await navigator.share({
+                title: 'ผลการแข่งขัน',
+                text: textSummary,
+                url: window.location.href,
+            });
+            return { success: true, method: 'share' };
+        } catch (error) {
+            // User cancelled or failed, try copy
+            console.log("Web Share cancelled/failed");
+        }
+    }
+
+    // 3. Fallback: Copy to Clipboard
+    try {
+        await navigator.clipboard.writeText(textSummary);
+        return { success: true, method: 'copy' };
+    } catch (err) {
+        return { success: false, method: 'error' };
     }
 }
+
