@@ -1,5 +1,6 @@
 
 
+
 import { AppData, User } from '../types';
 import { getMockData } from './mockData';
 
@@ -113,10 +114,10 @@ export const updateUser = async (user: Partial<User>): Promise<boolean> => {
     }
 }
 
-export const updateTeamResult = async (teamId: string, score: number, rank: string, medal: string): Promise<boolean> => {
+export const updateTeamResult = async (teamId: string, score: number, rank: string, medal: string, flag: string = ''): Promise<boolean> => {
     try {
         // Use GET for simplicity with simple triggers, or POST if large data
-        const response = await fetch(`${API_URL}?action=updateTeamResult&teamId=${encodeURIComponent(teamId)}&score=${score}&rank=${encodeURIComponent(rank)}&medal=${encodeURIComponent(medal)}`, {
+        const response = await fetch(`${API_URL}?action=updateTeamResult&teamId=${encodeURIComponent(teamId)}&score=${score}&rank=${encodeURIComponent(rank)}&medal=${encodeURIComponent(medal)}&flag=${encodeURIComponent(flag)}`, {
             method: 'GET',
             mode: 'cors'
         });
@@ -146,3 +147,4 @@ export const getTeamsByActivity = (data: AppData) => {
   });
   return Object.keys(counts).map(key => ({ name: key, value: counts[key] }));
 };
+
