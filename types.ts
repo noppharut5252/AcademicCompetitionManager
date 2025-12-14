@@ -68,6 +68,7 @@ export interface User {
   level: string; // e.g., 'admin', 'school_admin', 'user'
   email: string;
   avatarFileId: string;
+  isGuest?: boolean; // Added for frontend logic
 }
 
 export interface FileLog {

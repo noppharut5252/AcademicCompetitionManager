@@ -5,17 +5,33 @@ const FOLDER_ID = "1T6P3E7K1kWsaEOeO-vZdfrAGwh0dDHwo";
 function doGet(e) {
   const action = e.parameter.action;
   
-  // If specific action is requested via API
+  // Get All Data
   if (action === 'getData') {
     return ContentService.createTextOutput(JSON.stringify(getCompetitionData()))
       .setMimeType(ContentService.MimeType.JSON);
   }
   
+  // Get User by LINE ID
   if (action === 'getUser') {
     const lineId = e.parameter.lineId;
     const user = getUserByLineId(lineId);
     return ContentService.createTextOutput(JSON.stringify(user || {}))
       .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // Login with Username/Password
+  if (action === 'login') {
+    const username = e.parameter.username;
+    const password = e.parameter.password;
+    const user = authenticateUser(username, password);
+    
+    if (user) {
+        return ContentService.createTextOutput(JSON.stringify({ status: 'success', user: user }))
+            .setMimeType(ContentService.MimeType.JSON);
+    } else {
+        return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: 'Invalid credentials' }))
+            .setMimeType(ContentService.MimeType.JSON);
+    }
   }
 
   // Otherwise serve index.html
@@ -41,17 +57,39 @@ function getCompetitionData() {
   };
 }
 
-function getUserByLineId(lineId) {
+function authenticateUser(username, password) {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sheet = ss.getSheetByName('Users');
     if(!sheet) return null;
     
     const data = sheet.getDataRange().getValues();
     // Headers: "userid","username","password","name","surname","SchoolID","tel","userline_id","level","email","avatarFileId"
-    // Assuming userline_id is column index 7 (0-based) based on description
+    // username = col 1, password = col 2
     
-    // Find header index just to be safe, or use fixed mapping from prompt
-    // Prompt says: Users ... "userid" ... "userline_id" ...
+    // Skip header
+    for(let i=1; i<data.length; i++) {
+        if(String(data[i][1]) === String(username) && String(data[i][2]) === String(password)) {
+            return {
+                userid: data[i][0],
+                username: data[i][1],
+                name: data[i][3],
+                surname: data[i][4],
+                SchoolID: data[i][5],
+                level: data[i][8],
+                email: data[i][9],
+                avatarFileId: data[i][10]
+            };
+        }
+    }
+    return null;
+}
+
+function getUserByLineId(lineId) {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName('Users');
+    if(!sheet) return null;
+    
+    const data = sheet.getDataRange().getValues();
     
     // Skip header
     for(let i=1; i<data.length; i++) {

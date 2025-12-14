@@ -5,12 +5,9 @@ const API_URL = "https://script.google.com/macros/s/AKfycbyYcf6m-3ypN3aX8F6prN0B
 
 export const fetchData = async (): Promise<AppData> => {
   try {
-    // Using POST with 'no-cors' is tricky for reading data. 
-    // Standard fetch for GAS JSON API usually uses GET or POST with redirect: follow.
-    // For simple public GET:
     const response = await fetch(`${API_URL}?action=getData`, {
       method: 'GET',
-      mode: 'cors', // Ensure your GAS script is deployed as "Anyone"
+      mode: 'cors',
     });
 
     if (!response.ok) {
@@ -20,8 +17,7 @@ export const fetchData = async (): Promise<AppData> => {
     const data = await response.json();
     return data;
   } catch (error) {
-    console.warn("Fetching from live API failed, falling back to mock data for demo purposes.", error);
-    // Fallback to mock data if API fails (e.g., CORS issues during dev)
+    console.warn("Fetching from live API failed, falling back to mock data.", error);
     return getMockData();
   }
 };
@@ -39,6 +35,26 @@ export const checkUserPermission = async (lineUserId: string): Promise<User | nu
        console.error("Error checking user", e);
        return null;
    }
+}
+
+export const loginStandardUser = async (username: string, password: string): Promise<User | null> => {
+    try {
+        const response = await fetch(`${API_URL}?action=login&username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`, {
+            method: 'GET', // Using GET for simplicity in GAS deployment context, though POST is better practice
+            mode: 'cors'
+        });
+        
+        if (!response.ok) return null;
+        
+        const result = await response.json();
+        if (result.status === 'success' && result.user) {
+            return result.user;
+        }
+        return null;
+    } catch (e) {
+        console.error("Login failed", e);
+        return null;
+    }
 }
 
 export const getTeamCountByStatus = (data: AppData) => {
