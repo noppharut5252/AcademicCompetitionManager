@@ -10,6 +10,7 @@ interface TeamDetailModalProps {
   data: AppData;
   onClose: () => void;
   canEdit?: boolean;
+  onSaveSuccess?: () => void;
 }
 
 // Internal Toast Component for Modal
@@ -75,10 +76,11 @@ const PrefixInput = ({ value, onChange, placeholder }: { value: string, onChange
     );
 };
 
-const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, canEdit = false }) => {
+const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, canEdit = false, onSaveSuccess }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [uploadingState, setUploadingState] = useState<{ id: string, loading: boolean }>({ id: '', loading: false });
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   
   // Notification State
   const [toast, setToast] = useState<{ msg: string, type: 'success' | 'error', show: boolean }>({ msg: '', type: 'success', show: false });
@@ -171,15 +173,26 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
       setTimeout(() => setToast(prev => ({ ...prev, show: false })), 3000);
   };
 
+  const handleClose = () => {
+      if (hasUnsavedChanges) {
+          if (!window.confirm('คุณมีข้อมูลที่ยังไม่ได้บันทึก ต้องการปิดหน้าต่างหรือไม่?')) {
+              return;
+          }
+      }
+      onClose();
+  };
+
   // --- Edit Handlers ---
 
   const handleTeacherChange = (index: number, field: string, value: string) => {
+      setHasUnsavedChanges(true);
       const newTeachers = [...editTeachers];
       newTeachers[index] = { ...newTeachers[index], [field]: value };
       setEditTeachers(newTeachers);
   };
 
   const handleStudentChange = (index: number, field: string, value: string) => {
+      setHasUnsavedChanges(true);
       const newStudents = [...editStudents];
       newStudents[index] = { ...newStudents[index], [field]: value };
       setEditStudents(newStudents);
@@ -213,7 +226,8 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
                     newStudents[index] = { ...newStudents[index], image: fileUrl, fileId: response.fileId };
                     setEditStudents(newStudents);
                 }
-                showNotification('อัปโหลดรูปภาพสำเร็จ', 'success');
+                showNotification('อัปโหลดรูปภาพสำเร็จ (กรุณากดบันทึก)', 'success');
+                setHasUnsavedChanges(true);
           } else {
                 throw new Error(response.message || 'Upload failed');
           }
@@ -235,6 +249,7 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
   };
 
   const handleContactChange = (field: string, value: string) => {
+      setHasUnsavedChanges(true);
       setEditContact(prev => ({ ...prev, [field]: value }));
   };
 
@@ -275,7 +290,9 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
       
       if (success) {
           showNotification('บันทึกข้อมูลเรียบร้อยแล้ว', 'success');
+          setHasUnsavedChanges(false);
           setIsEditing(false);
+          if (onSaveSuccess) onSaveSuccess();
       } else {
           showNotification('บันทึกข้อมูลล้มเหลว กรุณาลองใหม่อีกครั้ง', 'error');
       }
@@ -331,7 +348,7 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
   return (
     <div 
         className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-        onClick={onClose}
+        onClick={handleClose}
     >
       {/* Toast Notification */}
       <ModalToast message={toast.msg} type={toast.type} isVisible={toast.show} />
@@ -352,7 +369,7 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
                         type="text" 
                         className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-lg font-bold text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none" 
                         value={editTeamName}
-                        onChange={(e) => setEditTeamName(e.target.value)}
+                        onChange={(e) => { setHasUnsavedChanges(true); setEditTeamName(e.target.value); }}
                         placeholder="ชื่อทีม..."
                     />
                 ) : (
@@ -395,7 +412,7 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
                       บันทึก
                   </button>
               )}
-              <button onClick={onClose} className="p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 rounded-full transition-colors shrink-0">
+              <button onClick={handleClose} className="p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 rounded-full transition-colors shrink-0">
                 <X className="w-6 h-6" />
               </button>
           </div>
