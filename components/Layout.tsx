@@ -2,16 +2,22 @@ import React from 'react';
 import { LayoutDashboard, Users, Trophy, School, Settings, LogOut, Award, FileBadge, IdCard, LogIn, UserCircle } from 'lucide-react';
 import { logoutLiff } from '../services/liff';
 import { User } from '../types';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 interface LayoutProps {
   children: React.ReactNode;
-  activeTab: string;
-  onTabChange: (tab: string) => void;
   userProfile?: User | any; // Supports both our User type and LIFF profile
 }
 
-const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, userProfile }) => {
+const Layout: React.FC<LayoutProps> = ({ children, userProfile }) => {
   const isGuest = !userProfile || userProfile.isGuest;
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Determine active tab from current path
+  const currentPath = location.pathname.substring(1) || 'dashboard';
+  // Handle root case or nested paths if necessary, simpler here:
+  const activeTab = currentPath.split('/')[0] || 'dashboard';
 
   const handleLogout = () => {
       if (isGuest) {
@@ -20,6 +26,10 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, userP
       } else {
           logoutLiff(); // This handles reloading too
       }
+  };
+
+  const handleNav = (id: string) => {
+      navigate(`/${id}`);
   };
 
   const menuItems = [
@@ -56,7 +66,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, userP
           {menuItems.map((item) => (
             <button
               key={item.id}
-              onClick={() => onTabChange(item.id)}
+              onClick={() => handleNav(item.id)}
               className={`
                 w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors
                 ${activeTab === item.id 
@@ -155,7 +165,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, userP
         {mobileMenuItems.map((item) => (
           <button
             key={item.id}
-            onClick={() => onTabChange(item.id)}
+            onClick={() => handleNav(item.id)}
             className={`
               flex flex-col items-center justify-center w-full h-full space-y-1
               ${activeTab === item.id ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}
@@ -166,7 +176,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, userP
           </button>
         ))}
         <button
-            onClick={() => onTabChange('schools')}
+            onClick={() => handleNav('schools')}
             className={`flex flex-col items-center justify-center w-full h-full space-y-1 ${['schools','activities','certificates','idcards'].includes(activeTab) ? 'text-blue-600' : 'text-gray-400'}`}
         >
             <div className="w-6 h-6 flex items-center justify-center border-2 border-current rounded-lg">
