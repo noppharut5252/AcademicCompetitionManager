@@ -69,6 +69,7 @@ export interface Team {
   flag: string; // Representative Flag
   stageInfo: string; // JSON string containing AreaStageInfo (Area Score, etc.)
   stageStatus: string;
+  editDeadline?: string; // New field for editing deadline
 }
 
 export interface User {
@@ -118,3 +119,4 @@ export interface AppData {
   files: FileLog[];
   announcements: Announcement[];
 }
+
