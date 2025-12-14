@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { AppData, User, Team } from '../types';
 import { updateTeamResult } from '../services/api';
 import { shareScoreResult, shareTop3Result } from '../services/liff';
-import { Save, Filter, AlertCircle, CheckCircle, Lock, Trophy, Search, ChevronRight, Share2, AlertTriangle, Calculator, X, Copy, PieChart, Check, ChevronDown, Flag, History, Loader2, ListChecks, Edit2, Crown } from 'lucide-react';
+import { Save, Filter, AlertCircle, CheckCircle, Lock, Trophy, Search, ChevronRight, Share2, AlertTriangle, Calculator, X, Copy, PieChart, Check, ChevronDown, Flag, History, Loader2, ListChecks, Edit2, Crown, LayoutGrid, AlertOctagon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 // --- Types & Interfaces ---
@@ -21,14 +21,14 @@ interface BatchItem {
     rank: string;
     medal: string;
     flag: string;
-    isModified: boolean; // New field to track modification status
+    isModified: boolean;
 }
 
 interface ConfirmModalProps {
     isOpen: boolean;
     type: 'single' | 'batch';
-    count?: number; // Modified count
-    totalCount?: number; // Total items in list
+    count?: number;
+    totalCount?: number;
     teamName?: string;
     newScore?: string;
     newRank?: string;
@@ -49,7 +49,8 @@ interface ToastProps {
 interface RecentLog {
     id: string;
     teamName: string;
-    activityName: string; // Added Activity Name
+    schoolName: string; // Added School Name
+    activityName: string;
     score: string;
     time: string;
 }
@@ -57,12 +58,9 @@ interface RecentLog {
 // --- Helper Functions ---
 
 const calculateMedal = (scoreStr: string, manualMedal: string): string => {
-    // If manual override is set (and not empty/Auto), use it
     if (manualMedal && manualMedal !== '' && manualMedal !== '- Auto -') return manualMedal;
-    
     const score = parseFloat(scoreStr);
     if (isNaN(score)) return '';
-    
     if (score >= 80) return 'Gold';
     if (score >= 70) return 'Silver';
     if (score >= 60) return 'Bronze';
@@ -169,9 +167,7 @@ const ConfirmModal: React.FC<ConfirmModalProps> = (props) => {
                                  </thead>
                                  <tbody className="divide-y divide-gray-200 bg-white">
                                      {props.batchItems?.map((item) => {
-                                         // Use calculated medal if "Auto" or empty, otherwise use explicit value
                                          const displayMedal = calculateMedal(item.score, item.medal);
-                                         
                                          return (
                                              <tr key={item.id} className={item.isModified ? 'bg-blue-50/70' : ''}>
                                                  <td className="px-3 py-2 text-gray-900">
@@ -318,6 +314,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
   const [confirmState, setConfirmState] = useState<{ isOpen: boolean, type: 'single' | 'batch', teamId: string | null }>({ isOpen: false, type: 'single', teamId: null });
   const [edits, setEdits] = useState<Record<string, { score: string, rank: string, medal: string, flag: string, isDirty: boolean }>>({});
   const [recentLogs, setRecentLogs] = useState<RecentLog[]>([]);
+  const [showMissingRepList, setShowMissingRepList] = useState(false);
 
   const showToast = (message: string, type: 'success' | 'error' | 'info') => {
       setToast({ message, type, isVisible: true });
@@ -366,7 +363,32 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       return { availableCategories: categories, availableActivities: activeActivities, allAuthorizedTeams: authorizedTeams };
   }, [data.activities, data.teams, data.schools, role, user]);
 
-  // Global Dashboard Stats
+  // Representative Stats Calculation
+  const repStats = useMemo(() => {
+      // Get IDs of all activities visible to this user
+      const activityIds = new Set(availableActivities.map(a => a.id));
+      
+      // Filter authorized teams to only those in the visible activities (already done in allAuthorizedTeams generally)
+      // Identify activities that have at least one Representative (Flag == TRUE)
+      const activitiesWithRep = new Set(
+          allAuthorizedTeams
+            .filter(t => String(t.flag).toUpperCase() === 'TRUE')
+            .map(t => t.activityId)
+            .filter(id => activityIds.has(id))
+      );
+      
+      const missingActivities = availableActivities.filter(a => !activitiesWithRep.has(a.id));
+
+      return {
+          total: availableActivities.length,
+          countWithRep: activitiesWithRep.size,
+          countMissing: missingActivities.length,
+          missingList: missingActivities
+      };
+  }, [availableActivities, allAuthorizedTeams]);
+
+
+  // Global Dashboard Stats (Existing)
   const globalStats = useMemo(() => {
       const total = allAuthorizedTeams.length;
       const scored = allAuthorizedTeams.filter(t => t.score > 0).length;
@@ -421,11 +443,6 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
           };
 
           const newState = { ...baseState, [field]: value, isDirty: true };
-          
-          if (field === 'score') {
-             // Auto medal update handled in render/modal via calculateMedal
-             // but we keep the state clean.
-          }
           return { ...prev, [teamId]: newState };
       });
   };
@@ -446,9 +463,9 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       setConfirmState({ isOpen: true, type: 'batch', teamId: null });
   };
 
-  const addRecentLog = (teamName: string, activityName: string, score: string) => {
+  const addRecentLog = (teamName: string, schoolName: string, activityName: string, score: string) => {
       const time = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
-      setRecentLogs(prev => [{ id: Date.now().toString(), teamName, activityName, score, time }, ...prev].slice(0, 5));
+      setRecentLogs(prev => [{ id: Date.now().toString(), teamName, schoolName, activityName, score, time }, ...prev].slice(0, 5));
   };
 
   const performUpdate = async (teamId: string, edit: any) => {
@@ -482,7 +499,8 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                 return rest;
             });
             const team = data.teams.find(t => t.teamId === teamId);
-            addRecentLog(team?.teamName || teamId, currentActivityName, edit.score);
+            const school = data.schools.find(s => s.SchoolID === team?.schoolId || s.SchoolName === team?.schoolId);
+            addRecentLog(team?.teamName || teamId, school?.SchoolName || '', currentActivityName, edit.score);
             showToast('บันทึกคะแนนเรียบร้อยแล้ว', 'success');
         } else {
             showToast('บันทึกข้อมูลล้มเหลว', 'error');
@@ -503,7 +521,8 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
             if (result) {
                 successCount++;
                 const team = data.teams.find(t => t.teamId === id);
-                addRecentLog(team?.teamName || id, currentActivityName, edit.score);
+                const school = data.schools.find(s => s.SchoolID === team?.schoolId || s.SchoolName === team?.schoolId);
+                addRecentLog(team?.teamName || id, school?.SchoolName || '', currentActivityName, edit.score);
             }
         }
 
@@ -629,42 +648,93 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
         <p className="text-gray-500">จัดการคะแนนและประกาศผลรางวัล</p>
       </div>
 
-      {/* 1. Global Stats */}
-      <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-xl p-6 text-white shadow-lg">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-6">
-              <div className="flex-1 w-full">
-                  <h3 className="text-lg font-bold mb-1 flex items-center">
-                      <PieChart className="w-5 h-5 mr-2 text-blue-400" />
-                      ภาพรวมการบันทึกคะแนน
-                  </h3>
-                  <div className="space-y-2 mt-2">
-                      <div className="flex justify-between text-sm">
-                          <span className="text-slate-300">ความคืบหน้า ({globalStats.scored}/{globalStats.total})</span>
-                          <span className="font-bold text-blue-400">{globalStats.percent}%</span>
-                      </div>
-                      <div className="w-full bg-slate-700/50 rounded-full h-3">
-                          <div className="bg-blue-500 h-3 rounded-full transition-all duration-700" style={{ width: `${globalStats.percent}%` }}></div>
-                      </div>
-                  </div>
-              </div>
-              <div className="grid grid-cols-3 gap-3 w-full md:w-auto">
-                  <div className="bg-slate-700/50 p-3 rounded-lg border border-slate-600/50 text-center min-w-[80px]">
-                      <div className="text-yellow-400 font-bold text-xl">{globalStats.gold}</div>
-                      <div className="text-[10px] text-slate-400 uppercase tracking-wide">Gold</div>
-                  </div>
-                  <div className="bg-slate-700/50 p-3 rounded-lg border border-slate-600/50 text-center min-w-[80px]">
-                      <div className="text-slate-300 font-bold text-xl">{globalStats.silver}</div>
-                      <div className="text-[10px] text-slate-400 uppercase tracking-wide">Silver</div>
-                  </div>
-                  <div className="bg-slate-700/50 p-3 rounded-lg border border-slate-600/50 text-center min-w-[80px]">
-                      <div className="text-orange-400 font-bold text-xl">{globalStats.bronze}</div>
-                      <div className="text-[10px] text-slate-400 uppercase tracking-wide">Bronze</div>
-                  </div>
-              </div>
-          </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* 1. Global Stats - Score Progress */}
+        <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-xl p-6 text-white shadow-lg flex flex-col justify-between">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                <div className="flex-1 w-full">
+                    <h3 className="text-lg font-bold mb-1 flex items-center">
+                        <PieChart className="w-5 h-5 mr-2 text-blue-400" />
+                        ภาพรวมการบันทึกคะแนน
+                    </h3>
+                    <div className="space-y-2 mt-4">
+                        <div className="flex justify-between text-sm">
+                            <span className="text-slate-300">ความคืบหน้า ({globalStats.scored}/{globalStats.total})</span>
+                            <span className="font-bold text-blue-400">{globalStats.percent}%</span>
+                        </div>
+                        <div className="w-full bg-slate-700/50 rounded-full h-3">
+                            <div className="bg-blue-500 h-3 rounded-full transition-all duration-700" style={{ width: `${globalStats.percent}%` }}></div>
+                        </div>
+                    </div>
+                </div>
+                <div className="grid grid-cols-3 gap-2 w-full md:w-auto mt-2 md:mt-0">
+                    <div className="bg-slate-700/50 p-2 rounded-lg border border-slate-600/50 text-center min-w-[70px]">
+                        <div className="text-yellow-400 font-bold text-lg">{globalStats.gold}</div>
+                        <div className="text-[10px] text-slate-400 uppercase tracking-wide">Gold</div>
+                    </div>
+                    <div className="bg-slate-700/50 p-2 rounded-lg border border-slate-600/50 text-center min-w-[70px]">
+                        <div className="text-slate-300 font-bold text-lg">{globalStats.silver}</div>
+                        <div className="text-[10px] text-slate-400 uppercase tracking-wide">Silver</div>
+                    </div>
+                    <div className="bg-slate-700/50 p-2 rounded-lg border border-slate-600/50 text-center min-w-[70px]">
+                        <div className="text-orange-400 font-bold text-lg">{globalStats.bronze}</div>
+                        <div className="text-[10px] text-slate-400 uppercase tracking-wide">Bronze</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {/* 2. Representative Status Dashboard */}
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 flex flex-col justify-between">
+             <div className="flex justify-between items-start mb-4">
+                <h3 className="text-lg font-bold text-gray-800 flex items-center">
+                    <Flag className="w-5 h-5 mr-2 text-purple-600" />
+                    สถานะการคัดเลือกตัวแทน
+                </h3>
+                <span className="px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 text-xs font-bold">
+                    {repStats.countWithRep} / {repStats.total} รายการ
+                </span>
+             </div>
+             
+             <div className="space-y-4">
+                 <div className="grid grid-cols-2 gap-4">
+                     <div className="bg-green-50 p-3 rounded-lg border border-green-100">
+                         <div className="text-xs text-green-600 font-medium uppercase mb-1">กำหนดตัวแทนแล้ว</div>
+                         <div className="text-2xl font-bold text-green-700">{repStats.countWithRep} <span className="text-sm font-normal text-green-600">รายการ</span></div>
+                     </div>
+                     <div className="bg-red-50 p-3 rounded-lg border border-red-100">
+                         <div className="text-xs text-red-600 font-medium uppercase mb-1">ยังไม่มีตัวแทน</div>
+                         <div className="text-2xl font-bold text-red-700">{repStats.countMissing} <span className="text-sm font-normal text-red-600">รายการ</span></div>
+                     </div>
+                 </div>
+
+                 {repStats.countMissing > 0 && (
+                     <div className="relative">
+                         <button 
+                            onClick={() => setShowMissingRepList(!showMissingRepList)}
+                            className="w-full flex items-center justify-between text-xs text-gray-500 hover:text-gray-700 py-1"
+                         >
+                             <span>แสดงรายการที่ยังไม่มีตัวแทน</span>
+                             <ChevronDown className={`w-3 h-3 transition-transform ${showMissingRepList ? 'rotate-180' : ''}`} />
+                         </button>
+                         
+                         {showMissingRepList && (
+                             <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 max-h-48 overflow-y-auto p-2">
+                                 {repStats.missingList.map(a => (
+                                     <div key={a.id} className="text-xs py-1.5 px-2 hover:bg-gray-50 text-gray-700 border-b border-gray-50 last:border-0 flex items-center">
+                                         <AlertOctagon className="w-3 h-3 text-red-400 mr-2 shrink-0" />
+                                         <span className="truncate">{a.name}</span>
+                                     </div>
+                                 ))}
+                             </div>
+                         )}
+                     </div>
+                 )}
+             </div>
+        </div>
       </div>
 
-      {/* 2. Selection Card */}
+      {/* 3. Selection Card */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">1. เลือกหมวดหมู่</label>
@@ -690,7 +760,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
           </div>
       </div>
 
-      {/* 3. Table Section */}
+      {/* 4. Table Section */}
       {selectedActivityId && (
           <div className="space-y-4">
               <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col md:flex-row justify-between items-center gap-4">
@@ -866,13 +936,18 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
               <div className="space-y-2">
                   {recentLogs.map(log => (
                       <div key={log.id} className="flex justify-between items-center text-sm p-2 bg-gray-50 rounded border border-gray-100 animate-in fade-in slide-in-from-bottom-2">
-                          <div>
-                              <div className="text-xs text-blue-500 font-medium mb-0.5">{log.activityName}</div>
-                              <span className="font-medium text-gray-900">{log.teamName}</span>
-                              <span className="mx-2 text-gray-300">|</span>
-                              <span className="text-blue-600 font-bold">{log.score} คะแนน</span>
+                          <div className="min-w-0 flex-1 mr-4">
+                              <div className="text-xs text-blue-500 font-medium mb-0.5 truncate">{log.activityName}</div>
+                              <div className="font-medium text-gray-900 truncate">{log.teamName}</div>
+                              <div className="text-xs text-gray-500 truncate flex items-center">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-gray-400 mr-1.5"></div>
+                                  {log.schoolName}
+                              </div>
                           </div>
-                          <span className="text-xs text-gray-400">{log.time}</span>
+                          <div className="text-right whitespace-nowrap">
+                              <span className="text-blue-600 font-bold block">{log.score} คะแนน</span>
+                              <span className="text-xs text-gray-400 block mt-0.5">{log.time}</span>
+                          </div>
                       </div>
                   ))}
               </div>
