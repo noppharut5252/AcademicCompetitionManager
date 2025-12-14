@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { AppData, Team, TeamStatus, User, AreaStageInfo } from '../types';
-import { Search, Filter, CheckCircle, XCircle, Clock, ChevronLeft, ChevronRight, Eye, Trophy, Medal, Hash, LayoutGrid, Users, Award, School, Printer, FileText, Star, Crown, Zap, Edit, Trash2 } from 'lucide-react';
+import { Search, Filter, CheckCircle, XCircle, Clock, ChevronLeft, ChevronRight, Eye, Trophy, Medal, Hash, LayoutGrid, Users, Award, School, Printer, FileText, Star, Crown, Zap, Edit, Trash2, Plus } from 'lucide-react';
 import TeamDetailModal from './TeamDetailModal';
 
 interface TeamListProps {
@@ -16,7 +16,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [categoryFilter, setCategoryFilter] = useState<string>('All');
   const [clusterFilter, setClusterFilter] = useState<string>('All');
-  const [quickFilter, setQuickFilter] = useState<'all' | 'gold' | 'qualified'>('all'); // New Quick Filter State
+  const [quickFilter, setQuickFilter] = useState<'all' | 'gold' | 'qualified'>('all'); 
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const [viewRound, setViewRound] = useState<'cluster' | 'area'>('area');
@@ -48,7 +48,6 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
   };
 
   // Logic to determine if a team is considered "Qualified" for Area Round
-  // Strict Rules: Rank 1 AND Flag (RepresentativeOverride) is TRUE
   const isTeamQualifiedForArea = (team: Team) => {
       const r = String(team.rank || '').trim();
       const f = String(team.flag || '').trim().toUpperCase();
@@ -108,16 +107,12 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
       let silver = 0;
       let bronze = 0;
       
-      // For Top Schools Calculation
       const schoolScores: Record<string, number> = {};
 
-      // Filter scopeTeams based on ViewRound for display consistency
-      // UPDATED: Using strict isTeamQualifiedForArea for Area view to match counts
       const displayTeams = viewRound === 'area' 
         ? scopeTeams.filter(t => isTeamQualifiedForArea(t)) 
         : scopeTeams;
 
-      // Calculate unique activities count
       const activitiesCount = new Set(displayTeams.map(t => t.activityId)).size;
 
       displayTeams.forEach(t => {
@@ -133,14 +128,12 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
           else if (score >= 70) silver++;
           else if (score >= 60) bronze++;
 
-          // Aggregate School Scores for Top Schools (Area View mainly)
           if (viewRound === 'area' && score > 0) {
               const sName = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId)?.SchoolName || t.schoolId;
               schoolScores[sName] = (schoolScores[sName] || 0) + score;
           }
       });
 
-      // Get Top 3 Schools
       const topSchools = Object.entries(schoolScores)
           .map(([name, score]) => ({ name, score }))
           .sort((a, b) => b.score - a.score)
@@ -154,7 +147,6 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
           activities: activitiesCount,
           pending: displayTeams.filter(t => normalizeStatus(t.status) === TeamStatus.PENDING).length,
           approved: displayTeams.filter(t => normalizeStatus(t.status) === TeamStatus.APPROVED).length,
-          // Qualified logic: Rank 1 AND Flag TRUE (Case insensitive check)
           qualified: scopeTeams.filter(t => isTeamQualifiedForArea(t)).length, 
           medals: { gold, silver, bronze },
           topSchools
@@ -186,15 +178,15 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
         } else if (role === 'school_admin' || role === 'user') {
             // For Standard User: Now sees ALL teams in their school
             const userSchool = data.schools.find(s => s.SchoolID === user.SchoolID);
-            if (userSchool) {
-                teams = teams.filter(t => t.schoolId === user.SchoolID || t.schoolId === userSchool.SchoolName);
+            if (user.SchoolID) {
+                // Filter by SchoolID OR SchoolName (to handle legacy data)
+                teams = teams.filter(t => 
+                    t.schoolId === user.SchoolID || 
+                    (userSchool && t.schoolId === userSchool.SchoolName)
+                );
             } else { 
                 // Fallback if User has no SchoolID yet -> Only see own created teams
-                if (role === 'user') {
-                     teams = teams.filter(t => t.createdBy === user.userid);
-                } else {
-                     teams = teams.filter(t => t.schoolId === user.SchoolID); 
-                }
+                teams = teams.filter(t => t.createdBy === user.userid);
             }
         } else if (role === 'score') {
             const allowedActivities = user.assignedActivities || [];
@@ -203,7 +195,6 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
     }
 
     // 2. Round Filtering
-    // UPDATED: Using strict isTeamQualifiedForArea for Area view
     if (viewRound === 'area') {
         teams = teams.filter(team => isTeamQualifiedForArea(team));
     }
@@ -226,14 +217,11 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
       const matchesCategory = categoryFilter === 'All' || (activity && activity.category === categoryFilter);
       const matchesCluster = clusterFilter === 'All' || (cluster && cluster.ClusterID === clusterFilter);
 
-      // Quick Filter Logic
       let matchesQuickFilter = true;
       if (quickFilter === 'gold') {
-          // Check score based on viewRound
           const score = viewRound === 'cluster' ? team.score : (getAreaInfo(team.stageInfo)?.score || 0);
           matchesQuickFilter = score >= 80;
       } else if (quickFilter === 'qualified') {
-          // Strict logic for Qualified Filter: Rank 1 AND Flag TRUE
           matchesQuickFilter = isTeamQualifiedForArea(team);
       }
 
@@ -268,56 +256,124 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
     return "https://cdn-icons-png.flaticon.com/512/3135/3135768.png"; 
   };
 
+  const handlePrintSummary = () => {
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) return;
+
+      const date = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
+      const scopeTitle = dashboardStats?.title || 'สรุปข้อมูลการแข่งขัน';
+      const roundTitle = viewRound === 'cluster' ? 'ระดับกลุ่มเครือข่าย' : 'ระดับเขตพื้นที่';
+
+      const teamsByActivity: Record<string, Team[]> = {};
+      filteredTeams.forEach(t => {
+          const actName = data.activities.find(a => a.id === t.activityId)?.name || t.activityId;
+          if (!teamsByActivity[actName]) teamsByActivity[actName] = [];
+          teamsByActivity[actName].push(t);
+      });
+
+      const htmlContent = `
+        <html>
+        <head>
+            <title>Summary Report</title>
+            <style>
+                body { font-family: 'Sarabun', 'Kanit', sans-serif; padding: 20px; }
+                h1, h2 { text-align: center; margin-bottom: 10px; }
+                .meta { text-align: center; color: #666; margin-bottom: 30px; font-size: 14px; }
+                table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 12px; }
+                th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                th { background-color: #f2f2f2; font-weight: bold; }
+                .activity-header { background-color: #e6f3ff; font-weight: bold; font-size: 14px; }
+                .status-approved { color: green; }
+                .status-pending { color: orange; }
+                @media print {
+                    .no-print { display: none; }
+                    body { -webkit-print-color-adjust: exact; }
+                }
+            </style>
+            <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600&family=Sarabun:wght@400;600&display=swap" rel="stylesheet">
+        </head>
+        <body>
+            <h1>รายงานสรุปข้อมูลการแข่งขัน</h1>
+            <h2>${scopeTitle} (${roundTitle})</h2>
+            <div class="meta">ข้อมูล ณ วันที่ ${date} | จำนวนทีมทั้งหมด: ${filteredTeams.length} ทีม</div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 5%">#</th>
+                        <th style="width: 30%">ชื่อทีม</th>
+                        <th style="width: 25%">โรงเรียน</th>
+                        <th style="width: 15%">สถานะ</th>
+                        <th style="width: 15%">ผลการแข่งขัน</th>
+                        <th style="width: 10%">หมายเหตุ</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${Object.entries(teamsByActivity).map(([actName, teams]) => `
+                        <tr class="activity-header"><td colspan="6">${actName} (${teams.length} ทีม)</td></tr>
+                        ${teams.map((t, idx) => {
+                             const school = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
+                             const rawScore = viewRound === 'cluster' ? t.score : getAreaInfo(t.stageInfo)?.score;
+                             const displayScore = (typeof rawScore === 'number' && rawScore > 0) ? rawScore : '-';
+                             return `
+                                <tr>
+                                    <td>${idx + 1}</td>
+                                    <td>${t.teamName}</td>
+                                    <td>${school?.SchoolName || t.schoolId}</td>
+                                    <td class="${t.status === 'Approved' ? 'status-approved' : 'status-pending'}">${normalizeStatus(t.status)}</td>
+                                    <td>${displayScore}</td>
+                                    <td>${t.flag === 'TRUE' ? 'ตัวแทนเขต' : ''}</td>
+                                </tr>
+                             `;
+                        }).join('')}
+                    `).join('')}
+                </tbody>
+            </table>
+            <div style="margin-top: 30px; text-align: right; font-size: 12px;">
+                ผู้พิมพ์รายงาน: ${user?.name || user?.username || 'Guest'}
+            </div>
+            <script>
+                window.onload = function() { window.print(); }
+            </script>
+        </body>
+        </html>
+      `;
+
+      printWindow.document.write(htmlContent);
+      printWindow.document.close();
+  };
+
   const isGroupAdmin = user?.level === 'group_admin';
   const isSchoolAdmin = user?.level === 'school_admin';
 
-  // Helper to check ownership
+  // Helper to check ownership/permission
   const isTeamOwner = (team: Team) => {
-      if (!user) return false;
-      return team.createdBy === user.userid;
-  }
+      if (!user || user.isGuest) return false;
+      const role = user.level?.toLowerCase();
 
-  const handlePrintSummary = () => {
-    window.print();
-  };
+      // Admin/Area can edit everything
+      if (role === 'admin' || role === 'area') return true;
+      
+      // School Admin: owns all in their school
+      if (role === 'school_admin') {
+          const userSchool = data.schools.find(s => s.SchoolID === user.SchoolID);
+          return team.schoolId === user.SchoolID || (userSchool && team.schoolId === userSchool.SchoolName);
+      }
+
+      // User: owns only teams they created
+      if (role === 'user') {
+          return team.createdBy === user.userid;
+      }
+
+      return false;
+  }
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       
-      {/* Styles for Printing */}
-      <style>{`
-        @media print {
-            body {
-                visibility: hidden;
-            }
-            #printable-content, #printable-content * {
-                visibility: visible;
-            }
-            #printable-content {
-                position: absolute;
-                left: 0;
-                top: 0;
-                width: 100%;
-                background: white;
-                padding: 20px;
-            }
-            @page {
-                size: A4 landscape;
-                margin: 1cm;
-            }
-            /* Hide URL printing on browsers that support it */
-            @media print {
-                a[href]:after {
-                    content: none !important;
-                }
-            }
-        }
-      `}</style>
-
       {/* Enhanced Dashboard Stats */}
       {dashboardStats && (
         <div className={`bg-gradient-to-r ${dashboardStats.bgGradient} rounded-2xl p-6 text-white shadow-lg mb-6 transition-all duration-300`}>
-            {/* ... Existing Dashboard Content ... */}
             <div className="flex justify-between items-start mb-6">
                 <h3 className="text-xl font-bold flex items-center">
                     <dashboardStats.icon className="w-6 h-6 mr-2" />
@@ -462,6 +518,17 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
         </div>
         
         <div className="flex gap-2">
+            {/* Add Team Button */}
+            {user && !user.isGuest && (['school_admin', 'user', 'admin'].includes(user.level?.toLowerCase())) && (
+                <button 
+                    onClick={() => alert("ระบบลงทะเบียนทีมยังไม่เปิดใช้งานในส่วนนี้")} 
+                    className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+                >
+                    <Plus className="w-4 h-4 sm:mr-2" />
+                    <span className="hidden sm:inline">ลงทะเบียนทีม</span>
+                </button>
+            )}
+
             {/* Round Toggle */}
             <div className="flex bg-gray-100 p-1 rounded-lg shadow-inner">
                 <button
@@ -479,8 +546,8 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
             </div>
 
             {/* Print Button */}
-             <button 
-                onClick={handlePrintSummary} 
+            <button 
+                onClick={handlePrintSummary}
                 className="flex items-center px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 hover:text-blue-600 transition-colors shadow-sm"
                 title="พิมพ์สรุปข้อมูล"
             >
