@@ -35,6 +35,15 @@ const App: React.FC = () => {
   // Initialize LIFF and Session on mount
   useEffect(() => {
     const initialize = async () => {
+      // 0. Always attempt to init LIFF to ensure SDK capabilities (Sharing) are ready
+      // This is non-blocking for local session check, but crucial for features.
+      let liffProfile: LiffProfile | null = null;
+      try {
+          liffProfile = await initLiff();
+      } catch (e) {
+          console.warn("LIFF init warning:", e);
+      }
+
       // 1. Check Local Storage for existing session
       const savedUserStr = localStorage.getItem('comp_user');
       if (savedUserStr) {
@@ -44,17 +53,14 @@ const App: React.FC = () => {
               setIsAuthenticated(true);
               setLiffChecking(false);
               fetchAppData();
-              return; // Skip LIFF check if session exists
+              return; 
           } catch(e) {
               localStorage.removeItem('comp_user');
           }
       }
 
-      // 2. If no session, check LIFF
-      try {
-        const liffProfile = await initLiff();
-        if (liffProfile) {
-          // If LIFF is logged in, check if this LINE ID exists in our Database
+      // 2. If no session, use LIFF to check if user needs to login/register
+      if (liffProfile) {
           setLoading(true);
           const dbUser = await checkUserPermission(liffProfile.userId);
           
@@ -85,12 +91,9 @@ const App: React.FC = () => {
              fetchAppData(); // Need data for schools list in registration
           }
           setLoading(false);
-        }
-      } catch (e) {
-          console.error("Auth check failed", e);
-      } finally {
-          setLiffChecking(false);
       }
+      
+      setLiffChecking(false);
     };
     initialize();
   }, []);
