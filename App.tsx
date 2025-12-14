@@ -9,10 +9,9 @@ import { AppData, User } from './types';
 import { fetchData, loginStandardUser } from './services/api';
 import { initLiff, loginLiff, LiffProfile } from './services/liff';
 import { Loader2, LogIn, User as UserIcon, Lock, Globe } from 'lucide-react';
-import { HashRouter } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 
 const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState('dashboard');
   const [data, setData] = useState<AppData | null>(null);
   const [loading, setLoading] = useState(false);
   const [liffChecking, setLiffChecking] = useState(true);
@@ -203,7 +202,7 @@ const App: React.FC = () => {
   }
 
   // 3. Main App Content (Authenticated)
-  const renderContent = () => {
+  const renderLoadingOrError = () => {
     if (loading) {
       return (
         <div className="flex flex-col items-center justify-center h-[50vh]">
@@ -228,44 +227,32 @@ const App: React.FC = () => {
         </div>
       );
     }
-
-    if (!data) return null;
-
-    switch (activeTab) {
-      case 'dashboard':
-        return <Dashboard data={data} />;
-      case 'teams':
-        return <TeamList data={data} user={currentUser} />;
-      case 'activities':
-        return <ActivityList data={data} />;
-      case 'results':
-        return <ResultsView data={data} />;
-      case 'certificates':
-        return <DocumentsView data={data} type="certificate" />;
-      case 'idcards':
-        return <DocumentsView data={data} type="idcard" />;
-      case 'schools':
-      case 'settings':
-         return (
-             <div className="bg-white p-6 rounded-xl border border-gray-100 text-center py-12">
-                 <h3 className="text-lg font-bold text-gray-800 mb-2">เมนูอื่นๆ</h3>
-                 <div className="grid grid-cols-2 gap-4 mt-6">
-                    <button onClick={() => setActiveTab('activities')} className="p-4 bg-gray-50 rounded-lg text-sm font-medium hover:bg-gray-100">รายการแข่งขัน</button>
-                    <button onClick={() => setActiveTab('schools')} className="p-4 bg-gray-50 rounded-lg text-sm font-medium hover:bg-gray-100">ข้อมูลโรงเรียน</button>
-                    <button onClick={() => setActiveTab('certificates')} className="p-4 bg-gray-50 rounded-lg text-sm font-medium hover:bg-gray-100">เกียรติบัตร</button>
-                    <button onClick={() => setActiveTab('idcards')} className="p-4 bg-gray-50 rounded-lg text-sm font-medium hover:bg-gray-100">บัตรประจำตัว</button>
-                 </div>
-             </div>
-         );
-      default:
-        return null;
-    }
+    return null;
   };
+
+  const PlaceholderMenu = ({ title }: { title: string }) => (
+      <div className="bg-white p-6 rounded-xl border border-gray-100 text-center py-12">
+          <h3 className="text-lg font-bold text-gray-800 mb-2">{title}</h3>
+          <p className="text-gray-500 text-sm">ส่วนนี้อยู่ระหว่างการพัฒนา</p>
+      </div>
+  );
 
   return (
     <HashRouter>
-      <Layout activeTab={activeTab} onTabChange={setActiveTab} userProfile={currentUser}>
-        {renderContent()}
+      <Layout userProfile={currentUser}>
+        {renderLoadingOrError() || (data && (
+            <Routes>
+                <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                <Route path="/dashboard" element={<Dashboard data={data} user={currentUser} />} />
+                <Route path="/teams" element={<TeamList data={data} user={currentUser} />} />
+                <Route path="/activities" element={<ActivityList data={data} />} />
+                <Route path="/results" element={<ResultsView data={data} />} />
+                <Route path="/certificates" element={<DocumentsView data={data} type="certificate" />} />
+                <Route path="/idcards" element={<DocumentsView data={data} type="idcard" />} />
+                <Route path="/schools" element={<PlaceholderMenu title="ข้อมูลโรงเรียน" />} />
+                <Route path="/settings" element={<PlaceholderMenu title="ตั้งค่าระบบ" />} />
+            </Routes>
+        ))}
       </Layout>
     </HashRouter>
   );
