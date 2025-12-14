@@ -477,49 +477,62 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
   };
 
   const handleAutoRank = () => {
-    // 1. Get current scores for all teams in view (merging edits and existing data)
-    const teamsWithScores = filteredTeams.map(team => {
-        const edit = edits[team.teamId];
-        const score = edit?.score ? parseFloat(edit.score) : team.score;
-        return { ...team, currentScore: isNaN(score) ? 0 : score };
+    // 1. Group teams by Cluster to ensure ranking is done per network/cluster context
+    // This supports scenarios where multiple clusters are viewed at once (e.g. by admin)
+    const teamsByCluster: Record<string, typeof filteredTeams> = {};
+    
+    filteredTeams.forEach(team => {
+        const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
+        const clusterId = school?.SchoolCluster || 'Unassigned';
+        if (!teamsByCluster[clusterId]) teamsByCluster[clusterId] = [];
+        teamsByCluster[clusterId].push(team);
     });
 
-    // 2. Sort by Score Descending
-    teamsWithScores.sort((a, b) => b.currentScore - a.currentScore);
-
-    // 3. Assign Ranks (Standard Competition Ranking: 1, 2, 2, 4...)
-    let currentRank = 1;
     const newEdits: typeof edits = {};
 
-    for (let i = 0; i < teamsWithScores.length; i++) {
-        if (i > 0 && teamsWithScores[i].currentScore < teamsWithScores[i - 1].currentScore) {
-            currentRank = i + 1;
-        }
-        
-        // Only update if rank has changed or wasn't set, and only if score > 0
-        if (teamsWithScores[i].currentScore > 0) {
-            const teamId = teamsWithScores[i].teamId;
-            const rankStr = String(currentRank);
+    // 2. Process each cluster independently
+    Object.values(teamsByCluster).forEach(clusterTeams => {
+        // Prepare score list
+        const teamsWithScores = clusterTeams.map(team => {
+            const edit = edits[team.teamId];
+            const score = edit?.score ? parseFloat(edit.score) : team.score;
+            return { ...team, currentScore: isNaN(score) ? 0 : score };
+        });
+
+        // Sort Descending
+        teamsWithScores.sort((a, b) => b.currentScore - a.currentScore);
+
+        // Assign Ranks (1, 2, 3...)
+        let currentRank = 1;
+        for (let i = 0; i < teamsWithScores.length; i++) {
+            if (i > 0 && teamsWithScores[i].currentScore < teamsWithScores[i - 1].currentScore) {
+                currentRank = i + 1;
+            }
             
-            // Preserve other edits if they exist
-            const prevEdit = edits[teamId];
-            const baseTeam = data.teams.find(t => t.teamId === teamId);
-            
-            // Check if rank actually needs update to avoid unnecessary dirty state
-            if (prevEdit?.rank !== rankStr && baseTeam?.rank !== rankStr) {
-                newEdits[teamId] = {
-                    score: prevEdit?.score ?? String(baseTeam?.score > 0 ? baseTeam.score : ''),
-                    rank: rankStr,
-                    medal: prevEdit?.medal ?? String(baseTeam?.medalOverride || ''),
-                    flag: prevEdit?.flag ?? String(baseTeam?.flag || ''),
-                    isDirty: true
-                };
+            // Only rank if score > 0
+            if (teamsWithScores[i].currentScore > 0) {
+                const teamId = teamsWithScores[i].teamId;
+                const rankStr = String(currentRank);
+                
+                const prevEdit = edits[teamId];
+                const baseTeam = data.teams.find(t => t.teamId === teamId);
+                
+                // Add to edits if changed
+                if (prevEdit?.rank !== rankStr && baseTeam?.rank !== rankStr) {
+                    newEdits[teamId] = {
+                        score: prevEdit?.score ?? String(baseTeam?.score > 0 ? baseTeam.score : ''),
+                        rank: rankStr,
+                        medal: prevEdit?.medal ?? String(baseTeam?.medalOverride || ''),
+                        flag: prevEdit?.flag ?? String(baseTeam?.flag || ''),
+                        isDirty: true
+                    };
+                }
             }
         }
-    }
+    });
 
     setEdits(prev => ({ ...prev, ...newEdits }));
-    showToast('คำนวณลำดับเรียบร้อยแล้ว (กรุณากดบันทึก)', 'info');
+    showToast('คำนวณลำดับ (แยกตามกลุ่มเครือข่าย) เรียบร้อยแล้ว (กรุณากดบันทึก)', 'info');
   };
 
   const initiateSave = (teamId: string) => {
