@@ -1,5 +1,5 @@
 
-import { AppData, User } from '../types';
+import { AppData, User, Team } from '../types';
 import { getMockData } from './mockData';
 
 const API_URL = "https://script.google.com/macros/s/AKfycbyYcf6m-3ypN3aX8F6prN0BLQcz0JyW0gj3Tq8dJyMs54gaTXSv_1uytthNu9H4CmMy/exec";
@@ -129,9 +129,9 @@ export const updateTeamResult = async (teamId: string, score: number, rank: stri
     }
 }
 
-export const updateTeamStatus = async (teamId: string, status: string, reason: string = ''): Promise<boolean> => {
+export const updateTeamStatus = async (teamId: string, status: string, reason: string = '', deadline: string = ''): Promise<boolean> => {
     try {
-        const response = await fetch(`${API_URL}?action=updateTeamStatus&teamId=${encodeURIComponent(teamId)}&status=${encodeURIComponent(status)}&reason=${encodeURIComponent(reason)}`, {
+        const response = await fetch(`${API_URL}?action=updateTeamStatus&teamId=${encodeURIComponent(teamId)}&status=${encodeURIComponent(status)}&reason=${encodeURIComponent(reason)}&deadline=${encodeURIComponent(deadline)}`, {
             method: 'GET',
             mode: 'cors'
         });
@@ -141,6 +141,39 @@ export const updateTeamStatus = async (teamId: string, status: string, reason: s
         return result.status === 'success';
     } catch (e) {
         console.error("Update Status failed", e);
+        return false;
+    }
+}
+
+export const deleteTeam = async (teamId: string): Promise<boolean> => {
+    try {
+        const response = await fetch(`${API_URL}?action=deleteTeam&teamId=${encodeURIComponent(teamId)}`, {
+            method: 'GET',
+            mode: 'cors'
+        });
+        
+        if (!response.ok) return false;
+        const result = await response.json();
+        return result.status === 'success';
+    } catch (e) {
+        console.error("Delete Team failed", e);
+        return false;
+    }
+}
+
+export const updateTeamDetails = async (team: Partial<Team>): Promise<boolean> => {
+    try {
+        const response = await fetch(`${API_URL}?action=updateTeamDetails`, {
+            method: 'POST',
+            mode: 'cors',
+            body: JSON.stringify(team)
+        });
+        
+        if (!response.ok) return false;
+        const result = await response.json();
+        return result.status === 'success';
+    } catch (e) {
+        console.error("Update Team Details failed", e);
         return false;
     }
 }
