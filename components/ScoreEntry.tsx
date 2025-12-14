@@ -1,9 +1,8 @@
-
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { AppData, User, Team } from '../types';
 import { updateTeamResult } from '../services/api';
 import { shareScoreResult } from '../services/liff';
-import { Save, Filter, AlertCircle, CheckCircle, Lock, Trophy, Search, ChevronRight, Share2, AlertTriangle, Calculator, X, Copy, PieChart, Check, ChevronDown, Flag } from 'lucide-react';
+import { Save, Filter, AlertCircle, CheckCircle, Lock, Trophy, Search, ChevronRight, Share2, AlertTriangle, Calculator, X, Copy, PieChart, Check, ChevronDown, Flag, History, Loader2, ListChecks } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 // --- Types & Interfaces ---
@@ -16,13 +15,15 @@ interface ScoreEntryProps {
 
 interface ConfirmModalProps {
     isOpen: boolean;
+    type: 'single' | 'batch';
+    count?: number;
+    teamName?: string;
+    newScore?: string;
+    newRank?: string;
+    newMedal?: string;
+    newFlag?: string;
     onConfirm: () => void;
     onCancel: () => void;
-    teamName: string;
-    newScore: string;
-    newRank: string;
-    newMedal: string;
-    newFlag: string;
 }
 
 interface ToastProps {
@@ -32,7 +33,105 @@ interface ToastProps {
     onClose: () => void;
 }
 
-// --- Searchable Select Component (Select2 style) ---
+interface RecentLog {
+    id: string;
+    teamName: string;
+    score: string;
+    time: string;
+}
+
+// --- Sub-Components ---
+
+const LoadingOverlay: React.FC<{ isVisible: boolean }> = ({ isVisible }) => {
+    if (!isVisible) return null;
+    return (
+        <div className="fixed inset-0 bg-black/50 z-[100] flex flex-col items-center justify-center backdrop-blur-sm animate-in fade-in">
+            <div className="bg-white p-6 rounded-2xl shadow-xl flex flex-col items-center space-y-4">
+                <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
+                <div className="text-gray-800 font-medium">กำลังบันทึกข้อมูล...</div>
+                <div className="text-xs text-gray-500">กรุณาอย่าปิดหน้าต่าง</div>
+            </div>
+        </div>
+    );
+};
+
+const Toast: React.FC<ToastProps> = ({ message, type, isVisible, onClose }) => {
+    useEffect(() => {
+        if (isVisible) {
+            const timer = setTimeout(onClose, 3000);
+            return () => clearTimeout(timer);
+        }
+    }, [isVisible, onClose]);
+
+    if (!isVisible) return null;
+
+    const bgClass = type === 'success' ? 'bg-green-600' : type === 'error' ? 'bg-red-600' : 'bg-blue-600';
+    const icon = type === 'success' ? <CheckCircle className="w-5 h-5" /> : type === 'error' ? <AlertCircle className="w-5 h-5" /> : <Trophy className="w-5 h-5" />;
+
+    return (
+        <div className={`fixed top-4 right-4 z-[100] flex items-center p-4 mb-4 text-white rounded-lg shadow-lg ${bgClass} animate-in slide-in-from-top-5 duration-300`}>
+            <div className="mr-3">{icon}</div>
+            <div className="text-sm font-medium">{message}</div>
+            <button onClick={onClose} className="ml-4 p-1 hover:bg-white/20 rounded-full transition-colors">
+                <X className="w-4 h-4" />
+            </button>
+        </div>
+    );
+};
+
+const ConfirmModal: React.FC<ConfirmModalProps> = (props) => {
+    if (!props.isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6 space-y-4">
+                <div className="flex items-center text-amber-500 mb-2">
+                    <AlertTriangle className="w-6 h-6 mr-2" />
+                    <h3 className="text-lg font-bold text-gray-800">ยืนยันการบันทึก</h3>
+                </div>
+                
+                {props.type === 'single' ? (
+                    <>
+                        <p className="text-gray-600 text-sm">กรุณาตรวจสอบความถูกต้องของข้อมูลทีม <br/><span className="font-bold text-gray-800">{props.teamName}</span></p>
+                        <div className="bg-gray-50 p-4 rounded-lg border border-gray-100 space-y-2 text-sm">
+                            <div className="flex justify-between">
+                                <span className="text-gray-500">คะแนน:</span>
+                                <span className="font-bold text-blue-600 text-lg">{props.newScore}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-gray-500">เหรียญรางวัล:</span>
+                                <span className="font-medium text-gray-900">{props.newMedal || '-'}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-gray-500">ลำดับที่:</span>
+                                <span className="font-medium text-gray-900">{props.newRank || '-'}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-gray-500">ตัวแทน (Q):</span>
+                                <span className={`font-medium ${props.newFlag === 'TRUE' ? 'text-green-600' : 'text-gray-400'}`}>
+                                    {props.newFlag === 'TRUE' ? 'ใช่' : 'ไม่ใช่'}
+                                </span>
+                            </div>
+                        </div>
+                    </>
+                ) : (
+                    <div className="text-center py-4">
+                        <div className="text-4xl font-bold text-blue-600 mb-2">{props.count}</div>
+                        <p className="text-gray-600">รายการที่ถูกแก้ไข</p>
+                        <p className="text-sm text-gray-500 mt-2">ระบบจะทำการบันทึกข้อมูลทั้งหมดทีละรายการ <br/>กรุณารอสักครู่จนกว่าจะเสร็จสิ้น</p>
+                    </div>
+                )}
+
+                <div className="flex gap-3 pt-2">
+                    <button onClick={props.onCancel} className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">ยกเลิก</button>
+                    <button onClick={props.onConfirm} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">ยืนยัน</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// --- Searchable Select Component ---
 interface SearchableSelectProps {
   options: { label: string; value: string }[];
   value: string;
@@ -130,73 +229,6 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({ options, value, onC
   );
 };
 
-// --- Sub-Components ---
-
-const Toast: React.FC<ToastProps> = ({ message, type, isVisible, onClose }) => {
-    useEffect(() => {
-        if (isVisible) {
-            const timer = setTimeout(onClose, 3000);
-            return () => clearTimeout(timer);
-        }
-    }, [isVisible, onClose]);
-
-    if (!isVisible) return null;
-
-    const bgClass = type === 'success' ? 'bg-green-600' : type === 'error' ? 'bg-red-600' : 'bg-blue-600';
-    const icon = type === 'success' ? <CheckCircle className="w-5 h-5" /> : type === 'error' ? <AlertCircle className="w-5 h-5" /> : <Trophy className="w-5 h-5" />;
-
-    return (
-        <div className={`fixed top-4 right-4 z-[100] flex items-center p-4 mb-4 text-white rounded-lg shadow-lg ${bgClass} animate-in slide-in-from-top-5 duration-300`}>
-            <div className="mr-3">{icon}</div>
-            <div className="text-sm font-medium">{message}</div>
-            <button onClick={onClose} className="ml-4 p-1 hover:bg-white/20 rounded-full transition-colors">
-                <X className="w-4 h-4" />
-            </button>
-        </div>
-    );
-};
-
-const ConfirmModal: React.FC<ConfirmModalProps> = ({ isOpen, onConfirm, onCancel, teamName, newScore, newRank, newMedal, newFlag }) => {
-    if (!isOpen) return null;
-    return (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-            <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6 space-y-4">
-                <div className="flex items-center text-amber-500 mb-2">
-                    <AlertTriangle className="w-6 h-6 mr-2" />
-                    <h3 className="text-lg font-bold text-gray-800">ยืนยันการบันทึก</h3>
-                </div>
-                <p className="text-gray-600 text-sm">กรุณาตรวจสอบความถูกต้องของข้อมูลทีม <br/><span className="font-bold text-gray-800">{teamName}</span></p>
-                
-                <div className="bg-gray-50 p-4 rounded-lg border border-gray-100 space-y-2 text-sm">
-                    <div className="flex justify-between">
-                        <span className="text-gray-500">คะแนน:</span>
-                        <span className="font-bold text-blue-600 text-lg">{newScore}</span>
-                    </div>
-                    <div className="flex justify-between">
-                        <span className="text-gray-500">เหรียญรางวัล:</span>
-                        <span className="font-medium text-gray-900">{newMedal || '-'}</span>
-                    </div>
-                    <div className="flex justify-between">
-                        <span className="text-gray-500">ลำดับที่:</span>
-                        <span className="font-medium text-gray-900">{newRank || '-'}</span>
-                    </div>
-                     <div className="flex justify-between">
-                        <span className="text-gray-500">สถานะตัวแทน (Q):</span>
-                        <span className={`font-medium ${newFlag === 'TRUE' ? 'text-green-600' : 'text-gray-400'}`}>
-                            {newFlag === 'TRUE' ? 'ใช่' : 'ไม่ใช่'}
-                        </span>
-                    </div>
-                </div>
-
-                <div className="flex gap-3 pt-2">
-                    <button onClick={onCancel} className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">ยกเลิก</button>
-                    <button onClick={onConfirm} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">ยืนยัน</button>
-                </div>
-            </div>
-        </div>
-    );
-};
-
 // --- Main Component ---
 
 const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => {
@@ -207,9 +239,10 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
   
   // UI State
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info', isVisible: boolean }>({ message: '', type: 'info', isVisible: false });
-  const [confirmState, setConfirmState] = useState<{ isOpen: boolean, teamId: string | null }>({ isOpen: false, teamId: null });
-  // Include flag in edits state
-  const [edits, setEdits] = useState<Record<string, { score: string, rank: string, medal: string, flag: string, isDirty: boolean, isSaving: boolean }>>({});
+  const [isLoading, setIsLoading] = useState(false);
+  const [confirmState, setConfirmState] = useState<{ isOpen: boolean, type: 'single' | 'batch', teamId: string | null }>({ isOpen: false, type: 'single', teamId: null });
+  const [edits, setEdits] = useState<Record<string, { score: string, rank: string, medal: string, flag: string, isDirty: boolean }>>({});
+  const [recentLogs, setRecentLogs] = useState<RecentLog[]>([]);
 
   const showToast = (message: string, type: 'success' | 'error' | 'info') => {
       setToast({ message, type, isVisible: true });
@@ -230,17 +263,13 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       );
   }
 
-  // 2. Data Filtering & Stats
+  // 2. Data Filtering
   const { availableCategories, availableActivities, allAuthorizedTeams } = useMemo(() => {
       let validActivities = data.activities;
-      
-      // Filter activities by Role
       if (role === 'score') {
           const assigned = user.assignedActivities || [];
           validActivities = validActivities.filter(a => assigned.includes(a.id));
       }
-
-      // Filter teams by Group Admin Cluster
       let relevantTeams = data.teams;
       if (role === 'group_admin') {
           const userSchool = data.schools.find(s => s.SchoolID === user.SchoolID);
@@ -254,24 +283,12 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
              relevantTeams = [];
           }
       }
-
-      // Count teams per activity
       const teamCountsByActivity: Record<string, number> = {};
-      relevantTeams.forEach(t => {
-          teamCountsByActivity[t.activityId] = (teamCountsByActivity[t.activityId] || 0) + 1;
-      });
-
+      relevantTeams.forEach(t => { teamCountsByActivity[t.activityId] = (teamCountsByActivity[t.activityId] || 0) + 1; });
       const activeActivities = validActivities.filter(a => (teamCountsByActivity[a.id] || 0) > 0);
       const categories = Array.from(new Set(activeActivities.map(a => a.category))).sort();
-      
-      // Filter teams to only those in valid activities
       const authorizedTeams = relevantTeams.filter(t => activeActivities.some(a => a.id === t.activityId));
-
-      return { 
-          availableCategories: categories, 
-          availableActivities: activeActivities,
-          allAuthorizedTeams: authorizedTeams
-      };
+      return { availableCategories: categories, availableActivities: activeActivities, allAuthorizedTeams: authorizedTeams };
   }, [data.activities, data.teams, data.schools, role, user]);
 
   // Global Dashboard Stats
@@ -282,9 +299,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       const gold = allAuthorizedTeams.filter(t => t.score >= 80).length;
       const silver = allAuthorizedTeams.filter(t => t.score >= 70 && t.score < 80).length;
       const bronze = allAuthorizedTeams.filter(t => t.score >= 60 && t.score < 70).length;
-      
       const percent = total > 0 ? Math.round((scored / total) * 100) : 0;
-
       return { total, scored, pending, percent, gold, silver, bronze };
   }, [allAuthorizedTeams]);
 
@@ -297,7 +312,6 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
   const filteredTeams = useMemo(() => {
       if (!selectedActivityId) return [];
       let teams = allAuthorizedTeams.filter(t => t.activityId === selectedActivityId);
-
       if (searchTerm) {
           const lower = searchTerm.toLowerCase();
           teams = teams.filter(t => 
@@ -306,10 +320,10 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
               t.schoolId.toLowerCase().includes(lower)
           );
       }
-      return teams.sort((a, b) => b.score - a.score); // Sort by saved score
+      return teams.sort((a, b) => b.score - a.score); 
   }, [allAuthorizedTeams, selectedActivityId, searchTerm]);
 
-  // Activity Specific Progress
+  // Activity Progress
   const activityProgress = useMemo(() => {
       const total = filteredTeams.length;
       const recorded = filteredTeams.filter(t => t.score > 0).length;
@@ -317,7 +331,8 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       return { total, recorded, percent };
   }, [filteredTeams]);
 
-  // Handlers
+  // --- Handlers ---
+
   const handleInputChange = (teamId: string, field: 'score' | 'rank' | 'medal' | 'flag', value: string) => {
       setEdits(prev => {
           const team = data.teams.find(t => t.teamId === teamId);
@@ -330,7 +345,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
               flag: prev[teamId]?.flag ?? String(team.flag || ''),
           };
 
-          const newState = { ...baseState, [field]: value, isDirty: true, isSaving: false };
+          const newState = { ...baseState, [field]: value, isDirty: true };
           
           if (field === 'score') {
               const numScore = parseFloat(value);
@@ -343,14 +358,12 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                   newState.medal = '';
               }
           }
-
           return { ...prev, [teamId]: newState };
       });
   };
 
   const initiateSave = (teamId: string) => {
       const edit = edits[teamId];
-      // Validation: Check if score is within range 0-100
       if(edit) {
         const score = parseFloat(edit.score);
         if(!isNaN(score) && (score < 0 || score > 100)) {
@@ -358,43 +371,94 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
             return;
         }
       }
-      setConfirmState({ isOpen: true, teamId });
+      setConfirmState({ isOpen: true, type: 'single', teamId });
+  };
+
+  const initiateBatchSave = () => {
+      setConfirmState({ isOpen: true, type: 'batch', teamId: null });
+  };
+
+  const addRecentLog = (teamName: string, score: string) => {
+      const time = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+      setRecentLogs(prev => [{ id: Date.now().toString(), teamName, score, time }, ...prev].slice(0, 5));
+  };
+
+  const performUpdate = async (teamId: string, edit: any) => {
+        const finalScore = parseFloat(edit.score) || 0;
+        const finalRank = edit.rank === 'undefined' ? '' : edit.rank;
+        const finalMedal = edit.medal === 'undefined' ? '' : edit.medal;
+        const finalFlag = edit.flag === 'undefined' ? '' : edit.flag;
+        return await updateTeamResult(teamId, finalScore, finalRank, finalMedal, finalFlag);
   };
 
   const handleConfirmSave = async () => {
-      const teamId = confirmState.teamId;
-      if (!teamId) return;
+      if (confirmState.type === 'single') {
+        const teamId = confirmState.teamId;
+        if (!teamId) return;
+        setConfirmState({ isOpen: false, type: 'single', teamId: null });
+        
+        const edit = edits[teamId];
+        if (!edit || !edit.isDirty) return;
 
-      setConfirmState({ isOpen: false, teamId: null });
+        setIsLoading(true);
+        const success = await performUpdate(teamId, edit);
+        setIsLoading(false);
 
-      const edit = edits[teamId];
-      if (!edit || !edit.isDirty) return;
+        if (success) {
+            onDataUpdate(); 
+            // Clear dirty state for this team
+            setEdits(prev => {
+                const { [teamId]: _, ...rest } = prev;
+                return rest;
+            });
+            const team = data.teams.find(t => t.teamId === teamId);
+            addRecentLog(team?.teamName || teamId, edit.score);
+            showToast('บันทึกคะแนนเรียบร้อยแล้ว', 'success');
+        } else {
+            showToast('บันทึกข้อมูลล้มเหลว', 'error');
+        }
 
-      setEdits(prev => ({ ...prev, [teamId]: { ...edit, isSaving: true } }));
-
-      const finalScore = parseFloat(edit.score) || 0;
-      const finalRank = edit.rank === 'undefined' ? '' : edit.rank;
-      const finalMedal = edit.medal === 'undefined' ? '' : edit.medal;
-      const finalFlag = edit.flag === 'undefined' ? '' : edit.flag;
-
-      const success = await updateTeamResult(teamId, finalScore, finalRank, finalMedal, finalFlag);
-
-      if (success) {
-          onDataUpdate(); 
-          setEdits(prev => {
-              const { [teamId]: _, ...rest } = prev;
-              return rest;
-          });
-          showToast('บันทึกคะแนนเรียบร้อยแล้ว', 'success');
       } else {
-          setEdits(prev => ({ ...prev, [teamId]: { ...edit, isSaving: false } }));
-          showToast('บันทึกข้อมูลล้มเหลว กรุณาลองใหม่', 'error');
+        // Batch Save
+        setConfirmState({ isOpen: false, type: 'batch', teamId: null });
+        setIsLoading(true);
+
+        const dirtyIds = Object.keys(edits).filter(id => edits[id].isDirty && filteredTeams.some(t => t.teamId === id));
+        let successCount = 0;
+
+        // Execute sequentially to be safe with Google Apps Script concurrent locks
+        for (const id of dirtyIds) {
+            const edit = edits[id];
+            const result = await performUpdate(id, edit);
+            if (result) {
+                successCount++;
+                const team = data.teams.find(t => t.teamId === id);
+                addRecentLog(team?.teamName || id, edit.score);
+            }
+        }
+
+        setIsLoading(false);
+        onDataUpdate(); // Refresh global data
+        
+        // Clear edits for successful ones
+        setEdits(prev => {
+             const newEdits = { ...prev };
+             dirtyIds.forEach(id => delete newEdits[id]);
+             return newEdits;
+        });
+
+        if (successCount === dirtyIds.length) {
+            showToast(`บันทึกข้อมูลทั้งหมด ${successCount} รายการเรียบร้อยแล้ว`, 'success');
+        } else {
+             showToast(`บันทึกสำเร็จ ${successCount} จาก ${dirtyIds.length} รายการ`, 'info');
+        }
       }
   };
 
   const handleShare = async (team: Team) => {
      const activityName = data.activities.find(a => a.id === team.activityId)?.name || team.activityId;
      const schoolName = data.schools.find(s => s.SchoolID === team.schoolId)?.SchoolName || team.schoolId;
+     // Use database value unless edited locally (though usually share button appears after save)
      const medal = team.medalOverride || (team.score >= 80 ? 'Gold' : team.score >= 70 ? 'Silver' : team.score >= 60 ? 'Bronze' : 'Participant');
      
      const result = await shareScoreResult(team.teamName, schoolName, activityName, team.score, medal, team.rank);
@@ -402,21 +466,18 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
      if (result.success) {
          if (result.method === 'copy') {
              showToast('คัดลอกผลการแข่งขันแล้ว', 'success');
-         } else if (result.method === 'share') {
-             // Web share doesn't always guarantee success callback accurately in all browsers
          }
      } else {
          showToast('ไม่สามารถแชร์ข้อมูลได้', 'error');
      }
   };
 
-  const getConfirmData = () => {
-      const teamId = confirmState.teamId;
-      if (!teamId) return null;
-      const team = data.teams.find(t => t.teamId === teamId);
-      const edit = edits[teamId];
+  // Helper for confirm data
+  const getSingleConfirmData = () => {
+      if (confirmState.type !== 'single' || !confirmState.teamId) return null;
+      const team = data.teams.find(t => t.teamId === confirmState.teamId);
+      const edit = edits[confirmState.teamId!];
       if (!team || !edit) return null;
-
       return {
           teamName: team.teamName,
           newScore: edit.score,
@@ -426,10 +487,12 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       };
   };
 
-  const confirmData = getConfirmData();
+  const singleConfirmData = getSingleConfirmData();
+  const dirtyCount = Object.keys(edits).filter(id => edits[id].isDirty && filteredTeams.some(t => t.teamId === id)).length;
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500 pb-20">
+    <div className="space-y-6 animate-in fade-in duration-500 pb-20 relative">
+      <LoadingOverlay isVisible={isLoading} />
       <Toast message={toast.message} type={toast.type} isVisible={toast.isVisible} onClose={() => setToast(prev => ({...prev, isVisible: false}))} />
       
       <div>
@@ -437,7 +500,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
         <p className="text-gray-500">จัดการคะแนนและประกาศผลรางวัล</p>
       </div>
 
-      {/* 1. Global Progress Dashboard */}
+      {/* 1. Global Stats */}
       <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-xl p-6 text-white shadow-lg">
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">
               <div className="flex-1 w-full">
@@ -445,22 +508,16 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                       <PieChart className="w-5 h-5 mr-2 text-blue-400" />
                       ภาพรวมการบันทึกคะแนน
                   </h3>
-                  <p className="text-slate-400 text-sm mb-4">สถานะการบันทึกคะแนนของทีมที่คุณดูแลทั้งหมด</p>
-                  
-                  <div className="space-y-2">
+                  <div className="space-y-2 mt-2">
                       <div className="flex justify-between text-sm">
                           <span className="text-slate-300">ความคืบหน้า ({globalStats.scored}/{globalStats.total})</span>
                           <span className="font-bold text-blue-400">{globalStats.percent}%</span>
                       </div>
                       <div className="w-full bg-slate-700/50 rounded-full h-3">
-                          <div 
-                            className="bg-blue-500 h-3 rounded-full transition-all duration-700 ease-out shadow-[0_0_10px_rgba(59,130,246,0.5)]" 
-                            style={{ width: `${globalStats.percent}%` }}
-                          ></div>
+                          <div className="bg-blue-500 h-3 rounded-full transition-all duration-700" style={{ width: `${globalStats.percent}%` }}></div>
                       </div>
                   </div>
               </div>
-
               <div className="grid grid-cols-3 gap-3 w-full md:w-auto">
                   <div className="bg-slate-700/50 p-3 rounded-lg border border-slate-600/50 text-center min-w-[80px]">
                       <div className="text-yellow-400 font-bold text-xl">{globalStats.gold}</div>
@@ -478,10 +535,10 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
           </div>
       </div>
 
-      {/* 2. Selection Card with Searchable Selects */}
+      {/* 2. Selection Card */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">1. เลือกหมวดหมู่ (Category)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">1. เลือกหมวดหมู่</label>
               <SearchableSelect 
                 options={availableCategories.map(cat => ({ label: cat, value: cat }))}
                 value={selectedCategory}
@@ -492,7 +549,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
           </div>
 
           <div>
-              <label className={`block text-sm font-medium mb-2 ${!selectedCategory ? 'text-gray-400' : 'text-gray-700'}`}>2. เลือกรายการแข่งขัน (Activity)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">2. เลือกรายการแข่งขัน</label>
               <SearchableSelect 
                 options={filteredActivities.map(act => ({ label: act.name, value: act.id }))}
                 value={selectedActivityId}
@@ -507,22 +564,18 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       {/* 3. Table Section */}
       {selectedActivityId && (
           <div className="space-y-4">
-              {/* Activity Toolbar */}
               <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col md:flex-row justify-between items-center gap-4">
                    <div className="w-full md:w-1/2">
                         <div className="flex justify-between items-end mb-1">
                             <span className="text-sm font-medium text-gray-700">รายการนี้บันทึกแล้ว</span>
-                            <span className="text-xs text-gray-500">{activityProgress.recorded} / {activityProgress.total} ทีม ({activityProgress.percent}%)</span>
+                            <span className="text-xs text-gray-500">{activityProgress.recorded} / {activityProgress.total} ทีม</span>
                         </div>
                         <div className="w-full bg-gray-200 rounded-full h-2">
                             <div className="bg-green-500 h-2 rounded-full transition-all duration-500" style={{ width: `${activityProgress.percent}%` }}></div>
                         </div>
                    </div>
-
                    <div className="w-full md:w-auto relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <Search className="h-4 w-4 text-gray-400" />
-                        </div>
+                        <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
                         <input
                             type="text"
                             className="block w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:outline-none"
@@ -533,7 +586,6 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                    </div>
               </div>
 
-              {/* Data Table */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                   <div className="overflow-x-auto">
                       <table className="min-w-full divide-y divide-gray-200">
@@ -545,7 +597,16 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">เหรียญ</th>
                                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">ลำดับ</th>
                                   <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-20">ตัวแทน (Q)</th>
-                                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">จัดการ</th>
+                                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                     {dirtyCount > 0 ? (
+                                         <button 
+                                            onClick={initiateBatchSave}
+                                            className="inline-flex items-center px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 transition-colors shadow-sm"
+                                         >
+                                             <ListChecks className="w-3 h-3 mr-1" /> บันทึกทั้งหมด ({dirtyCount})
+                                         </button>
+                                     ) : "จัดการ"}
+                                  </th>
                               </tr>
                           </thead>
                           <tbody className="bg-white divide-y divide-gray-200">
@@ -559,30 +620,24 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                   const displayFlag = edit?.flag ?? team.flag ?? '';
                                   
                                   const isDirty = edit?.isDirty;
-                                  const isSaving = edit?.isSaving;
                                   const hasSavedScore = team.score > 0 && !isDirty;
 
                                   return (
                                       <tr key={team.teamId} className={`${isDirty ? "bg-blue-50/30" : hasSavedScore ? "bg-green-50/20" : ""}`}>
                                           <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-500">{idx + 1}</td>
                                           <td className="px-6 py-4 whitespace-nowrap">
-                                              <div className="flex items-center">
-                                                  <div className="ml-0">
-                                                      <div className="text-sm font-medium text-gray-900">{team.teamName}</div>
-                                                      <div className="text-xs text-gray-500">{school?.SchoolName}</div>
-                                                  </div>
+                                              <div className="ml-0">
+                                                  <div className="text-sm font-medium text-gray-900">{team.teamName}</div>
+                                                  <div className="text-xs text-gray-500">{school?.SchoolName}</div>
                                               </div>
                                           </td>
                                           <td className="px-6 py-4 whitespace-nowrap">
                                               <input 
-                                                type="number" 
-                                                step="0.01"
+                                                type="number" step="0.01" min="0" max="100"
                                                 className={`w-full border rounded px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none ${isDirty ? 'border-blue-400 bg-white' : 'border-gray-300'}`}
                                                 value={displayScore}
                                                 onChange={(e) => handleInputChange(team.teamId, 'score', e.target.value)}
                                                 placeholder="0.00"
-                                                min="0"
-                                                max="100"
                                               />
                                           </td>
                                           <td className="px-6 py-4 whitespace-nowrap">
@@ -613,29 +668,26 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                                 className="w-5 h-5 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer"
                                                 checked={displayFlag === 'TRUE'}
                                                 onChange={(e) => handleInputChange(team.teamId, 'flag', e.target.checked ? 'TRUE' : '')}
-                                                title="ทำเครื่องหมายว่าเป็นตัวแทนไปแข่งระดับเขต"
                                               />
                                           </td>
                                           <td className="px-6 py-4 whitespace-nowrap text-right">
                                               <div className="flex items-center justify-end space-x-2">
                                                   <button 
-                                                    disabled={!isDirty || isSaving}
+                                                    disabled={!isDirty}
                                                     onClick={() => initiateSave(team.teamId)}
                                                     className={`inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-white focus:outline-none transition-all
                                                         ${!isDirty 
                                                             ? 'bg-gray-300 cursor-default opacity-50' 
-                                                            : isSaving ? 'bg-blue-400 cursor-wait' : 'bg-blue-600 hover:bg-blue-700 hover:shadow-md'
+                                                            : 'bg-blue-600 hover:bg-blue-700 hover:shadow-md'
                                                         }`}
                                                   >
-                                                      {isSaving ? '...' : <><Save className="w-4 h-4 mr-1" /> บันทึก</>}
+                                                      <Save className="w-4 h-4 mr-1" /> บันทึก
                                                   </button>
-                                                  
-                                                  {/* Share Button */}
                                                   {hasSavedScore && (
                                                       <button 
                                                         onClick={() => handleShare(team)}
                                                         className="p-1.5 bg-green-50 text-green-600 rounded-md hover:bg-green-100 transition-colors border border-green-200"
-                                                        title="แชร์ผล"
+                                                        title="แชร์ผลทาง LINE"
                                                       >
                                                           <Share2 className="w-4 h-4" />
                                                       </button>
@@ -646,15 +698,33 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                   );
                               })}
                               {filteredTeams.length === 0 && (
-                                  <tr>
-                                      <td colSpan={7} className="px-6 py-10 text-center text-gray-500">
-                                          ไม่พบข้อมูลทีมในรายการนี้
-                                      </td>
-                                  </tr>
+                                  <tr><td colSpan={7} className="px-6 py-10 text-center text-gray-500">ไม่พบข้อมูลทีมในรายการนี้</td></tr>
                               )}
                           </tbody>
                       </table>
                   </div>
+              </div>
+          </div>
+      )}
+
+      {/* Recent Logs Section */}
+      {recentLogs.length > 0 && (
+          <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+              <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center">
+                  <History className="w-4 h-4 mr-2 text-gray-500" />
+                  รายการที่บันทึกล่าสุด
+              </h3>
+              <div className="space-y-2">
+                  {recentLogs.map(log => (
+                      <div key={log.id} className="flex justify-between items-center text-sm p-2 bg-gray-50 rounded border border-gray-100 animate-in fade-in slide-in-from-bottom-2">
+                          <div>
+                              <span className="font-medium text-gray-900">{log.teamName}</span>
+                              <span className="mx-2 text-gray-300">|</span>
+                              <span className="text-blue-600 font-bold">{log.score} คะแนน</span>
+                          </div>
+                          <span className="text-xs text-gray-400">{log.time}</span>
+                      </div>
+                  ))}
               </div>
           </div>
       )}
@@ -667,16 +737,18 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       )}
 
       {/* Confirmation Modal */}
-      {confirmState.isOpen && confirmData && (
+      {confirmState.isOpen && (
           <ConfirmModal 
               isOpen={confirmState.isOpen}
-              teamName={confirmData.teamName}
-              newScore={confirmData.newScore}
-              newRank={confirmData.newRank}
-              newMedal={confirmData.newMedal}
-              newFlag={confirmData.newFlag}
+              type={confirmState.type}
+              count={dirtyCount}
+              teamName={singleConfirmData?.teamName}
+              newScore={singleConfirmData?.newScore}
+              newRank={singleConfirmData?.newRank}
+              newMedal={singleConfirmData?.newMedal}
+              newFlag={singleConfirmData?.newFlag}
               onConfirm={handleConfirmSave}
-              onCancel={() => setConfirmState({ isOpen: false, teamId: null })}
+              onCancel={() => setConfirmState({ isOpen: false, type: 'single', teamId: null })}
           />
       )}
     </div>
@@ -684,4 +756,3 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
 };
 
 export default ScoreEntry;
-
