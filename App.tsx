@@ -1,5 +1,4 @@
 
-
 import React, { useEffect, useState } from 'react';
 import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
@@ -96,15 +95,15 @@ const App: React.FC = () => {
     initialize();
   }, []);
 
-  const fetchAppData = async () => {
-    setLoading(true);
+  const fetchAppData = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const result = await fetchData();
       setData(result);
     } catch (err) {
       setError('ไม่สามารถโหลดข้อมูลการแข่งขันได้');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -350,7 +349,8 @@ const App: React.FC = () => {
                 <Route path="/dashboard" element={<Dashboard data={data} user={currentUser} />} />
                 <Route path="/teams" element={<TeamList data={data} user={currentUser} />} />
                 <Route path="/activities" element={<ActivityList data={data} />} />
-                <Route path="/score" element={<ScoreEntry data={data} user={currentUser} onDataUpdate={fetchAppData} />} />
+                {/* Pass silent refresh to prevent unmounting ScoreEntry */}
+                <Route path="/score" element={<ScoreEntry data={data} user={currentUser} onDataUpdate={() => fetchAppData(true)} />} />
                 <Route path="/results" element={<ResultsView data={data} />} />
                 <Route path="/certificates" element={<DocumentsView data={data} type="certificate" />} />
                 <Route path="/idcards" element={<DocumentsView data={data} type="idcard" />} />
@@ -374,3 +374,4 @@ const TrophyIcon = ({ className }: { className?: string }) => (
 );
 
 export default App;
+
