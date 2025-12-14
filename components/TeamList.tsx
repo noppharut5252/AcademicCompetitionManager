@@ -277,12 +277,47 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
       return team.createdBy === user.userid;
   }
 
+  const handlePrintSummary = () => {
+    window.print();
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       
+      {/* Styles for Printing */}
+      <style>{`
+        @media print {
+            body {
+                visibility: hidden;
+            }
+            #printable-content, #printable-content * {
+                visibility: visible;
+            }
+            #printable-content {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                background: white;
+                padding: 20px;
+            }
+            @page {
+                size: A4 landscape;
+                margin: 1cm;
+            }
+            /* Hide URL printing on browsers that support it */
+            @media print {
+                a[href]:after {
+                    content: none !important;
+                }
+            }
+        }
+      `}</style>
+
       {/* Enhanced Dashboard Stats */}
       {dashboardStats && (
         <div className={`bg-gradient-to-r ${dashboardStats.bgGradient} rounded-2xl p-6 text-white shadow-lg mb-6 transition-all duration-300`}>
+            {/* ... Existing Dashboard Content ... */}
             <div className="flex justify-between items-start mb-6">
                 <h3 className="text-xl font-bold flex items-center">
                     <dashboardStats.icon className="w-6 h-6 mr-2" />
@@ -444,9 +479,8 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
             </div>
 
             {/* Print Button */}
-            {/* Removed the logic for print button just to keep code concise as logic is not changed, keeping visual button */}
              <button 
-                // onClick={handlePrintSummary} 
+                onClick={handlePrintSummary} 
                 className="flex items-center px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 hover:text-blue-600 transition-colors shadow-sm"
                 title="พิมพ์สรุปข้อมูล"
             >
@@ -718,14 +752,14 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
                                 <>
                                     <button 
                                         onClick={(e) => { e.stopPropagation(); /* Add edit logic */ }} 
-                                        className="text-blue-500 hover:text-blue-700 bg-blue-50 p-1.5 rounded-full hover:bg-blue-100 transition-colors"
+                                        className="text-blue-500 hover:text-blue-600 bg-blue-50 p-1.5 rounded-full hover:bg-blue-100 transition-colors"
                                         title="แก้ไข"
                                     >
                                         <Edit className="w-4 h-4" />
                                     </button>
                                     <button 
                                         onClick={(e) => { e.stopPropagation(); /* Add delete logic */ }}
-                                        className="text-red-500 hover:text-red-700 bg-red-50 p-1.5 rounded-full hover:bg-red-100 transition-colors"
+                                        className="text-red-500 hover:text-red-600 bg-red-50 p-1.5 rounded-full hover:bg-red-100 transition-colors"
                                         title="ลบ"
                                     >
                                         <Trash2 className="w-4 h-4" />
@@ -809,6 +843,73 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
             </div>
         )}
 
+      {/* Hidden Print Section (Visible only when printing) */}
+      <div id="printable-content" className="hidden">
+        <div className="text-center mb-6">
+            <h1 className="text-2xl font-bold text-gray-900">สรุปข้อมูลทีมผู้เข้าแข่งขัน</h1>
+            <p className="text-gray-500">
+                {viewRound === 'area' ? 'ระดับเขตพื้นที่การศึกษา' : 'ระดับกลุ่มเครือข่าย'} | ข้อมูล ณ วันที่ {new Date().toLocaleDateString('th-TH')}
+            </p>
+        </div>
+        <table className="w-full text-left border-collapse">
+            <thead>
+                <tr className="border-b-2 border-gray-300">
+                    <th className="py-2 px-2 text-sm font-bold text-gray-700 w-12">#</th>
+                    <th className="py-2 px-2 text-sm font-bold text-gray-700">ทีม</th>
+                    <th className="py-2 px-2 text-sm font-bold text-gray-700">โรงเรียน / กลุ่มฯ</th>
+                    <th className="py-2 px-2 text-sm font-bold text-gray-700">รายการแข่งขัน</th>
+                    <th className="py-2 px-2 text-sm font-bold text-gray-700 text-center">สถานะ</th>
+                    <th className="py-2 px-2 text-sm font-bold text-gray-700 text-right">คะแนน</th>
+                </tr>
+            </thead>
+            <tbody>
+                {filteredTeams.map((team, idx) => {
+                    const activity = data.activities.find(a => a.id === team.activityId);
+                    const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
+                    const cluster = school ? data.clusters.find(c => c.ClusterID === school.SchoolCluster) : null;
+                    const areaInfo = getAreaInfo(team.stageInfo);
+                    
+                    const showScore = viewRound === 'cluster' ? team.score : areaInfo?.score;
+                    const showRank = viewRound === 'cluster' ? team.rank : (areaInfo?.rank || areaInfo?.medal);
+
+                    return (
+                        <tr key={team.teamId} className="border-b border-gray-200">
+                            <td className="py-2 px-2 text-sm text-gray-600">{idx + 1}</td>
+                            <td className="py-2 px-2 text-sm text-gray-900">
+                                <div className="font-bold">{viewRound === 'area' && areaInfo?.name ? areaInfo.name : team.teamName}</div>
+                                <div className="text-xs text-gray-500">{team.teamId}</div>
+                            </td>
+                            <td className="py-2 px-2 text-sm text-gray-600">
+                                <div>{school?.SchoolName}</div>
+                                <div className="text-xs text-gray-400">{cluster?.ClusterName}</div>
+                            </td>
+                            <td className="py-2 px-2 text-sm text-gray-600">
+                                <div>{activity?.name}</div>
+                                <div className="text-xs text-gray-400">{team.level}</div>
+                            </td>
+                            <td className="py-2 px-2 text-sm text-center">
+                                <span className={`px-2 py-0.5 rounded text-xs font-medium border ${
+                                    normalizeStatus(team.status) === 'Approved' ? 'bg-green-50 text-green-700 border-green-200' :
+                                    normalizeStatus(team.status) === 'Pending' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
+                                    'bg-red-50 text-red-700 border-red-200'
+                                }`}>
+                                    {normalizeStatus(team.status)}
+                                </span>
+                            </td>
+                            <td className="py-2 px-2 text-sm text-right font-medium text-gray-900">
+                                <div>{showScore > 0 ? showScore : '-'}</div>
+                                {showRank && <div className="text-xs text-gray-500">#{showRank}</div>}
+                            </td>
+                        </tr>
+                    );
+                })}
+            </tbody>
+        </table>
+        <div className="mt-4 text-xs text-gray-400 text-right">
+            พิมพ์จากระบบ CompManager
+        </div>
+      </div>
+
       {/* Modal */}
       {selectedTeam && (
           <TeamDetailModal 
@@ -822,3 +923,4 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
 };
 
 export default TeamList;
+
