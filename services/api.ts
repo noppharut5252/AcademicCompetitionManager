@@ -2,7 +2,7 @@ import { AppData } from '../types';
 import { getMockData } from './mockData';
 
 // In a real implementation, this would point to the Google Apps Script Web App URL
-// const API_URL = "https://script.google.com/macros/s/.../exec";
+// const API_URL = "https://script.google.com/macros/s/AKfycbyYcf6m-3ypN3aX8F6prN0BLQcz0JyW0gj3Tq8dJyMs54gaTXSv_1uytthNu9H4CmMy/exec";
 
 export const fetchData = async (): Promise<AppData> => {
   // Simulate network delay
