@@ -1,7 +1,7 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { AppData, Team, TeamStatus, User, AreaStageInfo } from '../types';
-import { Search, Filter, CheckCircle, XCircle, Clock, ChevronLeft, ChevronRight, Eye, Trophy, Medal, Hash, LayoutGrid, Users, Award, School, Printer, FileText, Star, Crown, Zap, Edit, Trash2, Plus, Square, CheckSquare, Loader2 } from 'lucide-react';
+import { Search, Filter, CheckCircle, XCircle, Clock, ChevronLeft, ChevronRight, Eye, Trophy, Medal, Hash, LayoutGrid, Users, Award, School, Printer, FileText, Star, Crown, Zap, Edit, Trash2, Plus, Square, CheckSquare, Loader2, AlertTriangle, Info, X } from 'lucide-react';
 import TeamDetailModal from './TeamDetailModal';
 import { updateTeamStatus, fetchData } from '../services/api';
 
@@ -9,6 +9,85 @@ interface TeamListProps {
   data: AppData;
   user?: User | null;
 }
+
+// --- Sub-Components for Beautiful UI ---
+
+const Toast = ({ message, type, isVisible, onClose }: { message: string, type: 'success' | 'error' | 'info', isVisible: boolean, onClose: () => void }) => {
+    useEffect(() => {
+        if (isVisible) {
+            const timer = setTimeout(onClose, 3000);
+            return () => clearTimeout(timer);
+        }
+    }, [isVisible, onClose]);
+
+    if (!isVisible) return null;
+
+    const styles = {
+        success: 'bg-green-600 text-white',
+        error: 'bg-red-600 text-white',
+        info: 'bg-blue-600 text-white'
+    };
+
+    const icons = {
+        success: <CheckCircle className="w-5 h-5" />,
+        error: <XCircle className="w-5 h-5" />,
+        info: <Info className="w-5 h-5" />
+    };
+
+    return (
+        <div className={`fixed top-6 right-6 z-[100] flex items-center p-4 rounded-xl shadow-xl transition-all duration-500 transform translate-y-0 ${styles[type]} animate-in slide-in-from-top-5 fade-in`}>
+            <div className="mr-3">{icons[type]}</div>
+            <div className="font-medium text-sm">{message}</div>
+            <button onClick={onClose} className="ml-4 p-1 hover:bg-white/20 rounded-full transition-colors">
+                <X className="w-4 h-4" />
+            </button>
+        </div>
+    );
+};
+
+const ConfirmationModal = ({ isOpen, title, description, confirmLabel, confirmColor, onConfirm, onCancel, isLoading }: any) => {
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden transform scale-100 transition-all">
+                <div className="p-6 text-center">
+                    <div className={`mx-auto flex items-center justify-center h-12 w-12 rounded-full mb-4 ${confirmColor === 'red' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>
+                        <AlertTriangle className="h-6 w-6" />
+                    </div>
+                    <h3 className="text-lg leading-6 font-bold text-gray-900">{title}</h3>
+                    <div className="mt-2">
+                        <p className="text-sm text-gray-500">{description}</p>
+                    </div>
+                </div>
+                <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse gap-2">
+                    <button
+                        type="button"
+                        disabled={isLoading}
+                        className={`w-full inline-flex justify-center rounded-lg border border-transparent shadow-sm px-4 py-2 text-base font-medium text-white focus:outline-none sm:ml-3 sm:w-auto sm:text-sm ${
+                            confirmColor === 'red' ? 'bg-red-600 hover:bg-red-700' : 
+                            confirmColor === 'green' ? 'bg-green-600 hover:bg-green-700' :
+                            confirmColor === 'yellow' ? 'bg-yellow-500 hover:bg-yellow-600' :
+                            'bg-blue-600 hover:bg-blue-700'
+                        } disabled:opacity-50`}
+                        onClick={onConfirm}
+                    >
+                        {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : confirmLabel}
+                    </button>
+                    <button
+                        type="button"
+                        className="mt-3 w-full inline-flex justify-center rounded-lg border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+                        onClick={onCancel}
+                        disabled={isLoading}
+                    >
+                        ยกเลิก
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// --- Main Component ---
 
 const ITEMS_PER_PAGE = 20;
 
@@ -25,6 +104,16 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
   // Bulk Action State
   const [selectedTeamIds, setSelectedTeamIds] = useState<Set<string>>(new Set());
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  
+  // Toast & Modal State
+  const [toast, setToast] = useState({ message: '', type: 'info' as 'success' | 'error' | 'info', isVisible: false });
+  const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean, action: string, statusValue: string, title: string, desc: string, color: string }>({
+      isOpen: false, action: '', statusValue: '', title: '', desc: '', color: 'blue'
+  });
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info') => {
+      setToast({ message, type, isVisible: true });
+  };
 
   // Extract unique categories
   const categories = useMemo(() => {
@@ -52,7 +141,6 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
     }
   };
 
-  // Logic to determine if a team is considered "Qualified" for Area Round
   const isTeamQualifiedForArea = (team: Team) => {
       const r = String(team.rank || '').trim();
       const f = String(team.flag || '').trim().toUpperCase();
@@ -65,19 +153,13 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
   const isGroupAdmin = role === 'group_admin';
   const isSchoolAdmin = role === 'school_admin';
 
-  // Check if current user can Edit/Delete a specific team
   const canEditTeam = (team: Team) => {
       if (!user || user.isGuest) return false;
-      
-      // Admin/Area: Can presumably edit (though feature focus is bulk status)
-      // For now, let's allow them full edit rights.
       if (isSuperUser) return true;
 
-      // STRICT RULE: Only if PENDING
       const currentStatus = normalizeStatus(team.status);
       if (currentStatus !== TeamStatus.PENDING) return false;
 
-      // Scope Check
       if (isGroupAdmin) {
           const userSchool = data.schools.find(s => s.SchoolID === user.SchoolID);
           const teamSchool = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
@@ -105,7 +187,6 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
       let icon = Users;
       let bgGradient = "from-blue-600 to-indigo-700";
 
-      // 1. Determine Scope
       if (role === 'admin' || role === 'area') {
           scopeTeams = data.teams;
           title = "ภาพรวมระดับเขตพื้นที่ (District Overview)";
@@ -125,7 +206,6 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
               bgGradient = "from-blue-600 to-cyan-600";
           }
       } else if (role === 'school_admin' || role === 'user') {
-          // Both School Admin and User see School Overview
           const userSchool = data.schools.find(s => s.SchoolID === user.SchoolID);
           if (userSchool) {
                scopeTeams = data.teams.filter(t => 
@@ -142,17 +222,13 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
 
       if (!title) return null;
 
-      // 2. Calculate Stats based on Scope & ViewRound
       let gold = 0;
       let silver = 0;
       let bronze = 0;
-      
       const schoolScores: Record<string, number> = {};
-
       const displayTeams = viewRound === 'area' 
         ? scopeTeams.filter(t => isTeamQualifiedForArea(t)) 
         : scopeTeams;
-
       const activitiesCount = new Set(displayTeams.map(t => t.activityId)).size;
 
       displayTeams.forEach(t => {
@@ -193,18 +269,13 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
       };
   }, [data.teams, data.schools, data.clusters, user, viewRound, role]);
 
-
-  // RBAC & Logic Filtering for the List
   const filteredTeams = useMemo(() => {
     let teams = data.teams;
     const isGuest = !user || user.isGuest;
 
-    // 1. Permission Filtering
     if (isGuest) {
-        // Guests see everything
     } else if (user) {
         if (role === 'admin' || role === 'area') {
-            // See ALL
         } else if (role === 'group_admin') {
             const userSchool = data.schools.find(s => s.SchoolID === user.SchoolID);
             if (userSchool) {
@@ -230,12 +301,10 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
         }
     }
 
-    // 2. Round Filtering
     if (viewRound === 'area') {
         teams = teams.filter(team => isTeamQualifiedForArea(team));
     }
 
-    // 3. Search & Filters & Quick Filters
     return teams.filter(team => {
       const activity = data.activities.find(a => a.id === team.activityId);
       const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
@@ -265,7 +334,6 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
     });
   }, [data.teams, data.schools, data.activities, data.clusters, user, searchTerm, statusFilter, categoryFilter, clusterFilter, viewRound, quickFilter, role]);
 
-  // Pagination
   const totalPages = Math.ceil(filteredTeams.length / ITEMS_PER_PAGE);
   const paginatedTeams = filteredTeams.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
@@ -292,7 +360,8 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
     return "https://cdn-icons-png.flaticon.com/512/3135/3135768.png"; 
   };
 
-  // Bulk Actions
+  // --- Bulk Actions Logic ---
+
   const handleSelectAll = () => {
       if (selectedTeamIds.size === paginatedTeams.length) {
           setSelectedTeamIds(new Set());
@@ -311,21 +380,58 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
       setSelectedTeamIds(newSelected);
   };
 
-  const handleBulkStatusUpdate = async (status: '1' | '2') => {
+  // Open Modal for Confirmation
+  const promptBulkUpdate = (status: string) => {
       if (selectedTeamIds.size === 0) return;
-      if (!confirm(`ยืนยันการเปลี่ยนสถานะเป็น "${status === '1' ? 'อนุมัติ' : 'ปฏิเสธ'}" สำหรับ ${selectedTeamIds.size} ทีม?`)) return;
+      
+      let title = '';
+      let desc = '';
+      let color = 'blue';
+      
+      if (status === '1') {
+          title = 'ยืนยันการอนุมัติ (Approve)';
+          desc = `คุณต้องการอนุมัติทีมที่เลือกจำนวน ${selectedTeamIds.size} ทีม ใช่หรือไม่?`;
+          color = 'green';
+      } else if (status === '2') {
+          title = 'ยืนยันการปฏิเสธ (Reject)';
+          desc = `คุณต้องการปฏิเสธทีมที่เลือกจำนวน ${selectedTeamIds.size} ทีม ใช่หรือไม่?`;
+          color = 'red';
+      } else if (status === '0') {
+          title = 'ตั้งสถานะรอตรวจสอบ (Set Pending)';
+          desc = `คุณต้องการเปลี่ยนสถานะเป็น "รอตรวจสอบ" จำนวน ${selectedTeamIds.size} ทีม ใช่หรือไม่?`;
+          color = 'yellow';
+      }
 
+      setConfirmModal({
+          isOpen: true,
+          action: 'updateStatus',
+          statusValue: status,
+          title,
+          desc,
+          color
+      });
+  };
+
+  // Actual Execute Function
+  const executeBulkUpdate = async () => {
       setIsUpdatingStatus(true);
       try {
+          const status = confirmModal.statusValue;
           const updates = Array.from(selectedTeamIds).map(id => updateTeamStatus(id, status));
           await Promise.all(updates);
           
-          // Clear selection and refresh data logic (In a real app, trigger a refresh callback)
           setSelectedTeamIds(new Set());
-          alert('บันทึกสถานะเรียบร้อยแล้ว กรุณารีเฟรชหน้าเว็บเพื่อดูข้อมูลล่าสุด');
-          window.location.reload(); 
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+          showToast('บันทึกข้อมูลสำเร็จ (กำลังรีเฟรช...)', 'success');
+          
+          // Delay reload slightly to let toast show
+          setTimeout(() => {
+              window.location.reload(); 
+          }, 1500);
+
       } catch (err) {
-          alert('เกิดข้อผิดพลาดในการบันทึกสถานะ');
+          showToast('เกิดข้อผิดพลาดในการบันทึกข้อมูล', 'error');
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
       } finally {
           setIsUpdatingStatus(false);
       }
@@ -421,8 +527,27 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
   const isAllSelected = paginatedTeams.length > 0 && selectedTeamIds.size === paginatedTeams.length;
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="space-y-6 animate-in fade-in duration-500 relative">
       
+      {/* Notifications */}
+      <Toast 
+        message={toast.message} 
+        type={toast.type} 
+        isVisible={toast.isVisible} 
+        onClose={() => setToast(prev => ({ ...prev, isVisible: false }))} 
+      />
+
+      <ConfirmationModal 
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        description={confirmModal.desc}
+        confirmLabel="ยืนยัน"
+        confirmColor={confirmModal.color}
+        onConfirm={executeBulkUpdate}
+        onCancel={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+        isLoading={isUpdatingStatus}
+      />
+
       {/* Enhanced Dashboard Stats */}
       {dashboardStats && (
         <div className={`bg-gradient-to-r ${dashboardStats.bgGradient} rounded-2xl p-6 text-white shadow-lg mb-6 transition-all duration-300`}>
@@ -436,10 +561,8 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
                 </div>
             </div>
 
-            {/* Area View: Focus on Medals & Top Schools */}
             {viewRound === 'area' ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Left: Medals */}
                     <div className="bg-white/10 backdrop-blur-sm rounded-xl p-5 border border-white/20">
                          <h4 className="text-white/80 text-sm mb-4 font-semibold flex items-center">
                              <Award className="w-4 h-4 mr-2"/> สรุปเหรียญรางวัลรวม
@@ -461,19 +584,8 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
                                 <span className="text-xs text-orange-100">Bronze</span>
                             </div>
                          </div>
-                         <div className="mt-4 pt-3 border-t border-white/10 flex justify-between items-center">
-                             <div className="flex flex-col">
-                                <span className="text-xs text-white/70">รายการแข่งขัน</span>
-                                <span className="text-lg font-bold">{dashboardStats.activities}</span>
-                             </div>
-                             <div className="flex flex-col text-right">
-                                <span className="text-xs text-white/70">ทีมทั้งหมด</span>
-                                <span className="text-lg font-bold">{dashboardStats.total}</span>
-                             </div>
-                         </div>
                     </div>
 
-                    {/* Right: Top Schools */}
                     <div className="bg-white/10 backdrop-blur-sm rounded-xl p-5 border border-white/20">
                          <h4 className="text-white/80 text-sm mb-4 font-semibold flex items-center">
                              <Crown className="w-4 h-4 mr-2 text-yellow-300"/> Top 3 โรงเรียนยอดเยี่ยม (คะแนนรวม)
@@ -497,7 +609,6 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
                     </div>
                 </div>
             ) : (
-                /* Cluster View: Standard Layout + Qualified Card */
                 <>
                     <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
                         <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
@@ -507,8 +618,6 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
                                 <span className="text-2xl font-bold">{dashboardStats.total}</span>
                             </div>
                         </div>
-                        
-                        {/* New Activities Card */}
                         <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
                             <p className="text-blue-100 text-sm mb-1">รายการแข่งขัน</p>
                             <div className="flex items-center text-blue-200">
@@ -516,7 +625,6 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
                                 <span className="text-2xl font-bold">{dashboardStats.activities}</span>
                             </div>
                         </div>
-
                         <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
                             <p className="text-yellow-100 text-sm mb-1">รอตรวจสอบ</p>
                             <div className="flex items-center text-yellow-300">
@@ -531,8 +639,6 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
                                 <span className="text-2xl font-bold">{dashboardStats.approved}</span>
                             </div>
                         </div>
-
-                        {/* Qualified Card (Cluster ONLY) */}
                         <div className="bg-white/20 backdrop-blur-md rounded-xl p-4 border border-white/40 ring-2 ring-white/20 shadow-inner">
                             <p className="text-purple-100 text-sm mb-1 font-semibold">ตัวแทนไปแข่งระดับเขต</p>
                             <div className="flex items-center text-white">
@@ -541,49 +647,46 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
                             </div>
                         </div>
                     </div>
-
-                    <div className="grid grid-cols-3 gap-4 border-t border-white/10 pt-4">
-                         <div className="flex flex-col items-center p-2 rounded-lg bg-yellow-500/20 border border-yellow-400/30">
-                             <Medal className="w-5 h-5 text-yellow-300 mb-1" />
-                             <span className="text-xl font-bold text-white">{dashboardStats.medals.gold}</span>
-                         </div>
-                         <div className="flex flex-col items-center p-2 rounded-lg bg-gray-400/20 border border-gray-400/30">
-                             <Medal className="w-5 h-5 text-gray-300 mb-1" />
-                             <span className="text-xl font-bold text-white">{dashboardStats.medals.silver}</span>
-                         </div>
-                         <div className="flex flex-col items-center p-2 rounded-lg bg-orange-500/20 border border-orange-400/30">
-                             <Medal className="w-5 h-5 text-orange-300 mb-1" />
-                             <span className="text-xl font-bold text-white">{dashboardStats.medals.bronze}</span>
-                         </div>
-                    </div>
                 </>
             )}
         </div>
       )}
 
-      {/* Bulk Action Bar (Sticky) */}
+      {/* Enhanced Bulk Action Bar (Sticky) */}
       {isSuperUser && selectedTeamIds.size > 0 && (
-          <div className="sticky top-14 z-20 bg-white border border-blue-200 shadow-lg rounded-xl p-3 flex items-center justify-between animate-in slide-in-from-top-2">
-              <div className="flex items-center gap-2">
-                  <span className="bg-blue-600 text-white text-xs font-bold px-2 py-1 rounded-full">{selectedTeamIds.size}</span>
+          <div className="sticky top-14 z-20 bg-white border border-blue-200 shadow-xl rounded-xl p-3 flex flex-col sm:flex-row items-center justify-between gap-3 animate-in slide-in-from-top-2">
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                  <div className="bg-blue-600 text-white text-sm font-bold px-3 py-1 rounded-full shadow-sm flex items-center">
+                      <CheckSquare className="w-4 h-4 mr-1.5" />
+                      {selectedTeamIds.size}
+                  </div>
                   <span className="text-sm text-gray-700 font-medium">รายการที่เลือก</span>
               </div>
-              <div className="flex gap-2">
+              
+              <div className="flex flex-wrap gap-2 w-full sm:w-auto justify-end">
                   <button 
-                    onClick={() => handleBulkStatusUpdate('1')}
+                    onClick={() => promptBulkUpdate('1')}
                     disabled={isUpdatingStatus}
-                    className="flex items-center px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors disabled:opacity-50"
+                    className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-all hover:shadow-md disabled:opacity-50"
                   >
-                      {isUpdatingStatus ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4 mr-1.5" />}
-                      อนุมัติทั้งหมด
+                      <CheckCircle className="w-4 h-4 mr-1.5" />
+                      อนุมัติ (Approve)
                   </button>
                   <button 
-                    onClick={() => handleBulkStatusUpdate('2')}
+                    onClick={() => promptBulkUpdate('0')}
                     disabled={isUpdatingStatus}
-                    className="flex items-center px-3 py-1.5 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50"
+                    className="flex items-center px-4 py-2 bg-yellow-500 text-white rounded-lg text-sm font-medium hover:bg-yellow-600 transition-all hover:shadow-md disabled:opacity-50"
                   >
-                      {isUpdatingStatus ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4 mr-1.5" />}
-                      ปฏิเสธทั้งหมด
+                      <Clock className="w-4 h-4 mr-1.5" />
+                      รอตรวจ (Pending)
+                  </button>
+                  <button 
+                    onClick={() => promptBulkUpdate('2')}
+                    disabled={isUpdatingStatus}
+                    className="flex items-center px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-all hover:shadow-md disabled:opacity-50"
+                  >
+                      <XCircle className="w-4 h-4 mr-1.5" />
+                      ปฏิเสธ (Reject)
                   </button>
               </div>
           </div>
