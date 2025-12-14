@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { AppData, User, Team } from '../types';
 import { updateTeamResult } from '../services/api';
 import { shareScoreResult, shareTop3Result } from '../services/liff';
-import { Save, Filter, AlertCircle, CheckCircle, Lock, Trophy, Search, ChevronRight, Share2, AlertTriangle, Calculator, X, Copy, PieChart, Check, ChevronDown, Flag, History, Loader2, ListChecks, Edit2, Crown, LayoutGrid, AlertOctagon } from 'lucide-react';
+import { Save, Filter, AlertCircle, CheckCircle, Lock, Trophy, Search, ChevronRight, Share2, AlertTriangle, Calculator, X, Copy, PieChart, Check, ChevronDown, Flag, History, Loader2, ListChecks, Edit2, Crown, LayoutGrid, AlertOctagon, Wand2, Eye, EyeOff, ArrowDownWideNarrow } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 // --- Types & Interfaces ---
@@ -49,7 +49,7 @@ interface ToastProps {
 interface RecentLog {
     id: string;
     teamName: string;
-    schoolName: string; // Added School Name
+    schoolName: string; 
     activityName: string;
     score: string;
     time: string;
@@ -315,6 +315,10 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
   const [edits, setEdits] = useState<Record<string, { score: string, rank: string, medal: string, flag: string, isDirty: boolean }>>({});
   const [recentLogs, setRecentLogs] = useState<RecentLog[]>([]);
   const [showMissingRepList, setShowMissingRepList] = useState(false);
+  const [showUnscoredOnly, setShowUnscoredOnly] = useState(false);
+
+  // References for keyboard navigation
+  const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const showToast = (message: string, type: 'success' | 'error' | 'info') => {
       setToast({ message, type, isVisible: true });
@@ -365,20 +369,14 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
 
   // Representative Stats Calculation
   const repStats = useMemo(() => {
-      // Get IDs of all activities visible to this user
       const activityIds = new Set(availableActivities.map(a => a.id));
-      
-      // Filter authorized teams to only those in the visible activities (already done in allAuthorizedTeams generally)
-      // Identify activities that have at least one Representative (Flag == TRUE)
       const activitiesWithRep = new Set(
           allAuthorizedTeams
             .filter(t => String(t.flag).toUpperCase() === 'TRUE')
             .map(t => t.activityId)
             .filter(id => activityIds.has(id))
       );
-      
       const missingActivities = availableActivities.filter(a => !activitiesWithRep.has(a.id));
-
       return {
           total: availableActivities.length,
           countWithRep: activitiesWithRep.size,
@@ -388,7 +386,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
   }, [availableActivities, allAuthorizedTeams]);
 
 
-  // Global Dashboard Stats (Existing)
+  // Global Dashboard Stats
   const globalStats = useMemo(() => {
       const total = allAuthorizedTeams.length;
       const scored = allAuthorizedTeams.filter(t => t.score > 0).length;
@@ -409,6 +407,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
   const filteredTeams = useMemo(() => {
       if (!selectedActivityId) return [];
       let teams = allAuthorizedTeams.filter(t => t.activityId === selectedActivityId);
+      
       if (searchTerm) {
           const lower = searchTerm.toLowerCase();
           teams = teams.filter(t => 
@@ -417,16 +416,26 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
               t.schoolId.toLowerCase().includes(lower)
           );
       }
+
+      if (showUnscoredOnly) {
+        teams = teams.filter(t => {
+            const edit = edits[t.teamId];
+            if (edit) return parseFloat(edit.score) <= 0;
+            return t.score <= 0;
+        });
+      }
+
       return teams.sort((a, b) => b.score - a.score); 
-  }, [allAuthorizedTeams, selectedActivityId, searchTerm]);
+  }, [allAuthorizedTeams, selectedActivityId, searchTerm, showUnscoredOnly, edits]);
 
   // Activity Progress
   const activityProgress = useMemo(() => {
-      const total = filteredTeams.length;
-      const recorded = filteredTeams.filter(t => t.score > 0).length;
+      const allInActivity = allAuthorizedTeams.filter(t => t.activityId === selectedActivityId);
+      const total = allInActivity.length;
+      const recorded = allInActivity.filter(t => t.score > 0).length;
       const percent = total > 0 ? Math.round((recorded / total) * 100) : 0;
       return { total, recorded, percent };
-  }, [filteredTeams]);
+  }, [allAuthorizedTeams, selectedActivityId]);
 
   // --- Handlers ---
 
@@ -445,6 +454,72 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
           const newState = { ...baseState, [field]: value, isDirty: true };
           return { ...prev, [teamId]: newState };
       });
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent, currentIndex: number) => {
+      if (e.key === 'Enter' || e.key === 'ArrowDown') {
+          e.preventDefault();
+          const nextIndex = currentIndex + 1;
+          if (nextIndex < filteredTeams.length) {
+              const nextTeamId = filteredTeams[nextIndex].teamId;
+              const nextInput = inputRefs.current[nextTeamId];
+              if (nextInput) nextInput.focus();
+          }
+      } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          const prevIndex = currentIndex - 1;
+          if (prevIndex >= 0) {
+              const prevTeamId = filteredTeams[prevIndex].teamId;
+              const prevInput = inputRefs.current[prevTeamId];
+              if (prevInput) prevInput.focus();
+          }
+      }
+  };
+
+  const handleAutoRank = () => {
+    // 1. Get current scores for all teams in view (merging edits and existing data)
+    const teamsWithScores = filteredTeams.map(team => {
+        const edit = edits[team.teamId];
+        const score = edit?.score ? parseFloat(edit.score) : team.score;
+        return { ...team, currentScore: isNaN(score) ? 0 : score };
+    });
+
+    // 2. Sort by Score Descending
+    teamsWithScores.sort((a, b) => b.currentScore - a.currentScore);
+
+    // 3. Assign Ranks (Standard Competition Ranking: 1, 2, 2, 4...)
+    let currentRank = 1;
+    const newEdits: typeof edits = {};
+
+    for (let i = 0; i < teamsWithScores.length; i++) {
+        if (i > 0 && teamsWithScores[i].currentScore < teamsWithScores[i - 1].currentScore) {
+            currentRank = i + 1;
+        }
+        
+        // Only update if rank has changed or wasn't set, and only if score > 0
+        if (teamsWithScores[i].currentScore > 0) {
+            const teamId = teamsWithScores[i].teamId;
+            const rankStr = String(currentRank);
+            
+            // Preserve other edits if they exist
+            const prevEdit = edits[teamId];
+            const baseTeam = data.teams.find(t => t.teamId === teamId);
+            
+            // Check if rank actually needs update to avoid unnecessary dirty state
+            if (prevEdit?.rank !== rankStr && baseTeam?.rank !== rankStr) {
+                newEdits[teamId] = {
+                    score: prevEdit?.score ?? String(baseTeam?.score > 0 ? baseTeam.score : ''),
+                    rank: rankStr,
+                    medal: prevEdit?.medal ?? String(baseTeam?.medalOverride || ''),
+                    flag: prevEdit?.flag ?? String(baseTeam?.flag || ''),
+                    isDirty: true
+                };
+            }
+        }
+    }
+
+    setEdits(prev => ({ ...prev, ...newEdits }));
+    showToast('คำนวณลำดับเรียบร้อยแล้ว (กรุณากดบันทึก)', 'info');
   };
 
   const initiateSave = (teamId: string) => {
@@ -493,7 +568,6 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
 
         if (success) {
             onDataUpdate(); 
-            // Clear dirty state for this team
             setEdits(prev => {
                 const { [teamId]: _, ...rest } = prev;
                 return rest;
@@ -507,14 +581,12 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
         }
 
       } else {
-        // Batch Save
         setConfirmState({ isOpen: false, type: 'batch', teamId: null });
         setIsLoading(true);
 
         const dirtyIds = Object.keys(edits).filter(id => edits[id].isDirty && filteredTeams.some(t => t.teamId === id));
         let successCount = 0;
 
-        // Execute sequentially to be safe with Google Apps Script concurrent locks
         for (const id of dirtyIds) {
             const edit = edits[id];
             const result = await performUpdate(id, edit);
@@ -527,9 +599,8 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
         }
 
         setIsLoading(false);
-        onDataUpdate(); // Refresh global data
+        onDataUpdate(); 
         
-        // Clear edits for successful ones
         setEdits(prev => {
              const newEdits = { ...prev };
              dirtyIds.forEach(id => delete newEdits[id]);
@@ -547,7 +618,6 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
   const handleShare = async (team: Team) => {
      const activityName = data.activities.find(a => a.id === team.activityId)?.name || team.activityId;
      const schoolName = data.schools.find(s => s.SchoolID === team.schoolId)?.SchoolName || team.schoolId;
-     // Use database value unless edited locally (though usually share button appears after save)
      const medal = calculateMedal(String(team.score), team.medalOverride);
      
      const result = await shareScoreResult(team.teamName, schoolName, activityName, team.score, medal, team.rank);
@@ -565,14 +635,12 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
     if (filteredTeams.length === 0) return;
     const currentActivityName = availableActivities.find(a => a.id === selectedActivityId)?.name || selectedActivityId;
     
-    // Sort logic same as render: High score first
     const sorted = [...filteredTeams].sort((a, b) => {
          const scoreA = edits[a.teamId]?.score ? parseFloat(edits[a.teamId].score) : a.score;
          const scoreB = edits[b.teamId]?.score ? parseFloat(edits[b.teamId].score) : b.score;
          return scoreB - scoreA;
     });
 
-    // Take top 3
     const top3 = sorted.slice(0, 3).map((t, index) => {
         const edit = edits[t.teamId];
         const score = edit?.score ?? String(t.score);
@@ -599,7 +667,6 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
      }
   };
 
-  // Helper for confirm data
   const getSingleConfirmData = () => {
       if (confirmState.type !== 'single' || !confirmState.teamId) return null;
       const team = data.teams.find(t => t.teamId === confirmState.teamId);
@@ -614,7 +681,6 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       };
   };
 
-  // Helper for batch data: RETURNS ALL TEAMS in Filter, marking which are modified
   const getBatchItems = (): BatchItem[] => {
       if (confirmState.type !== 'batch') return [];
       
@@ -649,7 +715,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* 1. Global Stats - Score Progress */}
+        {/* Global Stats */}
         <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-xl p-6 text-white shadow-lg flex flex-col justify-between">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                 <div className="flex-1 w-full">
@@ -684,7 +750,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
             </div>
         </div>
 
-        {/* 2. Representative Status Dashboard */}
+        {/* Representative Dashboard */}
         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 flex flex-col justify-between">
              <div className="flex justify-between items-start mb-4">
                 <h3 className="text-lg font-bold text-gray-800 flex items-center">
@@ -695,7 +761,6 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                     {repStats.countWithRep} / {repStats.total} รายการ
                 </span>
              </div>
-             
              <div className="space-y-4">
                  <div className="grid grid-cols-2 gap-4">
                      <div className="bg-green-50 p-3 rounded-lg border border-green-100">
@@ -707,7 +772,6 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                          <div className="text-2xl font-bold text-red-700">{repStats.countMissing} <span className="text-sm font-normal text-red-600">รายการ</span></div>
                      </div>
                  </div>
-
                  {repStats.countMissing > 0 && (
                      <div className="relative">
                          <button 
@@ -717,7 +781,6 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                              <span>แสดงรายการที่ยังไม่มีตัวแทน</span>
                              <ChevronDown className={`w-3 h-3 transition-transform ${showMissingRepList ? 'rotate-180' : ''}`} />
                          </button>
-                         
                          {showMissingRepList && (
                              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 max-h-48 overflow-y-auto p-2">
                                  {repStats.missingList.map(a => (
@@ -734,7 +797,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
         </div>
       </div>
 
-      {/* 3. Selection Card */}
+      {/* Selection Card */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">1. เลือกหมวดหมู่</label>
@@ -746,7 +809,6 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                 icon={<Filter className="h-4 w-4" />}
               />
           </div>
-
           <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">2. เลือกรายการแข่งขัน</label>
               <SearchableSelect 
@@ -760,7 +822,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
           </div>
       </div>
 
-      {/* 4. Table Section */}
+      {/* Table Section */}
       {selectedActivityId && (
           <div className="space-y-4">
               <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col md:flex-row justify-between items-center gap-4">
@@ -773,7 +835,8 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                             <div className="bg-green-500 h-2 rounded-full transition-all duration-500" style={{ width: `${activityProgress.percent}%` }}></div>
                         </div>
                    </div>
-                   <div className="w-full md:w-auto relative flex items-center gap-2">
+                   <div className="w-full md:w-auto flex items-center gap-2">
+                        {/* Search */}
                          <div className="relative flex-1">
                             <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
                             <input
@@ -784,14 +847,21 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                 onChange={(e) => setSearchTerm(e.target.value)}
                             />
                          </div>
-                         {/* Share Top 3 Button */}
+                         {/* Toggle Unscored Only */}
+                         <button
+                            onClick={() => setShowUnscoredOnly(!showUnscoredOnly)}
+                            className={`p-2 rounded-lg border transition-colors ${showUnscoredOnly ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-white border-gray-300 text-gray-400 hover:text-gray-600'}`}
+                            title={showUnscoredOnly ? "แสดงทั้งหมด" : "แสดงเฉพาะที่ยังไม่บันทึก"}
+                         >
+                            {showUnscoredOnly ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                         </button>
+                         {/* Share Top 3 */}
                          <button 
                             onClick={handleShareTop3}
                             className="p-2 bg-amber-50 text-amber-600 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors whitespace-nowrap flex items-center"
                             title="แชร์ผล Top 3"
                          >
-                             <Crown className="w-4 h-4 sm:mr-1" />
-                             <span className="hidden sm:inline text-xs font-bold">แชร์ Top 3</span>
+                             <Crown className="w-4 h-4" />
                          </button>
                    </div>
               </div>
@@ -808,14 +878,25 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">ลำดับ</th>
                                   <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-20">ตัวแทน (Q)</th>
                                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                     {dirtyCount > 0 ? (
-                                         <button 
-                                            onClick={initiateBatchSave}
-                                            className="inline-flex items-center px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 transition-colors shadow-sm"
-                                         >
-                                             <ListChecks className="w-3 h-3 mr-1" /> บันทึกทั้งหมด ({dirtyCount})
-                                         </button>
-                                     ) : "จัดการ"}
+                                     <div className="flex justify-end gap-2">
+                                        {/* Auto Rank Button */}
+                                        <button 
+                                            onClick={handleAutoRank}
+                                            className="inline-flex items-center px-2 py-1 bg-purple-50 text-purple-600 border border-purple-200 rounded text-xs hover:bg-purple-100 transition-colors shadow-sm"
+                                            title="คำนวณลำดับอัตโนมัติจากคะแนน"
+                                        >
+                                            <Wand2 className="w-3 h-3 mr-1" /> Auto Rank
+                                        </button>
+
+                                        {dirtyCount > 0 ? (
+                                            <button 
+                                                onClick={initiateBatchSave}
+                                                className="inline-flex items-center px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 transition-colors shadow-sm"
+                                            >
+                                                <ListChecks className="w-3 h-3 mr-1" /> Save All ({dirtyCount})
+                                            </button>
+                                        ) : "Actions"}
+                                     </div>
                                   </th>
                               </tr>
                           </thead>
@@ -832,8 +913,13 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                   const isDirty = edit?.isDirty;
                                   const hasSavedScore = team.score > 0 && !isDirty;
 
-                                  // Calculate medal if auto or empty
+                                  // Calculate medal
                                   const calculatedMedal = calculateMedal(displayScore, displayMedal);
+                                  
+                                  // Score color bar calculation
+                                  const numScore = parseFloat(displayScore);
+                                  const scorePercent = isNaN(numScore) ? 0 : Math.min(100, Math.max(0, numScore));
+                                  const scoreColor = numScore >= 80 ? 'bg-green-500' : numScore >= 70 ? 'bg-blue-500' : numScore >= 60 ? 'bg-orange-400' : 'bg-red-400';
 
                                   return (
                                       <tr key={team.teamId} className={`${isDirty ? "bg-blue-50/30" : hasSavedScore ? "bg-green-50/20" : ""}`}>
@@ -844,14 +930,21 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                                   <div className="text-xs text-gray-500">{school?.SchoolName}</div>
                                               </div>
                                           </td>
-                                          <td className="px-6 py-4 whitespace-nowrap">
-                                              <input 
-                                                type="number" step="0.01" min="0" max="100"
-                                                className={`w-full border rounded px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none ${isDirty ? 'border-blue-400 bg-white' : 'border-gray-300'}`}
-                                                value={displayScore}
-                                                onChange={(e) => handleInputChange(team.teamId, 'score', e.target.value)}
-                                                placeholder="0.00"
-                                              />
+                                          <td className="px-6 py-4 whitespace-nowrap relative">
+                                              <div className="relative">
+                                                  <input 
+                                                    ref={(el) => { inputRefs.current[team.teamId] = el; }}
+                                                    type="number" step="0.01" min="0" max="100"
+                                                    className={`w-full border rounded px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none ${isDirty ? 'border-blue-400 bg-white' : 'border-gray-300'}`}
+                                                    value={displayScore}
+                                                    onChange={(e) => handleInputChange(team.teamId, 'score', e.target.value)}
+                                                    onKeyDown={(e) => handleKeyDown(e, idx)}
+                                                    placeholder="0.00"
+                                                  />
+                                                  {displayScore && (
+                                                      <div className={`absolute bottom-0 left-0 h-0.5 ${scoreColor} transition-all duration-300`} style={{ width: `${scorePercent}%`, opacity: 0.6 }}></div>
+                                                  )}
+                                              </div>
                                           </td>
                                           <td className="px-6 py-4 whitespace-nowrap relative">
                                               <select 
@@ -865,7 +958,6 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                                   <option value="Bronze">Bronze</option>
                                                   <option value="Participant">Participant</option>
                                               </select>
-                                              {/* Show calculated hint if Auto */}
                                               {(!displayMedal || displayMedal === "") && displayScore && (
                                                   <span className="absolute right-8 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 pointer-events-none bg-white px-1">
                                                       ({calculatedMedal})
