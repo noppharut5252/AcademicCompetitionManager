@@ -350,9 +350,8 @@ const App: React.FC = () => {
             <Routes>
                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
                 <Route path="/dashboard" element={<Dashboard data={data} user={currentUser} />} />
-                <Route path="/teams" element={<TeamList data={data} user={currentUser} />} />
+                <Route path="/teams" element={<TeamList data={data} user={currentUser} onDataUpdate={() => fetchAppData(true)} />} />
                 <Route path="/activities" element={<ActivityList data={data} />} />
-                {/* Pass silent refresh to prevent unmounting ScoreEntry */}
                 <Route path="/score" element={<ScoreEntry data={data} user={currentUser} onDataUpdate={() => fetchAppData(true)} />} />
                 <Route path="/results" element={<ResultsView data={data} />} />
                 <Route path="/certificates" element={<DocumentsView data={data} type="certificate" />} />
