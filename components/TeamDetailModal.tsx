@@ -79,8 +79,14 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose }
   const displayStatus = normalizeStatus(team.status);
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in duration-200">
+    <div 
+        className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"
+        onClick={onClose} // Close on overlay click
+    >
+      <div 
+        className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in duration-200"
+        onClick={(e) => e.stopPropagation()} // Prevent close when clicking content
+      >
         
         {/* Header */}
         <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between z-10">
@@ -91,7 +97,7 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose }
                 <span className="text-sm text-gray-500">{team.teamId} • {displayStatus}</span>
                 {team.flag && (
                     <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
-                        <Flag className="w-3 h-3 mr-1" /> ตัวแทนเขต
+                        <Flag className="w-3 h-3 mr-1" /> ตัวแทนระดับกลุ่มเครือข่าย
                     </span>
                 )}
             </div>

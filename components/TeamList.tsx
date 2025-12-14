@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { AppData, Team, TeamStatus, User, AreaStageInfo } from '../types';
-import { Search, Filter, MoreHorizontal, FileText, CheckCircle, XCircle, Clock, ChevronLeft, ChevronRight, Eye, Trophy, Medal, Hash, Image as ImageIcon } from 'lucide-react';
+import { Search, Filter, MoreHorizontal, FileText, CheckCircle, XCircle, Clock, ChevronLeft, ChevronRight, Eye, Trophy, Medal, Hash, Image as ImageIcon, LayoutGrid } from 'lucide-react';
 import TeamDetailModal from './TeamDetailModal';
 
 interface TeamListProps {
@@ -14,6 +14,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [categoryFilter, setCategoryFilter] = useState<string>('All');
+  const [clusterFilter, setClusterFilter] = useState<string>('All');
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const [viewRound, setViewRound] = useState<'cluster' | 'area'>('cluster');
@@ -22,6 +23,11 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
   const categories = useMemo(() => {
     return Array.from(new Set(data.activities.map(a => a.category))).sort();
   }, [data.activities]);
+
+  // Extract clusters for filter
+  const clusters = useMemo(() => {
+    return data.clusters.sort((a, b) => a.ClusterName.localeCompare(b.ClusterName));
+  }, [data.clusters]);
 
   // Helper to normalize status (handle numeric codes if present)
   const normalizeStatus = (status: string) => {
@@ -50,7 +56,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
             if (userSchool) {
                 const userClusterId = userSchool.SchoolCluster;
                 teams = teams.filter(t => {
-                    const teamSchool = data.schools.find(s => s.SchoolID === t.schoolId);
+                    const teamSchool = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
                     return teamSchool && teamSchool.SchoolCluster === userClusterId;
                 });
             } else {
@@ -78,24 +84,28 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
         });
     }
 
-    // 3. Search & Status & Category Filtering
+    // 3. Search & Status & Category & Cluster Filtering
     return teams.filter(team => {
       const activity = data.activities.find(a => a.id === team.activityId);
-      const school = data.schools.find(s => s.SchoolID === team.schoolId);
+      // Improved school lookup to support ID or Name
+      const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
+      const cluster = school ? data.clusters.find(c => c.ClusterID === school.SchoolCluster) : null;
       const normalizedStatus = normalizeStatus(team.status);
       
       const term = searchTerm.toLowerCase();
       const matchesSearch = 
         team.teamName.toLowerCase().includes(term) || 
         team.teamId.toLowerCase().includes(term) ||
-        (school && school.SchoolName.toLowerCase().includes(term));
+        (school && school.SchoolName.toLowerCase().includes(term)) ||
+        (cluster && cluster.ClusterName.toLowerCase().includes(term));
       
       const matchesStatus = statusFilter === 'All' || normalizedStatus === statusFilter;
       const matchesCategory = categoryFilter === 'All' || (activity && activity.category === categoryFilter);
+      const matchesCluster = clusterFilter === 'All' || (cluster && cluster.ClusterID === clusterFilter);
 
-      return matchesSearch && matchesStatus && matchesCategory;
+      return matchesSearch && matchesStatus && matchesCategory && matchesCluster;
     });
-  }, [data.teams, data.schools, data.activities, user, searchTerm, statusFilter, categoryFilter, viewRound]);
+  }, [data.teams, data.schools, data.activities, data.clusters, user, searchTerm, statusFilter, categoryFilter, clusterFilter, viewRound]);
 
   // Pagination Logic
   const totalPages = Math.ceil(filteredTeams.length / ITEMS_PER_PAGE);
@@ -163,47 +173,68 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
       </div>
 
       {/* Filters */}
-      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col md:flex-row gap-4 items-center justify-between">
-        <div className="relative w-full md:w-80">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <Search className="h-5 w-5 text-gray-400" />
-          </div>
-          <input
-            type="text"
-            className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-            placeholder="ค้นหาชื่อทีม, โรงเรียน..."
-            value={searchTerm}
-            onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-          />
-        </div>
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col gap-4">
         
-        <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-             <Filter className="w-5 h-5 text-gray-500 hidden sm:block" />
-             <select 
-                className="block w-full pl-3 pr-8 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-lg"
-                value={categoryFilter}
-                onChange={(e) => { setCategoryFilter(e.target.value); setCurrentPage(1); }}
-            >
-                <option value="All">ทุกหมวดหมู่</option>
-                {categories.map(c => (
-                <option key={c} value={c}>{c}</option>
-                ))}
-            </select>
-          </div>
+        {/* Row 1: Search and Cluster/Category Filters */}
+        <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
+            <div className="relative w-full md:flex-1">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Search className="h-5 w-5 text-gray-400" />
+                </div>
+                <input
+                    type="text"
+                    className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                    placeholder="ค้นหาชื่อทีม, โรงเรียน, กลุ่มเครือข่าย..."
+                    value={searchTerm}
+                    onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+                />
+            </div>
 
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <select 
-                className="block w-full pl-3 pr-8 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-lg"
-                value={statusFilter}
-                onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
-            >
-                <option value="All">ทุกสถานะ</option>
-                {Object.values(TeamStatus).map(s => (
-                <option key={s} value={s}>{s}</option>
-                ))}
-            </select>
-          </div>
+            <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+                 {/* Cluster Filter */}
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <LayoutGrid className="w-5 h-5 text-gray-500 hidden sm:block" />
+                    <select 
+                        className="block w-full pl-3 pr-8 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-lg"
+                        value={clusterFilter}
+                        onChange={(e) => { setClusterFilter(e.target.value); setCurrentPage(1); }}
+                    >
+                        <option value="All">ทุกกลุ่มเครือข่าย</option>
+                        {clusters.map(c => (
+                        <option key={c.ClusterID} value={c.ClusterID}>{c.ClusterName}</option>
+                        ))}
+                    </select>
+                </div>
+
+                {/* Category Filter */}
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <Filter className="w-5 h-5 text-gray-500 hidden sm:block" />
+                    <select 
+                        className="block w-full pl-3 pr-8 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-lg"
+                        value={categoryFilter}
+                        onChange={(e) => { setCategoryFilter(e.target.value); setCurrentPage(1); }}
+                    >
+                        <option value="All">ทุกหมวดหมู่</option>
+                        {categories.map(c => (
+                        <option key={c} value={c}>{c}</option>
+                        ))}
+                    </select>
+                </div>
+
+                {/* Status Filter */}
+                 <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <select 
+                        className="block w-full pl-3 pr-8 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-lg"
+                        value={statusFilter}
+                        onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
+                    >
+                        <option value="All">ทุกสถานะ</option>
+                        {Object.values(TeamStatus).map(s => (
+                        <option key={s} value={s}>{s}</option>
+                        ))}
+                    </select>
+                </div>
+            </div>
         </div>
       </div>
 
@@ -211,7 +242,9 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
       <div className="grid grid-cols-1 gap-4 md:hidden">
         {paginatedTeams.map((team) => {
             const activity = data.activities.find(a => a.id === team.activityId);
-            const school = data.schools.find(s => s.SchoolID === team.schoolId);
+            // Improved lookup
+            const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
+            const cluster = school ? data.clusters.find(c => c.ClusterID === school.SchoolCluster) : null;
             const areaInfo = getAreaInfo(team.stageInfo);
             const imageUrl = getTeamImageUrl(team);
             const showScore = viewRound === 'cluster' ? team.score : areaInfo?.score;
@@ -234,6 +267,9 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
                             {getStatusBadge(team.status)}
                         </div>
                         <p className="text-xs text-gray-500 mt-1 truncate">{school?.SchoolName}</p>
+                         <p className="text-[10px] text-gray-400 mt-0.5 truncate flex items-center">
+                            <LayoutGrid className="w-3 h-3 mr-1"/> {cluster?.ClusterName}
+                        </p>
                         <p className="text-xs text-gray-400 mt-0.5 truncate">{activity?.name}</p>
                         
                         <div className="mt-3 flex items-center justify-between border-t border-gray-50 pt-2">
@@ -270,7 +306,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
               <tr>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ทีม (Team)</th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">หมวดหมู่ & รายการ</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">โรงเรียน</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">โรงเรียน / กลุ่มเครือข่าย</th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">สถานะ</th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     {viewRound === 'cluster' ? 'คะแนน / ลำดับ (Score/Rank)' : 'คะแนนเขต / ผล'}
@@ -282,7 +318,9 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
               {paginatedTeams.length > 0 ? (
                 paginatedTeams.map((team) => {
                   const activity = data.activities.find(a => a.id === team.activityId);
-                  const school = data.schools.find(s => s.SchoolID === team.schoolId);
+                  // Improved lookup
+                  const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
+                  const cluster = school ? data.clusters.find(c => c.ClusterID === school.SchoolCluster) : null;
                   const teamFiles = data.files.filter(f => f.TeamID === team.teamId);
                   const areaInfo = getAreaInfo(team.stageInfo);
                   const imageUrl = getTeamImageUrl(team);
@@ -323,7 +361,10 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900 max-w-[150px] truncate" title={school?.SchoolName}>{school?.SchoolName || team.schoolId}</div>
-                        <div className="text-xs text-gray-500">{data.clusters.find(c => c.ClusterID === school?.SchoolCluster)?.ClusterName}</div>
+                        <div className="text-xs text-gray-500 flex items-center">
+                            <LayoutGrid className="w-3 h-3 mr-1 text-gray-400"/>
+                            {cluster?.ClusterName || '-'}
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         {getStatusBadge(team.status)}

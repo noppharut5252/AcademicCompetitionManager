@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { AppData, Announcement, User } from '../types';
 import { Users, School, Trophy, FileText, Megaphone, Plus, Book, Calendar, ChevronRight } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from 'recharts';
@@ -20,11 +20,34 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
   const [newType, setNewType] = useState<'news' | 'manual'>('news');
   const [newLink, setNewLink] = useState('');
 
-  const statusData = getTeamCountByStatus(data);
-  const activityData = getTeamsByActivity(data);
-  
-  // Filter stats based on viewLevel if needed (Currently simplified to show overall)
-  // In a real scenario, you'd filter `data.teams` before calculating stats based on `viewLevel`.
+  // Filter teams based on view level
+  const filteredTeams = useMemo(() => {
+    if (viewLevel === 'area') {
+        // Show only teams that made it to the Area level
+        return data.teams.filter(t => t.stageStatus === 'Area' || t.flag === 'TRUE');
+    }
+    return data.teams;
+  }, [data.teams, viewLevel]);
+
+  // Recalculate Stats for current view
+  const statusData = useMemo(() => {
+      const counts: Record<string, number> = {};
+      filteredTeams.forEach(team => {
+        counts[team.status] = (counts[team.status] || 0) + 1;
+      });
+      return Object.keys(counts).map(key => ({ name: key, value: counts[key] }));
+  }, [filteredTeams]);
+
+  // Unique schools in the filtered list
+  const uniqueSchoolCount = useMemo(() => {
+      return new Set(filteredTeams.map(t => t.schoolId)).size;
+  }, [filteredTeams]);
+
+   // Unique activities in the filtered list
+   const uniqueActivityCount = useMemo(() => {
+    return new Set(filteredTeams.map(t => t.activityId)).size;
+   }, [filteredTeams]);
+
 
   const handleAddNews = async (e: React.FormEvent) => {
       e.preventDefault();
@@ -129,7 +152,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
               </div>
           </div>
 
-          {/* Right Column: Stats Overview (Changes based on viewLevel logic if implemented fully) */}
+          {/* Right Column: Stats Overview (Dynamic based on viewLevel) */}
           <div className="space-y-6">
              <h2 className="text-xl font-bold text-gray-800">
                  สถิติ ({viewLevel === 'cluster' ? 'Network' : 'District'})
@@ -138,19 +161,19 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
              <div className="grid grid-cols-1 gap-4">
                 <StatCard 
                     title="ทีมทั้งหมด" 
-                    value={data.teams.length} 
+                    value={filteredTeams.length} 
                     icon={Users} 
                     colorClass="bg-blue-500" 
                 />
                 <StatCard 
                     title="โรงเรียน" 
-                    value={data.schools.length} 
+                    value={uniqueSchoolCount} 
                     icon={School} 
                     colorClass="bg-indigo-500" 
                 />
                 <StatCard 
                     title="รายการแข่งขัน" 
-                    value={data.activities.length} 
+                    value={uniqueActivityCount} 
                     icon={Trophy} 
                     colorClass="bg-amber-500" 
                 />
