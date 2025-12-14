@@ -104,7 +104,29 @@ const App: React.FC = () => {
       fetchAppData();
   };
 
-  // 1. Initial Loading (Checking LIFF)
+  // Skeleton Loader Component
+  const SkeletonLoader = () => (
+    <div className="space-y-6 p-2">
+       {/* Hero Skeleton */}
+       <div className="h-32 bg-gray-200 rounded-2xl animate-pulse"></div>
+       
+       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+           <div className="lg:col-span-2 space-y-4">
+               {/* News Skeletons */}
+               <div className="h-48 bg-gray-200 rounded-xl animate-pulse"></div>
+               <div className="h-48 bg-gray-200 rounded-xl animate-pulse"></div>
+           </div>
+           <div className="space-y-4">
+               {/* Stat Skeletons */}
+               <div className="h-24 bg-gray-200 rounded-xl animate-pulse"></div>
+               <div className="h-24 bg-gray-200 rounded-xl animate-pulse"></div>
+               <div className="h-64 bg-gray-200 rounded-xl animate-pulse"></div>
+           </div>
+       </div>
+    </div>
+  );
+
+  // 1. Initial Loading (Checking LIFF) - Full Page Spinner
   if (liffChecking) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
@@ -226,12 +248,7 @@ const App: React.FC = () => {
   // 3. Main App Content (Authenticated)
   const renderLoadingOrError = () => {
     if (loading) {
-      return (
-        <div className="flex flex-col items-center justify-center h-[50vh]">
-          <Loader2 className="w-8 h-8 animate-spin text-blue-600 mb-4" />
-          <span className="text-gray-500 font-medium">กำลังโหลดข้อมูล...</span>
-        </div>
-      );
+      return <SkeletonLoader />;
     }
 
     if (error) {
@@ -291,3 +308,4 @@ const TrophyIcon = ({ className }: { className?: string }) => (
 );
 
 export default App;
+
