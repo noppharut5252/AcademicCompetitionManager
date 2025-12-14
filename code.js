@@ -34,6 +34,19 @@ function doGet(e) {
     }
   }
 
+  // Add Announcement (Admin)
+  if (action === 'addAnnouncement') {
+    const title = e.parameter.title;
+    const content = e.parameter.content;
+    const type = e.parameter.type || 'news';
+    const link = e.parameter.link || '';
+    const author = e.parameter.author || 'Admin';
+    
+    addAnnouncement(title, content, type, link, author);
+    return ContentService.createTextOutput(JSON.stringify({ status: 'success' }))
+        .setMimeType(ContentService.MimeType.JSON);
+  }
+
   // Otherwise serve index.html
   return HtmlService.createHtmlOutputFromFile('index')
       .setTitle('ระบบจัดการการแข่งขัน')
@@ -53,8 +66,33 @@ function getCompetitionData() {
     teams: getTeams(ss),
     schools: getSchools(ss),
     clusters: getClusters(ss),
-    files: getFiles(ss)
+    files: getFiles(ss),
+    announcements: getAnnouncements(ss)
   };
+}
+
+// Helper to get score assignments
+function getScoreAssignments(ss, userId) {
+    const sheet = ss.getSheetByName('ScoreAssignments');
+    if (!sheet) return [];
+    
+    const data = sheet.getDataRange().getValues();
+    // Headers assumed: "userId","activityIds","updatedAt","updatedBy"
+    // Skip header
+    for(let i=1; i<data.length; i++) {
+        if (String(data[i][0]) === String(userId)) {
+            // activityIds (column 1) might be comma separated or JSON
+            const raw = data[i][1];
+            try {
+                // Try JSON first
+                return JSON.parse(raw);
+            } catch (e) {
+                // Fallback to comma separated
+                return raw.toString().split(',').map(s => s.trim());
+            }
+        }
+    }
+    return [];
 }
 
 function authenticateUser(username, password) {
@@ -63,14 +101,12 @@ function authenticateUser(username, password) {
     if(!sheet) return null;
     
     const data = sheet.getDataRange().getValues();
-    // Headers: "userid","username","password","name","surname","SchoolID","tel","userline_id","level","email","avatarFileId"
-    // username = col 1, password = col 2
     
-    // Skip header
     for(let i=1; i<data.length; i++) {
         if(String(data[i][1]) === String(username) && String(data[i][2]) === String(password)) {
-            return {
-                userid: data[i][0],
+            const userId = data[i][0];
+            const user = {
+                userid: userId,
                 username: data[i][1],
                 name: data[i][3],
                 surname: data[i][4],
@@ -79,6 +115,13 @@ function authenticateUser(username, password) {
                 email: data[i][9],
                 avatarFileId: data[i][10]
             };
+            
+            // If user level is 'score', fetch assignments
+            if (user.level === 'score') {
+                user.assignedActivities = getScoreAssignments(ss, userId);
+            }
+            
+            return user;
         }
     }
     return null;
@@ -91,11 +134,11 @@ function getUserByLineId(lineId) {
     
     const data = sheet.getDataRange().getValues();
     
-    // Skip header
     for(let i=1; i<data.length; i++) {
-        if(data[i][7] == lineId) { // userline_id column
-            return {
-                userid: data[i][0],
+        if(data[i][7] == lineId) { 
+            const userId = data[i][0];
+            const user = {
+                userid: userId,
                 username: data[i][1],
                 name: data[i][3],
                 surname: data[i][4],
@@ -104,6 +147,11 @@ function getUserByLineId(lineId) {
                 email: data[i][9],
                 avatarFileId: data[i][10]
             };
+            
+            if (user.level === 'score') {
+                user.assignedActivities = getScoreAssignments(ss, userId);
+            }
+            return user;
         }
     }
     return null;
@@ -115,14 +163,14 @@ function getActivities(ss) {
   const data = sheet.getDataRange().getValues();
   data.shift();
   return data.map(row => ({
-    id: row[0],
-    category: row[1],
-    name: row[2],
-    levels: row[3],
-    mode: row[4],
-    reqTeachers: row[5],
-    reqStudents: row[6],
-    maxTeams: row[7],
+    id: String(row[0]),
+    category: String(row[1]),
+    name: String(row[2]),
+    levels: String(row[3]),
+    mode: String(row[4]),
+    reqTeachers: Number(row[5]) || 0,
+    reqStudents: Number(row[6]) || 0,
+    maxTeams: Number(row[7]) || 0,
     registrationDeadline: row[8] instanceof Date ? row[8].toISOString() : row[8]
   })).filter(a => a.id);
 }
@@ -132,26 +180,52 @@ function getTeams(ss) {
   if (!sheet) return [];
   const data = sheet.getDataRange().getValues();
   data.shift();
-  return data.map(row => ({
-    teamId: row[0],
-    activityId: row[1],
-    teamName: row[2],
-    schoolId: row[3],
-    level: row[4],
-    contact: row[5],
-    members: row[6],
-    reqInfo: row[7],
-    status: row[8],
-    logoUrl: row[9],
-    teamPhotoId: row[10],
-    createdBy: row[11],
-    statusReason: row[12],
-    score: row[13] || 0,
-    medalOverride: row[14],
-    flag: row[15],
-    stageInfo: row[16],
-    stageStatus: row[17]
-  })).filter(t => t.teamId);
+  
+  // Mapping based on: TeamID, ActivityID, TeamName, School, Level, Contact, Members, RequiredTeachers, RequiredStudents, Status, LogoUrl, TeamPhotoId, CreatedByUserId, CreatedByUsername, StatusReason, ScoreTotal, ScoreManualMedal, RankOverride, RepresentativeOverride, CompetitionStage, AreaTeamName, AreaContact, AreaMembers, AreaScore, AreaRank
+  
+  return data.map(row => {
+    // 0:TeamID, 1:ActivityID, 2:TeamName, 3:School, 4:Level
+    // 5:Contact, 6:Members, 7:ReqTeachers, 8:ReqStudents
+    // 9:Status, 10:LogoUrl, 11:TeamPhotoId
+    // 12:CreatedByUserId, 13:CreatedByUsername
+    // 14:StatusReason, 15:ScoreTotal
+    // 16:ScoreManualMedal, 17:RankOverride, 18:RepresentativeOverride
+    // 19:CompetitionStage
+    // 20:AreaTeamName, 21:AreaContact, 22:AreaMembers, 23:AreaScore, 24:AreaRank
+    
+    const scoreVal = parseFloat(row[15]); 
+    const areaScoreVal = parseFloat(row[23]);
+    
+    const stageInfo = {
+        name: String(row[20] || ""),
+        contact: String(row[21] || ""),
+        members: String(row[22] || ""),
+        score: isNaN(areaScoreVal) ? 0 : areaScoreVal,
+        rank: String(row[24] || "")
+    };
+
+    return {
+      teamId: String(row[0]),
+      activityId: String(row[1]),
+      teamName: String(row[2]),
+      schoolId: String(row[3]),
+      level: String(row[4]),
+      contact: String(row[5]),
+      members: String(row[6]),
+      reqInfo: `ครู:${row[7]}, นร:${row[8]}`,
+      status: String(row[9]),
+      logoUrl: String(row[10]),
+      teamPhotoId: String(row[11]),
+      createdBy: String(row[12]),
+      statusReason: String(row[14]), 
+      score: isNaN(scoreVal) ? 0 : scoreVal, 
+      medalOverride: String(row[16]), // Maps to ScoreManualMedal (e.g., "Gold")
+      rank: String(row[17]), // Maps to RankOverride (e.g., "1")
+      flag: String(row[18]), // Representative
+      stageInfo: JSON.stringify(stageInfo), // Area Info
+      stageStatus: String(row[19])
+    };
+  }).filter(t => t.teamId);
 }
 
 function getSchools(ss) {
@@ -160,10 +234,10 @@ function getSchools(ss) {
   const data = sheet.getDataRange().getValues();
   data.shift();
   return data.map(row => ({
-    SchoolID: row[0],
-    SchoolName: row[1],
-    SchoolCluster: row[2],
-    RegistrationMode: row[3],
+    SchoolID: String(row[0]),
+    SchoolName: String(row[1]),
+    SchoolCluster: String(row[2]),
+    RegistrationMode: String(row[3]),
     AssignedActivities: row[4] ? row[4].toString().split(',') : [] 
   })).filter(s => s.SchoolID);
 }
@@ -174,8 +248,8 @@ function getClusters(ss) {
   const data = sheet.getDataRange().getValues();
   data.shift();
   return data.map(row => ({
-    ClusterID: row[0],
-    ClusterName: row[1]
+    ClusterID: String(row[0]),
+    ClusterName: String(row[1])
   })).filter(c => c.ClusterID);
 }
 
@@ -185,12 +259,44 @@ function getFiles(ss) {
   const data = sheet.getDataRange().getValues();
   data.shift();
   return data.map(row => ({
-    FileLogID: row[0],
-    TeamID: row[1],
-    FileType: row[2],
-    Status: row[3],
-    FileUrl: row[4],
-    Remarks: row[5],
-    FileDriveId: row[6]
+    FileLogID: String(row[0]),
+    TeamID: String(row[1]),
+    FileType: String(row[2]),
+    Status: String(row[3]),
+    FileUrl: String(row[4]),
+    Remarks: String(row[5]),
+    FileDriveId: String(row[6])
   })).filter(f => f.FileLogID);
+}
+
+function getAnnouncements(ss) {
+  let sheet = ss.getSheetByName('Announcements');
+  if (!sheet) {
+    sheet = ss.insertSheet('Announcements');
+    sheet.appendRow(['ID', 'Title', 'Content', 'Date', 'Type', 'Link', 'Author']);
+    return [];
+  }
+  const data = sheet.getDataRange().getValues();
+  data.shift();
+  return data.map(row => ({
+    id: String(row[0]),
+    title: String(row[1]),
+    content: String(row[2]),
+    date: String(row[3]),
+    type: String(row[4]),
+    link: String(row[5]),
+    author: String(row[6])
+  })).filter(a => a.title).reverse(); // Show newest first
+}
+
+function addAnnouncement(title, content, type, link, author) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName('Announcements');
+  if (!sheet) {
+    sheet = ss.insertSheet('Announcements');
+    sheet.appendRow(['ID', 'Title', 'Content', 'Date', 'Type', 'Link', 'Author']);
+  }
+  const id = 'NEWS' + new Date().getTime();
+  const date = new Date().toISOString();
+  sheet.appendRow([id, title, content, date, type, link, author]);
 }

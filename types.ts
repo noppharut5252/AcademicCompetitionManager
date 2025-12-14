@@ -38,6 +38,16 @@ export interface Activity {
   registrationDeadline: string;
 }
 
+export interface AreaStageInfo {
+  name?: string;     // Area Team Name
+  contact?: any;     // Area Contact
+  members?: any;     // Area Members
+  score?: number;    // Area Score
+  rank?: string;     // Area Rank
+  medal?: string;    // Area Medal
+  note?: string;
+}
+
 export interface Team {
   teamId: string;
   activityId: string;
@@ -52,10 +62,11 @@ export interface Team {
   teamPhotoId: string;
   createdBy: string;
   statusReason: string;
-  score: number;
-  medalOverride: string;
-  flag: string;
-  stageInfo: string; // Area stage info
+  score: number; // Cluster Round Score
+  medalOverride: string; // Manual Medal (Gold/Silver/etc)
+  rank: string; // Rank Override (1, 2, 3)
+  flag: string; // Representative Flag
+  stageInfo: string; // JSON string containing AreaStageInfo (Area Score, etc.)
   stageStatus: string;
 }
 
@@ -65,10 +76,11 @@ export interface User {
   name: string;
   surname: string;
   SchoolID: string;
-  level: string; // e.g., 'admin', 'school_admin', 'user'
+  level: string; // e.g., 'admin', 'school_admin', 'user', 'group_admin', 'score', 'area'
   email: string;
   avatarFileId: string;
-  isGuest?: boolean; // Added for frontend logic
+  isGuest?: boolean;
+  assignedActivities?: string[]; // For 'score' role
 }
 
 export interface FileLog {
@@ -81,10 +93,21 @@ export interface FileLog {
   FileDriveId: string;
 }
 
+export interface Announcement {
+  id: string;
+  title: string;
+  content: string;
+  date: string;
+  type: 'news' | 'manual';
+  link?: string;
+  author?: string;
+}
+
 export interface AppData {
   activities: Activity[];
   teams: Team[];
   schools: School[];
   clusters: SchoolCluster[];
   files: FileLog[];
+  announcements: Announcement[];
 }

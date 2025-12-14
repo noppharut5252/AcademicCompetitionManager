@@ -19,7 +19,7 @@ const App: React.FC = () => {
   
   // Auth State
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [currentUser, setCurrentUser] = useState<User | LiffProfile | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | any | null>(null);
   
   // Login Form State
   const [loginMethod, setLoginMethod] = useState<'line' | 'standard'>('line');
@@ -235,7 +235,7 @@ const App: React.FC = () => {
       case 'dashboard':
         return <Dashboard data={data} />;
       case 'teams':
-        return <TeamList data={data} />;
+        return <TeamList data={data} user={currentUser} />;
       case 'activities':
         return <ActivityList data={data} />;
       case 'results':

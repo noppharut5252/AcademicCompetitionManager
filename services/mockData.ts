@@ -1,4 +1,4 @@
-import { Activity, AppData, FileLog, School, SchoolCluster, Team, TeamStatus, RegistrationMode } from '../types';
+import { Activity, AppData, FileLog, School, SchoolCluster, Team, TeamStatus, RegistrationMode, Announcement } from '../types';
 
 export const mockClusters: SchoolCluster[] = [
   { ClusterID: 'C01', ClusterName: 'North Zone' },
@@ -65,9 +65,10 @@ export const mockTeams: Team[] = [
     statusReason: '',
     score: 85,
     medalOverride: 'Gold',
-    flag: '',
-    stageInfo: '',
-    stageStatus: 'Regional'
+    rank: '1',
+    flag: 'TRUE',
+    stageInfo: '{"score": 90, "rank": "Gold", "name": "Alpha Squad (Area Rep)"}',
+    stageStatus: 'Area'
   },
   {
     teamId: 'T002',
@@ -76,66 +77,61 @@ export const mockTeams: Team[] = [
     schoolId: 'S002',
     level: 'Grade 10-12',
     contact: '{"phone":"0898765432"}',
-    members: '[{"name":"Student D"},{"name":"Student E"}]',
-    reqInfo: 'Pending Docs',
+    members: '[{"name":"Student X"},{"name":"Student Y"}]',
+    reqInfo: 'Pending',
     status: TeamStatus.PENDING,
     logoUrl: '',
     teamPhotoId: '',
     createdBy: 'user2',
-    statusReason: 'Waiting for advisor signature',
+    statusReason: '',
     score: 0,
     medalOverride: '',
+    rank: '',
     flag: '',
     stageInfo: '',
-    stageStatus: 'Local'
-  },
-  {
-    teamId: 'T003',
-    activityId: 'ACT003',
-    teamName: 'RoboWarrior',
-    schoolId: 'S003',
-    level: 'Grade 10-12',
-    contact: '{"phone":"0888888888"}',
-    members: '[{"name":"Student F"},{"name":"Student G"},{"name":"Student H"},{"name":"Student I"}]',
-    reqInfo: 'Complete',
-    status: TeamStatus.APPROVED,
-    logoUrl: 'https://picsum.photos/101/101',
-    teamPhotoId: '',
-    createdBy: 'user3',
-    statusReason: '',
-    score: 92,
-    medalOverride: 'Platinum',
-    flag: 'Rep',
-    stageInfo: '',
-    stageStatus: 'National'
+    stageStatus: ''
   }
 ];
 
 export const mockFiles: FileLog[] = [
-  {
-    FileLogID: 'F001',
-    TeamID: 'T001',
-    FileType: 'ProjectProposal',
-    Status: 'Approved',
-    FileUrl: '#',
-    Remarks: 'Looks good',
-    FileDriveId: 'drive_id_1'
-  },
-  {
-    FileLogID: 'F002',
-    TeamID: 'T002',
-    FileType: 'ParentConsent',
-    Status: 'Pending',
-    FileUrl: '#',
-    Remarks: '',
-    FileDriveId: 'drive_id_2'
-  }
+    {
+        FileLogID: 'F001',
+        TeamID: 'T001',
+        FileType: 'Project Report',
+        Status: 'Approved',
+        FileUrl: '#',
+        Remarks: 'Good',
+        FileDriveId: ''
+    }
 ];
 
-export const getMockData = (): AppData => ({
-  activities: mockActivities,
-  teams: mockTeams,
-  schools: mockSchools,
-  clusters: mockClusters,
-  files: mockFiles
-});
+export const mockAnnouncements: Announcement[] = [
+    {
+        id: '1',
+        title: 'ยินดีต้อนรับสู่การแข่งขันประจำปี',
+        content: 'ระบบเปิดให้ลงทะเบียนแล้ววันนี้ ท่านสามารถตรวจสอบรายการแข่งขันและสมัครเข้าร่วมได้ทันที',
+        date: new Date().toISOString(),
+        type: 'news',
+        author: 'Admin'
+    },
+    {
+        id: '2',
+        title: 'คู่มือการใช้งานระบบสำหรับโรงเรียน',
+        content: 'ศึกษาวิธีการใช้งานระบบ การเพิ่มข้อมูลทีม และการตรวจสอบสถานะ',
+        date: new Date(Date.now() - 86400000).toISOString(),
+        type: 'manual',
+        link: '#',
+        author: 'Admin'
+    }
+];
+
+export const getMockData = (): AppData => {
+  return {
+    activities: mockActivities,
+    teams: mockTeams,
+    schools: mockSchools,
+    clusters: mockClusters,
+    files: mockFiles,
+    announcements: mockAnnouncements
+  };
+};
