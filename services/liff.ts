@@ -57,7 +57,11 @@ export const shareScoreResult = async (
 ): Promise<{ success: boolean; method: 'line' | 'share' | 'copy' | 'error' }> => {
     const medalThai = (medal === 'Gold') ? 'เหรียญทอง' : (medal === 'Silver') ? 'เหรียญเงิน' : (medal === 'Bronze') ? 'เหรียญทองแดง' : 'เข้าร่วม';
     const rankText = rank ? ` (ลำดับที่ ${rank})` : '';
-    const textSummary = `🏆 ผลการแข่งขัน: ${activityName}\nทีม: ${teamName}\nโรงเรียน: ${schoolName}\n\n⭐ คะแนน: ${score}\n🏅 รางวัล: ${medalThai}${rankText}`;
+    
+    // Fallback for missing team name
+    const displayTeamName = (teamName && teamName.trim() !== '') ? teamName : schoolName || 'ไม่ระบุชื่อทีม';
+    
+    const textSummary = `🏆 ผลการแข่งขัน: ${activityName}\nทีม: ${displayTeamName}\nโรงเรียน: ${schoolName}\n\n⭐ คะแนน: ${score}\n🏅 รางวัล: ${medalThai}${rankText}`;
 
     // 1. Try LINE Flex Message
     // Check isApiAvailable to allow desktop/external browser sharing if enabled in LINE Developers
@@ -67,7 +71,7 @@ export const shareScoreResult = async (
         
         const flexMessage = {
             type: "flex",
-            altText: `ผลการแข่งขัน: ${teamName}`,
+            altText: `ผลการแข่งขัน: ${displayTeamName}`,
             contents: {
                 "type": "bubble",
                 "body": {
@@ -83,8 +87,8 @@ export const shareScoreResult = async (
                       "margin": "lg",
                       "spacing": "sm",
                       "contents": [
-                        { "type": "text", "text": teamName, "weight": "bold", "size": "md", "wrap": true },
-                        { "type": "text", "text": schoolName, "size": "xs", "color": "#666666", "wrap": true }
+                        { "type": "text", "text": displayTeamName, "weight": "bold", "size": "md", "wrap": true },
+                        { "type": "text", "text": schoolName || '-', "size": "xs", "color": "#666666", "wrap": true }
                       ]
                     },
                     {
@@ -176,7 +180,8 @@ export const shareTop3Result = async (
     // Construct Text Summary for Fallback
     let textSummary = `🏆 สรุปผลการแข่งขัน (Top 3)\nรายการ: ${activityName}\n\n`;
     winners.forEach(w => {
-        textSummary += `${w.rank}. ${w.teamName} (${w.score} คะแนน)\n`;
+        const displayTeam = (w.teamName && w.teamName.trim() !== '') ? w.teamName : w.schoolName || 'ไม่ระบุชื่อทีม';
+        textSummary += `${w.rank}. ${displayTeam} (${w.score} คะแนน)\n`;
     });
 
     // @ts-ignore
@@ -184,6 +189,7 @@ export const shareTop3Result = async (
         
         const createRankRow = (winner: any) => {
              const color = winner.rank === 1 ? '#E6B800' : winner.rank === 2 ? '#A0A0A0' : '#CD7F32';
+             const displayTeam = (winner.teamName && winner.teamName.trim() !== '') ? winner.teamName : winner.schoolName || 'ไม่ระบุชื่อทีม';
              return {
                 "type": "box",
                 "layout": "vertical",
@@ -194,13 +200,13 @@ export const shareTop3Result = async (
                     "layout": "baseline",
                     "contents": [
                       { "type": "text", "text": `${winner.rank}`, "flex": 1, "color": color, "weight": "bold", "size": "xl" },
-                      { "type": "text", "text": winner.teamName, "flex": 5, "weight": "bold", "size": "sm", "wrap": true },
+                      { "type": "text", "text": displayTeam, "flex": 5, "weight": "bold", "size": "sm", "wrap": true },
                       { "type": "text", "text": `${winner.score}`, "flex": 2, "align": "end", "weight": "bold", "color": "#1DB446" }
                     ]
                   },
                   {
                     "type": "text",
-                    "text": winner.schoolName,
+                    "text": winner.schoolName || '-',
                     "size": "xs",
                     "color": "#aaaaaa",
                     "margin": "none",
@@ -211,7 +217,6 @@ export const shareTop3Result = async (
         };
 
         const rows = winners.map(w => createRankRow(w));
-        // Fill empty slots if less than 3 (Optional, but looks better to just list available)
         
         const flexMessage = {
             type: "flex",
