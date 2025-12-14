@@ -1,8 +1,9 @@
+
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { AppData, User, Team } from '../types';
 import { updateTeamResult } from '../services/api';
 import { shareScoreResult } from '../services/liff';
-import { Save, Filter, AlertCircle, CheckCircle, Lock, Trophy, Search, ChevronRight, Share2, AlertTriangle, Calculator, X, Copy, PieChart, Check, ChevronDown, Flag, History, Loader2, ListChecks } from 'lucide-react';
+import { Save, Filter, AlertCircle, CheckCircle, Lock, Trophy, Search, ChevronRight, Share2, AlertTriangle, Calculator, X, Copy, PieChart, Check, ChevronDown, Flag, History, Loader2, ListChecks, Edit2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 // --- Types & Interfaces ---
@@ -13,15 +14,27 @@ interface ScoreEntryProps {
   onDataUpdate: () => void;
 }
 
+interface BatchItem {
+    id: string;
+    teamName: string;
+    score: string;
+    rank: string;
+    medal: string;
+    flag: string;
+    isModified: boolean; // New field to track modification status
+}
+
 interface ConfirmModalProps {
     isOpen: boolean;
     type: 'single' | 'batch';
-    count?: number;
+    count?: number; // Modified count
+    totalCount?: number; // Total items in list
     teamName?: string;
     newScore?: string;
     newRank?: string;
     newMedal?: string;
     newFlag?: string;
+    batchItems?: BatchItem[];
     onConfirm: () => void;
     onCancel: () => void;
 }
@@ -36,9 +49,25 @@ interface ToastProps {
 interface RecentLog {
     id: string;
     teamName: string;
+    activityName: string; // Added Activity Name
     score: string;
     time: string;
 }
+
+// --- Helper Functions ---
+
+const calculateMedal = (scoreStr: string, manualMedal: string): string => {
+    // If manual override is set (and not empty/Auto), use it
+    if (manualMedal && manualMedal !== '' && manualMedal !== '- Auto -') return manualMedal;
+    
+    const score = parseFloat(scoreStr);
+    if (isNaN(score)) return '';
+    
+    if (score >= 80) return 'Gold';
+    if (score >= 70) return 'Silver';
+    if (score >= 60) return 'Bronze';
+    return 'Participant';
+};
 
 // --- Sub-Components ---
 
@@ -84,23 +113,23 @@ const ConfirmModal: React.FC<ConfirmModalProps> = (props) => {
 
     return (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-            <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6 space-y-4">
-                <div className="flex items-center text-amber-500 mb-2">
+            <div className={`bg-white rounded-xl shadow-xl w-full p-6 space-y-4 flex flex-col max-h-[90vh] ${props.type === 'batch' ? 'max-w-4xl' : 'max-w-sm'}`}>
+                <div className="flex items-center text-amber-500 mb-2 shrink-0">
                     <AlertTriangle className="w-6 h-6 mr-2" />
                     <h3 className="text-lg font-bold text-gray-800">ยืนยันการบันทึก</h3>
                 </div>
                 
                 {props.type === 'single' ? (
-                    <>
+                    <div className="overflow-y-auto">
                         <p className="text-gray-600 text-sm">กรุณาตรวจสอบความถูกต้องของข้อมูลทีม <br/><span className="font-bold text-gray-800">{props.teamName}</span></p>
-                        <div className="bg-gray-50 p-4 rounded-lg border border-gray-100 space-y-2 text-sm">
+                        <div className="bg-gray-50 p-4 rounded-lg border border-gray-100 space-y-2 text-sm mt-2">
                             <div className="flex justify-between">
                                 <span className="text-gray-500">คะแนน:</span>
                                 <span className="font-bold text-blue-600 text-lg">{props.newScore}</span>
                             </div>
                             <div className="flex justify-between">
                                 <span className="text-gray-500">เหรียญรางวัล:</span>
-                                <span className="font-medium text-gray-900">{props.newMedal || '-'}</span>
+                                <span className="font-medium text-gray-900">{props.newMedal || calculateMedal(props.newScore || '0', '')}</span>
                             </div>
                             <div className="flex justify-between">
                                 <span className="text-gray-500">ลำดับที่:</span>
@@ -113,18 +142,64 @@ const ConfirmModal: React.FC<ConfirmModalProps> = (props) => {
                                 </span>
                             </div>
                         </div>
-                    </>
+                    </div>
                 ) : (
-                    <div className="text-center py-4">
-                        <div className="text-4xl font-bold text-blue-600 mb-2">{props.count}</div>
-                        <p className="text-gray-600">รายการที่ถูกแก้ไข</p>
-                        <p className="text-sm text-gray-500 mt-2">ระบบจะทำการบันทึกข้อมูลทั้งหมดทีละรายการ <br/>กรุณารอสักครู่จนกว่าจะเสร็จสิ้น</p>
+                    <div className="flex flex-col h-full overflow-hidden">
+                         <div className="flex items-center justify-between mb-2 shrink-0">
+                            <div>
+                                <span className="text-gray-800 font-bold text-lg">รายการทั้งหมด</span>
+                                <p className="text-xs text-gray-500">ตรวจสอบความถูกต้องก่อนบันทึก (ไฮไลต์สีฟ้าคือรายการที่มีการแก้ไข)</p>
+                            </div>
+                            <div className="text-right">
+                                <div className="text-2xl font-bold text-blue-600">{props.count} <span className="text-sm font-normal text-gray-500">แก้ไข</span></div>
+                                <div className="text-xs text-gray-400">จากทั้งหมด {props.totalCount} ทีม</div>
+                            </div>
+                         </div>
+                         
+                         <div className="flex-1 overflow-y-auto border border-gray-200 rounded-lg">
+                             <table className="min-w-full divide-y divide-gray-200 text-sm relative">
+                                 <thead className="bg-gray-50 sticky top-0 shadow-sm z-10">
+                                     <tr>
+                                         <th className="px-3 py-2 text-left font-medium text-gray-500 bg-gray-50">ทีม</th>
+                                         <th className="px-3 py-2 text-center font-medium text-gray-500 bg-gray-50 w-24">คะแนน</th>
+                                         <th className="px-3 py-2 text-center font-medium text-gray-500 bg-gray-50 w-24">Rank</th>
+                                         <th className="px-3 py-2 text-center font-medium text-gray-500 bg-gray-50 w-32">Medal</th>
+                                         <th className="px-3 py-2 text-center font-medium text-gray-500 bg-gray-50 w-20">Q</th>
+                                     </tr>
+                                 </thead>
+                                 <tbody className="divide-y divide-gray-200 bg-white">
+                                     {props.batchItems?.map((item) => {
+                                         // Use calculated medal if "Auto" or empty, otherwise use explicit value
+                                         const displayMedal = calculateMedal(item.score, item.medal);
+                                         
+                                         return (
+                                             <tr key={item.id} className={item.isModified ? 'bg-blue-50/70' : ''}>
+                                                 <td className="px-3 py-2 text-gray-900">
+                                                     <div className="font-medium truncate max-w-[200px]" title={item.teamName}>{item.teamName}</div>
+                                                     {item.isModified && <span className="text-[10px] text-blue-600 flex items-center"><Edit2 className="w-3 h-3 mr-0.5"/> Modified</span>}
+                                                 </td>
+                                                 <td className="px-3 py-2 text-center">
+                                                     <span className={`font-bold ${item.isModified ? 'text-blue-700' : 'text-gray-700'}`}>{item.score || '-'}</span>
+                                                 </td>
+                                                 <td className="px-3 py-2 text-center text-gray-600">{item.rank || '-'}</td>
+                                                 <td className="px-3 py-2 text-center text-gray-600">{displayMedal}</td>
+                                                 <td className="px-3 py-2 text-center">
+                                                    {item.flag === 'TRUE' ? (
+                                                        <div className="flex justify-center"><Check className="w-4 h-4 text-green-600" /></div>
+                                                    ) : <span className="text-gray-300">-</span>}
+                                                 </td>
+                                             </tr>
+                                         );
+                                     })}
+                                 </tbody>
+                             </table>
+                         </div>
                     </div>
                 )}
 
-                <div className="flex gap-3 pt-2">
-                    <button onClick={props.onCancel} className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">ยกเลิก</button>
-                    <button onClick={props.onConfirm} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">ยืนยัน</button>
+                <div className="flex gap-3 pt-2 shrink-0">
+                    <button onClick={props.onCancel} className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">ยกเลิก</button>
+                    <button onClick={props.onConfirm} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors">ยืนยันบันทึก</button>
                 </div>
             </div>
         </div>
@@ -348,15 +423,8 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
           const newState = { ...baseState, [field]: value, isDirty: true };
           
           if (field === 'score') {
-              const numScore = parseFloat(value);
-              if (!isNaN(numScore)) {
-                  if (numScore >= 80) newState.medal = 'Gold';
-                  else if (numScore >= 70) newState.medal = 'Silver';
-                  else if (numScore >= 60) newState.medal = 'Bronze';
-                  else newState.medal = 'Participant';
-              } else {
-                  newState.medal = '';
-              }
+             // Auto medal update handled in render/modal via calculateMedal
+             // but we keep the state clean.
           }
           return { ...prev, [teamId]: newState };
       });
@@ -378,9 +446,9 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       setConfirmState({ isOpen: true, type: 'batch', teamId: null });
   };
 
-  const addRecentLog = (teamName: string, score: string) => {
+  const addRecentLog = (teamName: string, activityName: string, score: string) => {
       const time = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
-      setRecentLogs(prev => [{ id: Date.now().toString(), teamName, score, time }, ...prev].slice(0, 5));
+      setRecentLogs(prev => [{ id: Date.now().toString(), teamName, activityName, score, time }, ...prev].slice(0, 5));
   };
 
   const performUpdate = async (teamId: string, edit: any) => {
@@ -392,6 +460,8 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
   };
 
   const handleConfirmSave = async () => {
+      const currentActivityName = availableActivities.find(a => a.id === selectedActivityId)?.name || '';
+
       if (confirmState.type === 'single') {
         const teamId = confirmState.teamId;
         if (!teamId) return;
@@ -412,7 +482,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                 return rest;
             });
             const team = data.teams.find(t => t.teamId === teamId);
-            addRecentLog(team?.teamName || teamId, edit.score);
+            addRecentLog(team?.teamName || teamId, currentActivityName, edit.score);
             showToast('บันทึกคะแนนเรียบร้อยแล้ว', 'success');
         } else {
             showToast('บันทึกข้อมูลล้มเหลว', 'error');
@@ -433,7 +503,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
             if (result) {
                 successCount++;
                 const team = data.teams.find(t => t.teamId === id);
-                addRecentLog(team?.teamName || id, edit.score);
+                addRecentLog(team?.teamName || id, currentActivityName, edit.score);
             }
         }
 
@@ -459,7 +529,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
      const activityName = data.activities.find(a => a.id === team.activityId)?.name || team.activityId;
      const schoolName = data.schools.find(s => s.SchoolID === team.schoolId)?.SchoolName || team.schoolId;
      // Use database value unless edited locally (though usually share button appears after save)
-     const medal = team.medalOverride || (team.score >= 80 ? 'Gold' : team.score >= 70 ? 'Silver' : team.score >= 60 ? 'Bronze' : 'Participant');
+     const medal = calculateMedal(String(team.score), team.medalOverride);
      
      const result = await shareScoreResult(team.teamName, schoolName, activityName, team.score, medal, team.rank);
      
@@ -487,7 +557,28 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       };
   };
 
+  // Helper for batch data: RETURNS ALL TEAMS in Filter, marking which are modified
+  const getBatchItems = (): BatchItem[] => {
+      if (confirmState.type !== 'batch') return [];
+      
+      return filteredTeams.map(team => {
+          const edit = edits[team.teamId];
+          const isModified = edit?.isDirty || false;
+
+          return {
+              id: team.teamId,
+              teamName: team.teamName,
+              score: isModified ? edit.score : String(team.score > 0 ? team.score : ''),
+              rank: isModified ? edit.rank : team.rank,
+              medal: isModified ? edit.medal : team.medalOverride,
+              flag: isModified ? edit.flag : team.flag,
+              isModified: isModified
+          };
+      });
+  };
+
   const singleConfirmData = getSingleConfirmData();
+  const batchConfirmData = getBatchItems();
   const dirtyCount = Object.keys(edits).filter(id => edits[id].isDirty && filteredTeams.some(t => t.teamId === id)).length;
 
   return (
@@ -622,6 +713,9 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                   const isDirty = edit?.isDirty;
                                   const hasSavedScore = team.score > 0 && !isDirty;
 
+                                  // Calculate medal if auto or empty
+                                  const calculatedMedal = calculateMedal(displayScore, displayMedal);
+
                                   return (
                                       <tr key={team.teamId} className={`${isDirty ? "bg-blue-50/30" : hasSavedScore ? "bg-green-50/20" : ""}`}>
                                           <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-500">{idx + 1}</td>
@@ -640,7 +734,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                                 placeholder="0.00"
                                               />
                                           </td>
-                                          <td className="px-6 py-4 whitespace-nowrap">
+                                          <td className="px-6 py-4 whitespace-nowrap relative">
                                               <select 
                                                 className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                                                 value={displayMedal}
@@ -652,6 +746,12 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                                   <option value="Bronze">Bronze</option>
                                                   <option value="Participant">Participant</option>
                                               </select>
+                                              {/* Show calculated hint if Auto */}
+                                              {(!displayMedal || displayMedal === "") && displayScore && (
+                                                  <span className="absolute right-8 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 pointer-events-none bg-white px-1">
+                                                      ({calculatedMedal})
+                                                  </span>
+                                              )}
                                           </td>
                                           <td className="px-6 py-4 whitespace-nowrap">
                                                <input 
@@ -665,7 +765,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                           <td className="px-6 py-4 whitespace-nowrap text-center">
                                               <input 
                                                 type="checkbox"
-                                                className="w-5 h-5 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer"
+                                                className="w-5 h-5 accent-blue-600 cursor-pointer"
                                                 checked={displayFlag === 'TRUE'}
                                                 onChange={(e) => handleInputChange(team.teamId, 'flag', e.target.checked ? 'TRUE' : '')}
                                               />
@@ -718,6 +818,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                   {recentLogs.map(log => (
                       <div key={log.id} className="flex justify-between items-center text-sm p-2 bg-gray-50 rounded border border-gray-100 animate-in fade-in slide-in-from-bottom-2">
                           <div>
+                              <div className="text-xs text-blue-500 font-medium mb-0.5">{log.activityName}</div>
                               <span className="font-medium text-gray-900">{log.teamName}</span>
                               <span className="mx-2 text-gray-300">|</span>
                               <span className="text-blue-600 font-bold">{log.score} คะแนน</span>
@@ -742,11 +843,13 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
               isOpen={confirmState.isOpen}
               type={confirmState.type}
               count={dirtyCount}
+              totalCount={batchConfirmData.length}
               teamName={singleConfirmData?.teamName}
               newScore={singleConfirmData?.newScore}
               newRank={singleConfirmData?.newRank}
               newMedal={singleConfirmData?.newMedal}
               newFlag={singleConfirmData?.newFlag}
+              batchItems={batchConfirmData}
               onConfirm={handleConfirmSave}
               onCancel={() => setConfirmState({ isOpen: false, type: 'single', teamId: null })}
           />
