@@ -1,8 +1,9 @@
 
 import React, { useState, useMemo } from 'react';
 import { AppData, Team, TeamStatus, User, AreaStageInfo } from '../types';
-import { Search, Filter, CheckCircle, XCircle, Clock, ChevronLeft, ChevronRight, Eye, Trophy, Medal, Hash, LayoutGrid, Users, Award, School, Printer, FileText, Star, Crown, Zap, Edit, Trash2, Plus } from 'lucide-react';
+import { Search, Filter, CheckCircle, XCircle, Clock, ChevronLeft, ChevronRight, Eye, Trophy, Medal, Hash, LayoutGrid, Users, Award, School, Printer, FileText, Star, Crown, Zap, Edit, Trash2, Plus, Square, CheckSquare, Loader2 } from 'lucide-react';
 import TeamDetailModal from './TeamDetailModal';
+import { updateTeamStatus, fetchData } from '../services/api';
 
 interface TeamListProps {
   data: AppData;
@@ -20,6 +21,10 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const [viewRound, setViewRound] = useState<'cluster' | 'area'>('area');
+  
+  // Bulk Action State
+  const [selectedTeamIds, setSelectedTeamIds] = useState<Set<string>>(new Set());
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
   // Extract unique categories
   const categories = useMemo(() => {
@@ -54,6 +59,43 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
       return r === '1' && f === 'TRUE';
   };
 
+  // Permissions Check
+  const role = user?.level?.toLowerCase();
+  const isSuperUser = role === 'admin' || role === 'area';
+  const isGroupAdmin = role === 'group_admin';
+  const isSchoolAdmin = role === 'school_admin';
+
+  // Check if current user can Edit/Delete a specific team
+  const canEditTeam = (team: Team) => {
+      if (!user || user.isGuest) return false;
+      
+      // Admin/Area: Can presumably edit (though feature focus is bulk status)
+      // For now, let's allow them full edit rights.
+      if (isSuperUser) return true;
+
+      // STRICT RULE: Only if PENDING
+      const currentStatus = normalizeStatus(team.status);
+      if (currentStatus !== TeamStatus.PENDING) return false;
+
+      // Scope Check
+      if (isGroupAdmin) {
+          const userSchool = data.schools.find(s => s.SchoolID === user.SchoolID);
+          const teamSchool = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
+          return userSchool && teamSchool && userSchool.SchoolCluster === teamSchool.SchoolCluster;
+      }
+
+      if (isSchoolAdmin) {
+          const userSchool = data.schools.find(s => s.SchoolID === user.SchoolID);
+          return team.schoolId === user.SchoolID || (userSchool && team.schoolId === userSchool.SchoolName);
+      }
+
+      if (role === 'user') {
+          return team.createdBy === user.userid;
+      }
+
+      return false;
+  };
+
   // --- Dynamic Dashboard Stats Logic ---
   const dashboardStats = useMemo(() => {
       if (!user) return null;
@@ -62,8 +104,6 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
       let title = "";
       let icon = Users;
       let bgGradient = "from-blue-600 to-indigo-700";
-
-      const role = user.level?.toLowerCase();
 
       // 1. Determine Scope
       if (role === 'admin' || role === 'area') {
@@ -151,7 +191,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
           medals: { gold, silver, bronze },
           topSchools
       };
-  }, [data.teams, data.schools, data.clusters, user, viewRound]);
+  }, [data.teams, data.schools, data.clusters, user, viewRound, role]);
 
 
   // RBAC & Logic Filtering for the List
@@ -163,7 +203,6 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
     if (isGuest) {
         // Guests see everything
     } else if (user) {
-        const role = user.level?.toLowerCase();
         if (role === 'admin' || role === 'area') {
             // See ALL
         } else if (role === 'group_admin') {
@@ -176,16 +215,13 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
                 });
             } else { teams = []; }
         } else if (role === 'school_admin' || role === 'user') {
-            // For Standard User: Now sees ALL teams in their school
             const userSchool = data.schools.find(s => s.SchoolID === user.SchoolID);
             if (user.SchoolID) {
-                // Filter by SchoolID OR SchoolName (to handle legacy data)
                 teams = teams.filter(t => 
                     t.schoolId === user.SchoolID || 
                     (userSchool && t.schoolId === userSchool.SchoolName)
                 );
             } else { 
-                // Fallback if User has no SchoolID yet -> Only see own created teams
                 teams = teams.filter(t => t.createdBy === user.userid);
             }
         } else if (role === 'score') {
@@ -227,7 +263,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
 
       return matchesSearch && matchesStatus && matchesCategory && matchesCluster && matchesQuickFilter;
     });
-  }, [data.teams, data.schools, data.activities, data.clusters, user, searchTerm, statusFilter, categoryFilter, clusterFilter, viewRound, quickFilter]);
+  }, [data.teams, data.schools, data.activities, data.clusters, user, searchTerm, statusFilter, categoryFilter, clusterFilter, viewRound, quickFilter, role]);
 
   // Pagination
   const totalPages = Math.ceil(filteredTeams.length / ITEMS_PER_PAGE);
@@ -254,6 +290,45 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
     if (team.logoUrl && team.logoUrl.startsWith('http')) return team.logoUrl;
     if (team.teamPhotoId) return `https://drive.google.com/thumbnail?id=${team.teamPhotoId}`;
     return "https://cdn-icons-png.flaticon.com/512/3135/3135768.png"; 
+  };
+
+  // Bulk Actions
+  const handleSelectAll = () => {
+      if (selectedTeamIds.size === paginatedTeams.length) {
+          setSelectedTeamIds(new Set());
+      } else {
+          setSelectedTeamIds(new Set(paginatedTeams.map(t => t.teamId)));
+      }
+  };
+
+  const handleSelectTeam = (id: string) => {
+      const newSelected = new Set(selectedTeamIds);
+      if (newSelected.has(id)) {
+          newSelected.delete(id);
+      } else {
+          newSelected.add(id);
+      }
+      setSelectedTeamIds(newSelected);
+  };
+
+  const handleBulkStatusUpdate = async (status: '1' | '2') => {
+      if (selectedTeamIds.size === 0) return;
+      if (!confirm(`ยืนยันการเปลี่ยนสถานะเป็น "${status === '1' ? 'อนุมัติ' : 'ปฏิเสธ'}" สำหรับ ${selectedTeamIds.size} ทีม?`)) return;
+
+      setIsUpdatingStatus(true);
+      try {
+          const updates = Array.from(selectedTeamIds).map(id => updateTeamStatus(id, status));
+          await Promise.all(updates);
+          
+          // Clear selection and refresh data logic (In a real app, trigger a refresh callback)
+          setSelectedTeamIds(new Set());
+          alert('บันทึกสถานะเรียบร้อยแล้ว กรุณารีเฟรชหน้าเว็บเพื่อดูข้อมูลล่าสุด');
+          window.location.reload(); 
+      } catch (err) {
+          alert('เกิดข้อผิดพลาดในการบันทึกสถานะ');
+      } finally {
+          setIsUpdatingStatus(false);
+      }
   };
 
   const handlePrintSummary = () => {
@@ -343,30 +418,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
       printWindow.document.close();
   };
 
-  const isGroupAdmin = user?.level === 'group_admin';
-  const isSchoolAdmin = user?.level === 'school_admin';
-
-  // Helper to check ownership/permission
-  const isTeamOwner = (team: Team) => {
-      if (!user || user.isGuest) return false;
-      const role = user.level?.toLowerCase();
-
-      // Admin/Area can edit everything
-      if (role === 'admin' || role === 'area') return true;
-      
-      // School Admin: owns all in their school
-      if (role === 'school_admin') {
-          const userSchool = data.schools.find(s => s.SchoolID === user.SchoolID);
-          return team.schoolId === user.SchoolID || (userSchool && team.schoolId === userSchool.SchoolName);
-      }
-
-      // User: owns only teams they created
-      if (role === 'user') {
-          return team.createdBy === user.userid;
-      }
-
-      return false;
-  }
+  const isAllSelected = paginatedTeams.length > 0 && selectedTeamIds.size === paginatedTeams.length;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -509,6 +561,34 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
         </div>
       )}
 
+      {/* Bulk Action Bar (Sticky) */}
+      {isSuperUser && selectedTeamIds.size > 0 && (
+          <div className="sticky top-14 z-20 bg-white border border-blue-200 shadow-lg rounded-xl p-3 flex items-center justify-between animate-in slide-in-from-top-2">
+              <div className="flex items-center gap-2">
+                  <span className="bg-blue-600 text-white text-xs font-bold px-2 py-1 rounded-full">{selectedTeamIds.size}</span>
+                  <span className="text-sm text-gray-700 font-medium">รายการที่เลือก</span>
+              </div>
+              <div className="flex gap-2">
+                  <button 
+                    onClick={() => handleBulkStatusUpdate('1')}
+                    disabled={isUpdatingStatus}
+                    className="flex items-center px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors disabled:opacity-50"
+                  >
+                      {isUpdatingStatus ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4 mr-1.5" />}
+                      อนุมัติทั้งหมด
+                  </button>
+                  <button 
+                    onClick={() => handleBulkStatusUpdate('2')}
+                    disabled={isUpdatingStatus}
+                    className="flex items-center px-3 py-1.5 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50"
+                  >
+                      {isUpdatingStatus ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4 mr-1.5" />}
+                      ปฏิเสธทั้งหมด
+                  </button>
+              </div>
+          </div>
+      )}
+
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-800">รายชื่อทีม (Teams)</h2>
@@ -519,7 +599,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
         
         <div className="flex gap-2">
             {/* Add Team Button */}
-            {user && !user.isGuest && (['school_admin', 'user', 'admin'].includes(user.level?.toLowerCase())) && (
+            {user && !user.isGuest && (['school_admin', 'user', 'admin'].includes(role || '')) && (
                 <button 
                     onClick={() => alert("ระบบลงทะเบียนทีมยังไม่เปิดใช้งานในส่วนนี้")} 
                     className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
@@ -653,13 +733,13 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
             const imageUrl = getTeamImageUrl(team);
             const showScore = viewRound === 'cluster' ? team.score : areaInfo?.score;
             const showRank = viewRound === 'cluster' ? team.rank : (areaInfo?.rank || areaInfo?.medal);
-            const owner = isTeamOwner(team);
+            const canEdit = canEditTeam(team);
 
             return (
                 <div 
                     key={team.teamId} 
                     onClick={() => setSelectedTeam(team)}
-                    className={`bg-white p-4 rounded-xl shadow-sm border ${owner ? 'border-l-4 border-l-blue-500 border-gray-100' : 'border-gray-100'} flex items-start space-x-4 cursor-pointer hover:shadow-md transition-all active:scale-[0.98]`}
+                    className={`bg-white p-4 rounded-xl shadow-sm border ${canEdit ? 'border-l-4 border-l-blue-500 border-gray-100' : 'border-gray-100'} flex items-start space-x-4 cursor-pointer hover:shadow-md transition-all active:scale-[0.98]`}
                 >
                     <div className="flex-shrink-0">
                         <img className="h-16 w-16 rounded-lg object-cover border border-gray-100" src={imageUrl} alt="" />
@@ -689,9 +769,9 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
                                 )}
                             </div>
                             <div className="flex items-center gap-2">
-                                {owner && (
+                                {canEdit && (
                                     <span className="text-[10px] text-blue-600 font-bold bg-blue-50 px-1.5 py-0.5 rounded">
-                                        My Team
+                                        Edit
                                     </span>
                                 )}
                                 <span className="text-xs text-gray-400">
@@ -716,6 +796,13 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className={viewRound === 'cluster' ? 'bg-gray-50' : 'bg-purple-50'}>
               <tr>
+                {isSuperUser && (
+                    <th className="px-3 py-3 w-10 text-center">
+                        <button onClick={handleSelectAll} className="text-gray-500 hover:text-blue-600">
+                            {isAllSelected ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
+                        </button>
+                    </th>
+                )}
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ทีม (Team)</th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">หมวดหมู่ & รายการ</th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">โรงเรียน / กลุ่มเครือข่าย</th>
@@ -738,19 +825,27 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
                   
                   const showScore = viewRound === 'cluster' ? team.score : areaInfo?.score;
                   const showRank = viewRound === 'cluster' ? team.rank : (areaInfo?.rank || areaInfo?.medal);
-                  const owner = isTeamOwner(team);
+                  const canEdit = canEditTeam(team);
+                  const isSelected = selectedTeamIds.has(team.teamId);
 
                   return (
                     <tr 
                         key={team.teamId} 
-                        className={`hover:bg-gray-50 transition-colors cursor-pointer group ${owner ? 'bg-blue-50/20' : ''}`}
+                        className={`hover:bg-gray-50 transition-colors cursor-pointer group ${canEdit ? 'bg-blue-50/20' : ''}`}
                         onClick={() => setSelectedTeam(team)}
                     >
+                      {isSuperUser && (
+                          <td className="px-3 py-4 text-center" onClick={(e) => { e.stopPropagation(); handleSelectTeam(team.teamId); }}>
+                              <div className={`cursor-pointer ${isSelected ? 'text-blue-600' : 'text-gray-300 hover:text-gray-400'}`}>
+                                  {isSelected ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
+                              </div>
+                          </td>
+                      )}
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
                           <div className="flex-shrink-0 h-10 w-10 relative">
                               <img className="h-10 w-10 rounded-full object-cover border border-gray-100 group-hover:border-blue-300 transition-colors" src={imageUrl} alt="" />
-                              {owner && (
+                              {canEdit && (
                                   <span className="absolute -top-1 -right-1 flex h-4 w-4">
                                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
                                     <span className="relative inline-flex rounded-full h-4 w-4 bg-blue-500 border-2 border-white"></span>
@@ -760,7 +855,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
                           <div className="ml-4">
                             <div className="text-sm font-medium text-gray-900 group-hover:text-blue-600 transition-colors flex items-center">
                                 {viewRound === 'area' && areaInfo?.name ? areaInfo.name : team.teamName}
-                                {owner && <span className="ml-2 text-[10px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded font-bold">YOU</span>}
+                                {canEdit && <span className="ml-2 text-[10px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded font-bold">EDIT</span>}
                             </div>
                             <div className="text-xs text-gray-500">ID: {team.teamId}</div>
                           </div>
@@ -815,17 +910,17 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
                                     <FileText className="w-4 h-4" />
                                 </div>
                             )}
-                            {owner ? (
+                            {canEdit ? (
                                 <>
                                     <button 
-                                        onClick={(e) => { e.stopPropagation(); /* Add edit logic */ }} 
+                                        onClick={(e) => { e.stopPropagation(); alert('Edit ' + team.teamName); }} 
                                         className="text-blue-500 hover:text-blue-600 bg-blue-50 p-1.5 rounded-full hover:bg-blue-100 transition-colors"
                                         title="แก้ไข"
                                     >
                                         <Edit className="w-4 h-4" />
                                     </button>
                                     <button 
-                                        onClick={(e) => { e.stopPropagation(); /* Add delete logic */ }}
+                                        onClick={(e) => { e.stopPropagation(); alert('Delete ' + team.teamName); }}
                                         className="text-red-500 hover:text-red-600 bg-red-50 p-1.5 rounded-full hover:bg-red-100 transition-colors"
                                         title="ลบ"
                                     >
@@ -844,7 +939,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
                 })
               ) : (
                  <tr>
-                    <td colSpan={6} className="px-6 py-10 text-center text-gray-500">
+                    <td colSpan={isSuperUser ? 7 : 6} className="px-6 py-10 text-center text-gray-500">
                         ไม่พบข้อมูลทีมที่ค้นหา
                     </td>
                  </tr>
