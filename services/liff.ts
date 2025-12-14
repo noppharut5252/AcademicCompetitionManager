@@ -3,6 +3,8 @@
 
 const LIFF_ID = "2006490627-uva5V8Q6";
 
+let liffInitPromise: Promise<void> | null = null;
+
 export interface LiffProfile {
   userId: string;
   displayName: string;
@@ -11,12 +13,30 @@ export interface LiffProfile {
   email?: string;
 }
 
+const ensureLiffInitialized = async () => {
+    if (!liffInitPromise) {
+        liffInitPromise = (async () => {
+            try {
+                // @ts-ignore
+                if (typeof liff === 'undefined') {
+                    console.warn("LIFF SDK not loaded");
+                    return;
+                }
+                // @ts-ignore
+                await liff.init({ liffId: LIFF_ID });
+            } catch (error) {
+                console.error("LIFF Initialization failed", error);
+            }
+        })();
+    }
+    await liffInitPromise;
+};
+
 export const initLiff = async (): Promise<LiffProfile | null> => {
+  await ensureLiffInitialized();
   try {
     // @ts-ignore
-    await liff.init({ liffId: LIFF_ID });
-    // @ts-ignore
-    if (liff.isLoggedIn()) {
+    if (typeof liff !== 'undefined' && liff.isLoggedIn()) {
       // @ts-ignore
       const profile = await liff.getProfile();
       // @ts-ignore
@@ -25,26 +45,32 @@ export const initLiff = async (): Promise<LiffProfile | null> => {
     }
     return null;
   } catch (error) {
-    console.error("LIFF Initialization failed", error);
+    console.error("Error getting LIFF profile", error);
     return null;
   }
 };
 
 export const loginLiff = () => {
   // @ts-ignore
-  if (!liff.isLoggedIn()) {
+  if (typeof liff !== 'undefined' && !liff.isLoggedIn()) {
     // @ts-ignore
     liff.login();
   }
 };
 
-export const logoutLiff = () => {
-  // @ts-ignore
-  if (liff.isLoggedIn()) {
-    // @ts-ignore
-    liff.logout();
-    window.location.reload();
+export const logoutLiff = async () => {
+  await ensureLiffInitialized();
+  try {
+      // @ts-ignore
+      if (typeof liff !== 'undefined' && liff.isLoggedIn()) {
+        // @ts-ignore
+        liff.logout();
+      }
+  } catch (e) {
+      console.warn("LIFF logout error", e);
   }
+  // Always reload to clear app state
+  window.location.reload();
 };
 
 export const shareScoreResult = async (
@@ -55,6 +81,10 @@ export const shareScoreResult = async (
   medal: string,
   rank: string
 ): Promise<{ success: boolean; method: 'line' | 'share' | 'copy' | 'error' }> => {
+    
+    // Ensure LIFF is ready before checking availability
+    await ensureLiffInitialized();
+
     const medalThai = (medal === 'Gold') ? 'เหรียญทอง' : (medal === 'Silver') ? 'เหรียญเงิน' : (medal === 'Bronze') ? 'เหรียญทองแดง' : 'เข้าร่วม';
     const rankText = rank ? ` (ลำดับที่ ${rank})` : '';
     
@@ -64,7 +94,6 @@ export const shareScoreResult = async (
     const textSummary = `🏆 ผลการแข่งขัน: ${activityName}\nทีม: ${displayTeamName}\nโรงเรียน: ${schoolName}\n\n⭐ คะแนน: ${score}\n🏅 รางวัล: ${medalThai}${rankText}`;
 
     // 1. Try LINE Flex Message
-    // Check isApiAvailable to allow desktop/external browser sharing if enabled in LINE Developers
     // @ts-ignore
     if (typeof liff !== 'undefined' && liff.isLoggedIn() && liff.isApiAvailable('shareTargetPicker')) {
         const medalColor = (medal === 'Gold') ? '#E6B800' : (medal === 'Silver') ? '#A0A0A0' : (medal === 'Bronze') ? '#CD7F32' : '#333333';
@@ -177,6 +206,8 @@ export const shareTop3Result = async (
   winners: { rank: number; teamName: string; schoolName: string; score: string; medal: string }[]
 ): Promise<{ success: boolean; method: 'line' | 'share' | 'copy' | 'error' }> => {
     
+    await ensureLiffInitialized();
+
     // Construct Text Summary for Fallback
     let textSummary = `🏆 สรุปผลการแข่งขัน (Top 3)\nรายการ: ${activityName}\n\n`;
     winners.forEach(w => {
