@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { AppData, User, Team } from '../types';
 import { updateTeamResult } from '../services/api';
 import { shareScoreResult, shareTop3Result } from '../services/liff';
-import { Save, Filter, AlertCircle, CheckCircle, Lock, Trophy, Search, ChevronRight, Share2, AlertTriangle, Calculator, X, Copy, PieChart, Check, ChevronDown, Flag, History, Loader2, ListChecks, Edit2, Crown, LayoutGrid, AlertOctagon, Wand2, Eye, EyeOff, ArrowDownWideNarrow } from 'lucide-react';
+import { Save, Filter, AlertCircle, CheckCircle, Lock, Trophy, Search, ChevronRight, Share2, AlertTriangle, Calculator, X, Copy, PieChart, Check, ChevronDown, Flag, History, Loader2, ListChecks, Edit2, Crown, LayoutGrid, AlertOctagon, Wand2, Eye, EyeOff, ArrowDownWideNarrow, GraduationCap } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 // --- Types & Interfaces ---
@@ -65,6 +65,15 @@ const calculateMedal = (scoreStr: string, manualMedal: string): string => {
     if (score >= 70) return 'Silver';
     if (score >= 60) return 'Bronze';
     return 'Participant';
+};
+
+const parseLevels = (levelStr: string) => {
+    try {
+        const parsed = JSON.parse(levelStr);
+        return Array.isArray(parsed) ? parsed.join(', ') : levelStr;
+    } catch {
+        return levelStr;
+    }
 };
 
 // --- Sub-Components ---
@@ -306,6 +315,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
   const navigate = useNavigate();
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [selectedActivityId, setSelectedActivityId] = useState<string>('');
+  const [selectedClusterFilter, setSelectedClusterFilter] = useState<string>(''); // For Admin/Area filtering
   const [searchTerm, setSearchTerm] = useState('');
   
   // UI State
@@ -327,6 +337,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
   // 1. Check Permissions
   const role = user?.level?.toLowerCase();
   const allowedRoles = ['admin', 'area', 'group_admin', 'score'];
+  const canFilterCluster = role === 'admin' || role === 'area';
   
   if (!user || !allowedRoles.includes(role || '')) {
       return (
@@ -404,10 +415,22 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       return availableActivities.filter(a => a.category === selectedCategory);
   }, [selectedCategory, availableActivities]);
 
+  const currentActivity = useMemo(() => {
+      return availableActivities.find(a => a.id === selectedActivityId);
+  }, [selectedActivityId, availableActivities]);
+
   const filteredTeams = useMemo(() => {
       if (!selectedActivityId) return [];
       let teams = allAuthorizedTeams.filter(t => t.activityId === selectedActivityId);
       
+      // Filter by Cluster (For Admin/Area)
+      if (canFilterCluster && selectedClusterFilter) {
+          teams = teams.filter(t => {
+              const school = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
+              return school?.SchoolCluster === selectedClusterFilter;
+          });
+      }
+
       if (searchTerm) {
           const lower = searchTerm.toLowerCase();
           teams = teams.filter(t => 
@@ -426,16 +449,16 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       }
 
       return teams.sort((a, b) => b.score - a.score); 
-  }, [allAuthorizedTeams, selectedActivityId, searchTerm, showUnscoredOnly, edits]);
+  }, [allAuthorizedTeams, selectedActivityId, searchTerm, showUnscoredOnly, edits, selectedClusterFilter, canFilterCluster, data.schools]);
 
   // Activity Progress
   const activityProgress = useMemo(() => {
-      const allInActivity = allAuthorizedTeams.filter(t => t.activityId === selectedActivityId);
-      const total = allInActivity.length;
-      const recorded = allInActivity.filter(t => t.score > 0).length;
+      // Base calculation on current filters (so if admin selects a cluster, stats reflect that cluster)
+      const total = filteredTeams.length;
+      const recorded = filteredTeams.filter(t => t.score > 0).length;
       const percent = total > 0 ? Math.round((recorded / total) * 100) : 0;
       return { total, recorded, percent };
-  }, [allAuthorizedTeams, selectedActivityId]);
+  }, [filteredTeams]);
 
   // --- Handlers ---
 
@@ -811,8 +834,8 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       </div>
 
       {/* Selection Card */}
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col md:flex-row gap-6">
+          <div className="flex-1">
               <label className="block text-sm font-medium text-gray-700 mb-2">1. เลือกหมวดหมู่</label>
               <SearchableSelect 
                 options={availableCategories.map(cat => ({ label: cat, value: cat }))}
@@ -822,7 +845,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                 icon={<Filter className="h-4 w-4" />}
               />
           </div>
-          <div>
+          <div className="flex-1">
               <label className="block text-sm font-medium text-gray-700 mb-2">2. เลือกรายการแข่งขัน</label>
               <SearchableSelect 
                 options={filteredActivities.map(act => ({ label: act.name, value: act.id }))}
@@ -833,7 +856,40 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                 icon={<Trophy className="h-4 w-4" />}
               />
           </div>
+          {canFilterCluster && selectedActivityId && (
+              <div className="flex-1 animate-in fade-in slide-in-from-left-2">
+                  <label className="block text-sm font-medium text-purple-700 mb-2 flex items-center">
+                      <LayoutGrid className="w-4 h-4 mr-1"/> กรองกลุ่มเครือข่าย (Admin)
+                  </label>
+                  <SearchableSelect 
+                    options={[
+                        { label: 'แสดงทุกกลุ่มเครือข่าย', value: '' },
+                        ...data.clusters.map(c => ({ label: c.ClusterName, value: c.ClusterID }))
+                    ]}
+                    value={selectedClusterFilter}
+                    onChange={setSelectedClusterFilter}
+                    placeholder="-- เลือกกลุ่มเครือข่าย --"
+                    icon={<LayoutGrid className="h-4 w-4" />}
+                  />
+              </div>
+          )}
       </div>
+
+      {/* Activity Context Header */}
+      {currentActivity && (
+          <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div>
+                  <div className="text-xs text-blue-600 font-bold uppercase tracking-wider mb-1 flex items-center">
+                      <GraduationCap className="w-4 h-4 mr-1"/> ระดับชั้นการแข่งขัน
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-900">{parseLevels(currentActivity.levels)}</h3>
+              </div>
+              <div className="text-sm text-gray-600 bg-white/50 px-3 py-2 rounded-lg border border-blue-100">
+                  <span className="block text-xs text-gray-400 mb-0.5">ประเภท</span>
+                  <span className="font-medium text-blue-800">{currentActivity.mode === 'Team' ? 'ทีม' : 'เดี่ยว'} ({currentActivity.reqStudents} คน)</span>
+              </div>
+          </div>
+      )}
 
       {/* Table Section */}
       {selectedActivityId && (
@@ -841,7 +897,12 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
               <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col md:flex-row justify-between items-center gap-4">
                    <div className="w-full md:w-1/2">
                         <div className="flex justify-between items-end mb-1">
-                            <span className="text-sm font-medium text-gray-700">รายการนี้บันทึกแล้ว</span>
+                            <span className="text-sm font-medium text-gray-700">
+                                {selectedClusterFilter 
+                                    ? `รายการนี้ (${data.clusters.find(c => c.ClusterID === selectedClusterFilter)?.ClusterName})` 
+                                    : 'ภาพรวมรายการนี้'
+                                } บันทึกแล้ว
+                            </span>
                             <span className="text-xs text-gray-500">{activityProgress.recorded} / {activityProgress.total} ทีม</span>
                         </div>
                         <div className="w-full bg-gray-200 rounded-full h-2">
@@ -916,6 +977,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                           <tbody className="bg-white divide-y divide-gray-200">
                               {filteredTeams.map((team, idx) => {
                                   const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
+                                  const cluster = data.clusters.find(c => c.ClusterID === school?.SchoolCluster);
                                   const edit = edits[team.teamId];
                                   
                                   const displayScore = edit?.score ?? (team.score > 0 ? String(team.score) : '');
@@ -941,6 +1003,10 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                               <div className="ml-0">
                                                   <div className="text-sm font-medium text-gray-900">{team.teamName}</div>
                                                   <div className="text-xs text-gray-500">{school?.SchoolName}</div>
+                                                  <div className="text-[10px] text-blue-500 flex items-center mt-0.5">
+                                                      <LayoutGrid className="w-3 h-3 mr-1" />
+                                                      {cluster?.ClusterName || 'ไม่ระบุกลุ่ม'}
+                                                  </div>
                                               </div>
                                           </td>
                                           <td className="px-6 py-4 whitespace-nowrap relative">
