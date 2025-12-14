@@ -1,20 +1,24 @@
 
 import React, { useState } from 'react';
 import { User, AppData } from '../types';
-import { User as UserIcon, Save, School, Shield, Mail, Phone, Loader2, Link as LinkIcon, CheckCircle, AlertCircle } from 'lucide-react';
-import { linkLineAccount } from '../services/api';
+import { User as UserIcon, Save, School, Shield, Mail, Phone, Loader2, Link as LinkIcon, CheckCircle, AlertCircle, LogIn } from 'lucide-react';
+import { linkLineAccount, registerUser, updateUser } from '../services/api';
 import { initLiff, loginLiff } from '../services/liff';
 
 interface ProfileViewProps {
   user: User;
   data: AppData;
   onUpdateUser: (updatedUser: User) => void;
+  isRegistrationMode?: boolean;
 }
 
-const ProfileView: React.FC<ProfileViewProps> = ({ user, data, onUpdateUser }) => {
+const ProfileView: React.FC<ProfileViewProps> = ({ user, data, onUpdateUser, isRegistrationMode = false }) => {
   const [name, setName] = useState(user.name || user.displayName || '');
   const [surname, setSurname] = useState(user.surname || '');
   const [tel, setTel] = useState(user.tel || '');
+  const [email, setEmail] = useState(user.email || '');
+  const [selectedSchoolID, setSelectedSchoolID] = useState(user.SchoolID || '');
+  
   const [isSaving, setIsSaving] = useState(false);
   const [isLinking, setIsLinking] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
@@ -26,15 +30,30 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user, data, onUpdateUser }) =
     setIsSaving(true);
     setMessage(null);
 
+    const userData = { ...user, name, surname, tel, email, SchoolID: selectedSchoolID };
+
     try {
-       // Simulate API Call for basic profile update
-       await new Promise(resolve => setTimeout(resolve, 1000));
+       let resultUser = null;
+       let success = false;
+
+       if (isRegistrationMode) {
+           // Call Register API
+           resultUser = await registerUser(userData);
+           success = !!resultUser;
+       } else {
+           // Call Update API
+           success = await updateUser(userData);
+           if (success) resultUser = userData;
+       }
        
-       const updatedUser = { ...user, name, surname, tel };
-       onUpdateUser(updatedUser);
-       setMessage({ type: 'success', text: 'บันทึกข้อมูลเรียบร้อยแล้ว' });
+       if (success && resultUser) {
+           onUpdateUser(resultUser);
+           setMessage({ type: 'success', text: isRegistrationMode ? 'ลงทะเบียนเรียบร้อยแล้ว' : 'บันทึกข้อมูลเรียบร้อยแล้ว' });
+       } else {
+           setMessage({ type: 'error', text: 'เกิดข้อผิดพลาดในการบันทึก' });
+       }
     } catch (err) {
-       setMessage({ type: 'error', text: 'เกิดข้อผิดพลาดในการบันทึก' });
+       setMessage({ type: 'error', text: 'เกิดข้อผิดพลาดในการเชื่อมต่อ' });
     } finally {
        setIsSaving(false);
     }
@@ -48,9 +67,6 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user, data, onUpdateUser }) =
           const liffProfile = await initLiff();
           
           if (!liffProfile) {
-              // Not logged in to LINE/LIFF -> Trigger Login
-              // This will redirect, so the flow stops here.
-              // When they come back, they need to navigate here again to finalize (or we assume standard login flow).
               loginLiff(); 
               return;
           }
@@ -75,10 +91,12 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user, data, onUpdateUser }) =
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in duration-500">
-      <div>
-        <h2 className="text-2xl font-bold text-gray-800">ข้อมูลส่วนตัว (Profile)</h2>
-        <p className="text-gray-500">จัดการข้อมูลผู้ใช้งานและตรวจสอบสถานะบัญชี</p>
-      </div>
+      {!isRegistrationMode && (
+        <div>
+            <h2 className="text-2xl font-bold text-gray-800">ข้อมูลส่วนตัว (Profile)</h2>
+            <p className="text-gray-500">จัดการข้อมูลผู้ใช้งานและตรวจสอบสถานะบัญชี</p>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Left Column: Avatar & Status */}
@@ -97,8 +115,8 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user, data, onUpdateUser }) =
                         </div>
                     )}
                 </div>
-                <h3 className="text-xl font-bold text-gray-900">{name} {surname}</h3>
-                <p className="text-sm text-gray-500 mb-4">@{user.username || 'user'}</p>
+                <h3 className="text-xl font-bold text-gray-900">{name || 'ชื่อ-นามสกุล'}</h3>
+                {!isRegistrationMode && <p className="text-sm text-gray-500 mb-4">@{user.username || 'user'}</p>}
                 
                 <div className="w-full pt-4 border-t border-gray-100 flex flex-col gap-2">
                     <div className="flex items-center justify-between text-sm">
@@ -107,25 +125,27 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user, data, onUpdateUser }) =
                     </div>
                 </div>
 
-                {/* LINE Connection Status */}
-                <div className="w-full pt-4 mt-2 border-t border-gray-100">
-                     <div className="mb-2 text-xs text-gray-400 font-medium uppercase tracking-wider text-left">LINE Connection</div>
-                     {user.userline_id ? (
-                         <div className="flex items-center justify-center p-3 bg-green-50 text-green-700 rounded-lg text-sm font-medium border border-green-100">
-                             <CheckCircle className="w-4 h-4 mr-2" />
-                             เชื่อมต่อแล้ว
-                         </div>
-                     ) : (
-                         <button 
-                            onClick={handleLinkLine}
-                            disabled={isLinking}
-                            className="w-full flex items-center justify-center p-3 bg-[#06C755] text-white rounded-lg text-sm font-medium hover:bg-[#05b34c] transition-colors disabled:opacity-70 shadow-sm"
-                         >
-                             {isLinking ? <Loader2 className="w-4 h-4 animate-spin" /> : <LinkIcon className="w-4 h-4 mr-2" />}
-                             เชื่อมต่อกับ LINE
-                         </button>
-                     )}
-                </div>
+                {/* LINE Connection Status (Hide if registering via LINE because it's already linked) */}
+                {!isRegistrationMode && (
+                    <div className="w-full pt-4 mt-2 border-t border-gray-100">
+                        <div className="mb-2 text-xs text-gray-400 font-medium uppercase tracking-wider text-left">LINE Connection</div>
+                        {user.userline_id ? (
+                            <div className="flex items-center justify-center p-3 bg-green-50 text-green-700 rounded-lg text-sm font-medium border border-green-100">
+                                <CheckCircle className="w-4 h-4 mr-2" />
+                                เชื่อมต่อแล้ว
+                            </div>
+                        ) : (
+                            <button 
+                                onClick={handleLinkLine}
+                                disabled={isLinking}
+                                className="w-full flex items-center justify-center p-3 bg-[#06C755] text-white rounded-lg text-sm font-medium hover:bg-[#05b34c] transition-colors disabled:opacity-70 shadow-sm"
+                            >
+                                {isLinking ? <Loader2 className="w-4 h-4 animate-spin" /> : <LinkIcon className="w-4 h-4 mr-2" />}
+                                เชื่อมต่อกับ LINE
+                            </button>
+                        )}
+                    </div>
+                )}
             </div>
         </div>
 
@@ -133,7 +153,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user, data, onUpdateUser }) =
         <div className="md:col-span-2">
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-100 bg-gray-50">
-                    <h3 className="font-bold text-gray-800">แก้ไขข้อมูล</h3>
+                    <h3 className="font-bold text-gray-800">{isRegistrationMode ? 'กรอกข้อมูลส่วนตัว' : 'แก้ไขข้อมูล'}</h3>
                 </div>
                 <div className="p-6">
                     <form onSubmit={handleSave} className="space-y-6">
@@ -162,20 +182,39 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user, data, onUpdateUser }) =
 
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">โรงเรียน / หน่วยงาน</label>
-                            <div className="flex items-center w-full px-3 py-2 bg-gray-100 border border-gray-200 rounded-lg text-gray-600 cursor-not-allowed">
-                                <School className="w-4 h-4 mr-2 text-gray-400" />
-                                {school?.SchoolName || 'ไม่ระบุหน่วยงาน'}
-                            </div>
-                            <p className="text-xs text-gray-400 mt-1">* หากต้องการแก้ไขข้อมูลโรงเรียน กรุณาติดต่อผู้ดูแลระบบ</p>
+                            {isRegistrationMode ? (
+                                <select 
+                                    required
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                                    value={selectedSchoolID}
+                                    onChange={(e) => setSelectedSchoolID(e.target.value)}
+                                >
+                                    <option value="">-- เลือกโรงเรียน --</option>
+                                    {data.schools.map(s => (
+                                        <option key={s.SchoolID} value={s.SchoolID}>{s.SchoolName}</option>
+                                    ))}
+                                </select>
+                            ) : (
+                                <>
+                                    <div className="flex items-center w-full px-3 py-2 bg-gray-100 border border-gray-200 rounded-lg text-gray-600 cursor-not-allowed">
+                                        <School className="w-4 h-4 mr-2 text-gray-400" />
+                                        {school?.SchoolName || 'ไม่ระบุหน่วยงาน'}
+                                    </div>
+                                    <p className="text-xs text-gray-400 mt-1">* หากต้องการแก้ไขข้อมูลโรงเรียน กรุณาติดต่อผู้ดูแลระบบ</p>
+                                </>
+                            )}
                         </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                              <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">อีเมล</label>
-                                <div className="flex items-center w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-500">
-                                    <Mail className="w-4 h-4 mr-2 text-gray-400" />
-                                    {user.email || '-'}
-                                </div>
+                                <input 
+                                    type="email" 
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    placeholder="example@mail.com"
+                                />
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">เบอร์โทรศัพท์</label>
@@ -214,8 +253,8 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user, data, onUpdateUser }) =
                                 disabled={isSaving}
                                 className="flex items-center px-6 py-2.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-70"
                             >
-                                {isSaving ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Save className="w-5 h-5 mr-2" />}
-                                บันทึกการเปลี่ยนแปลง
+                                {isSaving ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : (isRegistrationMode ? <LogIn className="w-5 h-5 mr-2" /> : <Save className="w-5 h-5 mr-2" />)}
+                                {isRegistrationMode ? 'ยืนยันการลงทะเบียน' : 'บันทึกการเปลี่ยนแปลง'}
                             </button>
                         </div>
                     </form>
@@ -228,4 +267,3 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user, data, onUpdateUser }) =
 };
 
 export default ProfileView;
-

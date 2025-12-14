@@ -1,4 +1,5 @@
 
+
 import { AppData, User } from '../types';
 import { getMockData } from './mockData';
 
@@ -61,8 +62,6 @@ export const loginStandardUser = async (username: string, password: string): Pro
 
 export const linkLineAccount = async (userId: string, lineId: string): Promise<boolean> => {
     try {
-        // Use no-cors for simple trigger execution if needed, or cors if returning JSON
-        // Using GET here to match existing patterns for simplicity
         const response = await fetch(`${API_URL}?action=linkLineAccount&userId=${encodeURIComponent(userId)}&lineId=${encodeURIComponent(lineId)}`, {
             method: 'GET',
             mode: 'cors'
@@ -73,6 +72,60 @@ export const linkLineAccount = async (userId: string, lineId: string): Promise<b
         return result.status === 'success';
     } catch (e) {
         console.error("Link LINE failed", e);
+        return false;
+    }
+}
+
+export const registerUser = async (user: Partial<User>): Promise<User | null> => {
+    try {
+        const response = await fetch(`${API_URL}?action=registerUser`, {
+            method: 'POST',
+            mode: 'cors', // changed to cors to read response
+            body: JSON.stringify(user)
+        });
+        
+        if (!response.ok) return null;
+        const result = await response.json();
+        if (result.status === 'success' && result.user) {
+            return result.user;
+        }
+        return null;
+    } catch (e) {
+        console.error("Registration failed", e);
+        return null;
+    }
+}
+
+export const updateUser = async (user: Partial<User>): Promise<boolean> => {
+    try {
+        const response = await fetch(`${API_URL}?action=updateUser`, {
+            method: 'POST',
+            mode: 'cors', // changed to cors to read response
+            body: JSON.stringify(user)
+        });
+        
+        if (!response.ok) return false;
+        const result = await response.json();
+        return result.status === 'success';
+    } catch (e) {
+        console.error("Update failed", e);
+        return false;
+    }
+}
+
+export const updateTeamResult = async (teamId: string, score: number, rank: string, medal: string): Promise<boolean> => {
+    try {
+        // Use GET for simplicity with simple triggers, or POST if large data
+        const response = await fetch(`${API_URL}?action=updateTeamResult&teamId=${encodeURIComponent(teamId)}&score=${score}&rank=${encodeURIComponent(rank)}&medal=${encodeURIComponent(medal)}`, {
+            method: 'GET',
+            mode: 'cors'
+        });
+        
+        if (!response.ok) return false;
+        const result = await response.json();
+        return result.status === 'success';
+    } catch (e) {
+        console.error("Update Score failed", e);
         return false;
     }
 }

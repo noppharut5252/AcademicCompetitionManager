@@ -1,4 +1,5 @@
 
+
 import React, { useEffect, useState } from 'react';
 import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
@@ -7,6 +8,7 @@ import ActivityList from './components/ActivityList';
 import ResultsView from './components/ResultsView';
 import DocumentsView from './components/DocumentsView';
 import ProfileView from './components/ProfileView'; // Import ProfileView
+import ScoreEntry from './components/ScoreEntry'; // Import ScoreEntry
 import { AppData, User } from './types';
 import { fetchData, loginStandardUser, checkUserPermission } from './services/api';
 import { initLiff, loginLiff, LiffProfile } from './services/liff';
@@ -21,6 +23,7 @@ const App: React.FC = () => {
   // Auth State
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | any | null>(null);
+  const [isRegistering, setIsRegistering] = useState(false);
   
   // Login Form State
   const [loginMethod, setLoginMethod] = useState<'line' | 'standard'>('line');
@@ -30,9 +33,25 @@ const App: React.FC = () => {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Initialize LIFF on mount
+  // Initialize LIFF and Session on mount
   useEffect(() => {
     const initialize = async () => {
+      // 1. Check Local Storage for existing session
+      const savedUserStr = localStorage.getItem('comp_user');
+      if (savedUserStr) {
+          try {
+              const savedUser = JSON.parse(savedUserStr);
+              setCurrentUser(savedUser);
+              setIsAuthenticated(true);
+              setLiffChecking(false);
+              fetchAppData();
+              return; // Skip LIFF check if session exists
+          } catch(e) {
+              localStorage.removeItem('comp_user');
+          }
+      }
+
+      // 2. If no session, check LIFF
       try {
         const liffProfile = await initLiff();
         if (liffProfile) {
@@ -42,13 +61,29 @@ const App: React.FC = () => {
           
           if (dbUser) {
              // Success: Found in DB
-             setCurrentUser({ ...dbUser, pictureUrl: liffProfile.pictureUrl, displayName: liffProfile.displayName });
+             const fullUser = { ...dbUser, pictureUrl: liffProfile.pictureUrl, displayName: liffProfile.displayName };
+             setCurrentUser(fullUser);
+             localStorage.setItem('comp_user', JSON.stringify(fullUser));
              setIsAuthenticated(true);
              fetchAppData();
           } else {
-             // Failed: Not linked yet. 
-             // We do NOT log them in, but we stop checking so they see the login screen.
-             console.log("LINE connected but not linked to any user in DB");
+             // Failed: Not linked yet -> Go to Registration Flow
+             console.log("LINE connected but not linked. Redirecting to register.");
+             setCurrentUser({
+                 userid: '',
+                 username: '',
+                 name: '', // Will be filled in registration
+                 surname: '',
+                 SchoolID: '',
+                 level: 'user',
+                 email: liffProfile.email || '',
+                 avatarFileId: '',
+                 userline_id: liffProfile.userId,
+                 pictureUrl: liffProfile.pictureUrl,
+                 displayName: liffProfile.displayName
+             });
+             setIsRegistering(true);
+             fetchAppData(); // Need data for schools list in registration
           }
           setLoading(false);
         }
@@ -86,6 +121,7 @@ const App: React.FC = () => {
         const user = await loginStandardUser(username, password);
         if (user) {
             setCurrentUser(user);
+            localStorage.setItem('comp_user', JSON.stringify(user));
             setIsAuthenticated(true);
             fetchAppData();
         } else {
@@ -102,6 +138,13 @@ const App: React.FC = () => {
       setCurrentUser({ name: 'Guest', isGuest: true } as User);
       setIsAuthenticated(true);
       fetchAppData();
+  };
+
+  const handleRegistrationComplete = (newUser: User) => {
+      setCurrentUser(newUser);
+      localStorage.setItem('comp_user', JSON.stringify(newUser));
+      setIsRegistering(false);
+      setIsAuthenticated(true);
   };
 
   // Skeleton Loader Component
@@ -135,8 +178,30 @@ const App: React.FC = () => {
     );
   }
 
-  // 2. Login Screen
-  if (!isAuthenticated) {
+  // 2. Registration Mode (Found LINE but no User)
+  if (isRegistering && data) {
+      return (
+        <div className="min-h-screen bg-gray-50 p-4 font-kanit">
+             <div className="max-w-4xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden mt-10">
+                 <div className="bg-green-600 p-6 text-center text-white">
+                     <h1 className="text-2xl font-bold">ลงทะเบียนสมาชิกใหม่</h1>
+                     <p className="text-green-100 mt-1">กรุณากรอกข้อมูลเพื่อเชื่อมต่อกับบัญชี LINE ของคุณ</p>
+                 </div>
+                 <div className="p-6">
+                    <ProfileView 
+                        user={currentUser} 
+                        data={data} 
+                        onUpdateUser={handleRegistrationComplete}
+                        isRegistrationMode={true} 
+                    />
+                 </div>
+             </div>
+        </div>
+      )
+  }
+
+  // 3. Login Screen
+  if (!isAuthenticated && !isRegistering) {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col justify-center px-4 font-kanit">
         <div className="max-w-md w-full mx-auto bg-white rounded-2xl shadow-xl overflow-hidden">
@@ -175,7 +240,7 @@ const App: React.FC = () => {
                             <span className="mr-2 font-bold">Log in with LINE</span>
                         </button>
                         <p className="text-xs text-gray-400 mt-4">
-                            * หากกดปุ่มแล้วเข้าไม่ได้ แสดงว่าท่านยังไม่ได้ผูกบัญชี<br/>กรุณาเข้าสู่ระบบด้วย Username/Password แล้วไปที่หน้า "ข้อมูลส่วนตัว" เพื่อเชื่อมต่อ LINE
+                            * หากยังไม่มีบัญชี ระบบจะพาท่านไปยังหน้าลงทะเบียนอัตโนมัติ
                         </p>
                     </div>
                 ) : (
@@ -245,7 +310,7 @@ const App: React.FC = () => {
     );
   }
 
-  // 3. Main App Content (Authenticated)
+  // 4. Main App Content (Authenticated)
   const renderLoadingOrError = () => {
     if (loading) {
       return <SkeletonLoader />;
@@ -285,6 +350,7 @@ const App: React.FC = () => {
                 <Route path="/dashboard" element={<Dashboard data={data} user={currentUser} />} />
                 <Route path="/teams" element={<TeamList data={data} user={currentUser} />} />
                 <Route path="/activities" element={<ActivityList data={data} />} />
+                <Route path="/score" element={<ScoreEntry data={data} user={currentUser} onDataUpdate={fetchAppData} />} />
                 <Route path="/results" element={<ResultsView data={data} />} />
                 <Route path="/certificates" element={<DocumentsView data={data} type="certificate" />} />
                 <Route path="/idcards" element={<DocumentsView data={data} type="idcard" />} />
@@ -308,4 +374,3 @@ const TrophyIcon = ({ className }: { className?: string }) => (
 );
 
 export default App;
-

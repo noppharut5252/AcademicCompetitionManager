@@ -1,7 +1,6 @@
-
 import React, { useState, useMemo } from 'react';
 import { AppData, Team, TeamStatus, User, AreaStageInfo } from '../types';
-import { Search, Filter, MoreHorizontal, FileText, CheckCircle, XCircle, Clock, ChevronLeft, ChevronRight, Eye, Trophy, Medal, Hash, Image as ImageIcon, LayoutGrid } from 'lucide-react';
+import { Search, Filter, CheckCircle, XCircle, Clock, ChevronLeft, ChevronRight, Eye, Trophy, Medal, Hash, LayoutGrid, Users, Award, School, Printer, FileText, Star, Crown, Zap } from 'lucide-react';
 import TeamDetailModal from './TeamDetailModal';
 
 interface TeamListProps {
@@ -16,9 +15,9 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [categoryFilter, setCategoryFilter] = useState<string>('All');
   const [clusterFilter, setClusterFilter] = useState<string>('All');
+  const [quickFilter, setQuickFilter] = useState<'all' | 'gold' | 'qualified'>('all'); // New Quick Filter State
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
-  // Default to 'area' as requested
   const [viewRound, setViewRound] = useState<'cluster' | 'area'>('area');
 
   // Extract unique categories
@@ -31,7 +30,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
     return data.clusters.sort((a, b) => a.ClusterName.localeCompare(b.ClusterName));
   }, [data.clusters]);
 
-  // Helper to normalize status (handle numeric codes if present)
+  // Helper to normalize status
   const normalizeStatus = (status: string) => {
     if (status === '1') return TeamStatus.APPROVED;
     if (status === '0') return TeamStatus.PENDING;
@@ -39,21 +38,141 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
     return status;
   };
 
-  // RBAC & Logic Filtering
+  const getAreaInfo = (stageInfo: string): AreaStageInfo | null => {
+    try {
+        return JSON.parse(stageInfo);
+    } catch {
+        return null;
+    }
+  };
+
+  // Logic to determine if a team is considered "Qualified" for Area Round
+  // Strict Rules: Rank 1 AND Flag (RepresentativeOverride) is TRUE
+  const isTeamQualifiedForArea = (team: Team) => {
+      const r = String(team.rank || '').trim();
+      const f = String(team.flag || '').trim().toUpperCase();
+      return r === '1' && f === 'TRUE';
+  };
+
+  // --- Dynamic Dashboard Stats Logic ---
+  const dashboardStats = useMemo(() => {
+      if (!user) return null;
+
+      let scopeTeams: Team[] = [];
+      let title = "";
+      let icon = Users;
+      let bgGradient = "from-blue-600 to-indigo-700";
+
+      const role = user.level?.toLowerCase();
+
+      // 1. Determine Scope
+      if (role === 'admin' || role === 'area') {
+          scopeTeams = data.teams;
+          title = "ภาพรวมระดับเขตพื้นที่ (District Overview)";
+          icon = Trophy;
+          bgGradient = "from-purple-600 to-indigo-600";
+      } else if (role === 'group_admin') {
+          const userSchool = data.schools.find(s => s.SchoolID === user.SchoolID);
+          const clusterId = userSchool?.SchoolCluster;
+          const cluster = data.clusters.find(c => c.ClusterID === clusterId);
+          if (cluster) {
+              scopeTeams = data.teams.filter(t => {
+                  const teamSchool = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
+                  return teamSchool && teamSchool.SchoolCluster === clusterId;
+              });
+              title = `ภาพรวม ${cluster.ClusterName}`;
+              icon = LayoutGrid;
+              bgGradient = "from-blue-600 to-cyan-600";
+          }
+      } else if (role === 'school_admin') {
+          const userSchool = data.schools.find(s => s.SchoolID === user.SchoolID);
+          if (userSchool) {
+               scopeTeams = data.teams.filter(t => 
+                  t.schoolId === user.SchoolID || 
+                  t.schoolId === userSchool.SchoolName
+              );
+              title = `ภาพรวม ${userSchool.SchoolName}`;
+              icon = School;
+              bgGradient = "from-emerald-600 to-teal-600";
+          }
+      } else {
+          return null;
+      }
+
+      if (!title) return null;
+
+      // 2. Calculate Stats based on Scope & ViewRound
+      let gold = 0;
+      let silver = 0;
+      let bronze = 0;
+      
+      // For Top Schools Calculation
+      const schoolScores: Record<string, number> = {};
+
+      // Filter scopeTeams based on ViewRound for display consistency
+      // UPDATED: Using strict isTeamQualifiedForArea for Area view to match counts
+      const displayTeams = viewRound === 'area' 
+        ? scopeTeams.filter(t => isTeamQualifiedForArea(t)) 
+        : scopeTeams;
+
+      // Calculate unique activities count
+      const activitiesCount = new Set(displayTeams.map(t => t.activityId)).size;
+
+      displayTeams.forEach(t => {
+          let score = 0;
+          if (viewRound === 'cluster') {
+              score = t.score;
+          } else {
+              const info = getAreaInfo(t.stageInfo);
+              score = info?.score || 0;
+          }
+
+          if (score >= 80) gold++;
+          else if (score >= 70) silver++;
+          else if (score >= 60) bronze++;
+
+          // Aggregate School Scores for Top Schools (Area View mainly)
+          if (viewRound === 'area' && score > 0) {
+              const sName = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId)?.SchoolName || t.schoolId;
+              schoolScores[sName] = (schoolScores[sName] || 0) + score;
+          }
+      });
+
+      // Get Top 3 Schools
+      const topSchools = Object.entries(schoolScores)
+          .map(([name, score]) => ({ name, score }))
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 3);
+
+      return {
+          title,
+          icon,
+          bgGradient,
+          total: displayTeams.length,
+          activities: activitiesCount,
+          pending: displayTeams.filter(t => normalizeStatus(t.status) === TeamStatus.PENDING).length,
+          approved: displayTeams.filter(t => normalizeStatus(t.status) === TeamStatus.APPROVED).length,
+          // Qualified logic: Rank 1 AND Flag TRUE (Case insensitive check)
+          qualified: scopeTeams.filter(t => isTeamQualifiedForArea(t)).length, 
+          medals: { gold, silver, bronze },
+          topSchools
+      };
+  }, [data.teams, data.schools, data.clusters, user, viewRound]);
+
+
+  // RBAC & Logic Filtering for the List
   const filteredTeams = useMemo(() => {
     let teams = data.teams;
     const isGuest = !user || user.isGuest;
 
     // 1. Permission Filtering
     if (isGuest) {
-        // Guests see everything (read-only)
+        // Guests see everything
     } else if (user) {
         const role = user.level?.toLowerCase();
-
         if (role === 'admin' || role === 'area') {
             // See ALL
         } else if (role === 'group_admin') {
-            // See only teams in their cluster
             const userSchool = data.schools.find(s => s.SchoolID === user.SchoolID);
             if (userSchool) {
                 const userClusterId = userSchool.SchoolCluster;
@@ -61,47 +180,29 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
                     const teamSchool = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
                     return teamSchool && teamSchool.SchoolCluster === userClusterId;
                 });
-            } else {
-                teams = [];
-            }
+            } else { teams = []; }
         } else if (role === 'school_admin') {
-            // FIX: School_Admin mapping logic
-            // 1. Find the school object from the user's SchoolID
             const userSchool = data.schools.find(s => s.SchoolID === user.SchoolID);
-            
             if (userSchool) {
-                // 2. Filter teams that match the SchoolID directly OR match the SchoolName (since Sheets might store Name)
-                teams = teams.filter(t => 
-                    t.schoolId === user.SchoolID || 
-                    t.schoolId === userSchool.SchoolName
-                );
-            } else {
-                // Fallback if school not found
-                teams = teams.filter(t => t.schoolId === user.SchoolID);
-            }
+                teams = teams.filter(t => t.schoolId === user.SchoolID || t.schoolId === userSchool.SchoolName);
+            } else { teams = teams.filter(t => t.schoolId === user.SchoolID); }
         } else if (role === 'user') {
-            // See only teams created by themselves
             teams = teams.filter(t => t.createdBy === user.userid);
         } else if (role === 'score') {
-            // See teams in assigned activities
             const allowedActivities = user.assignedActivities || [];
             teams = teams.filter(t => allowedActivities.includes(t.activityId));
         }
     }
 
-    // 2. Round Filtering (Cluster vs Area)
+    // 2. Round Filtering
+    // UPDATED: Using strict isTeamQualifiedForArea for Area view
     if (viewRound === 'area') {
-        teams = teams.filter(team => {
-            const isRepresentative = String(team.flag).toLowerCase() === 'true';
-            const isAreaStage = String(team.stageStatus).toLowerCase() === 'area';
-            return isRepresentative || isAreaStage;
-        });
+        teams = teams.filter(team => isTeamQualifiedForArea(team));
     }
 
-    // 3. Search & Status & Category & Cluster Filtering
+    // 3. Search & Filters & Quick Filters
     return teams.filter(team => {
       const activity = data.activities.find(a => a.id === team.activityId);
-      // Improved school lookup to support ID or Name
       const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
       const cluster = school ? data.clusters.find(c => c.ClusterID === school.SchoolCluster) : null;
       const normalizedStatus = normalizeStatus(team.status);
@@ -117,11 +218,22 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
       const matchesCategory = categoryFilter === 'All' || (activity && activity.category === categoryFilter);
       const matchesCluster = clusterFilter === 'All' || (cluster && cluster.ClusterID === clusterFilter);
 
-      return matchesSearch && matchesStatus && matchesCategory && matchesCluster;
-    });
-  }, [data.teams, data.schools, data.activities, data.clusters, user, searchTerm, statusFilter, categoryFilter, clusterFilter, viewRound]);
+      // Quick Filter Logic
+      let matchesQuickFilter = true;
+      if (quickFilter === 'gold') {
+          // Check score based on viewRound
+          const score = viewRound === 'cluster' ? team.score : (getAreaInfo(team.stageInfo)?.score || 0);
+          matchesQuickFilter = score >= 80;
+      } else if (quickFilter === 'qualified') {
+          // Strict logic for Qualified Filter: Rank 1 AND Flag TRUE
+          matchesQuickFilter = isTeamQualifiedForArea(team);
+      }
 
-  // Pagination Logic
+      return matchesSearch && matchesStatus && matchesCategory && matchesCluster && matchesQuickFilter;
+    });
+  }, [data.teams, data.schools, data.activities, data.clusters, user, searchTerm, statusFilter, categoryFilter, clusterFilter, viewRound, quickFilter]);
+
+  // Pagination
   const totalPages = Math.ceil(filteredTeams.length / ITEMS_PER_PAGE);
   const paginatedTeams = filteredTeams.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
@@ -142,54 +254,307 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
     }
   };
 
-  const getAreaInfo = (stageInfo: string): AreaStageInfo | null => {
-    try {
-        return JSON.parse(stageInfo);
-    } catch {
-        return null;
-    }
-  };
-
   const getTeamImageUrl = (team: Team) => {
-    // Priority: LogoUrl -> PhotoID (as thumb) -> Fallback
     if (team.logoUrl && team.logoUrl.startsWith('http')) return team.logoUrl;
     if (team.teamPhotoId) return `https://drive.google.com/thumbnail?id=${team.teamPhotoId}`;
-    // Fallback image (Golden Trophy Icon)
     return "https://cdn-icons-png.flaticon.com/512/3135/3135768.png"; 
   };
 
+  const handlePrintSummary = () => {
+      // Create a print window
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) return;
+
+      const date = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
+      const scopeTitle = dashboardStats?.title || 'สรุปข้อมูลการแข่งขัน';
+      const roundTitle = viewRound === 'cluster' ? 'ระดับกลุ่มเครือข่าย' : 'ระดับเขตพื้นที่';
+
+      // Group teams by activity
+      const teamsByActivity: Record<string, Team[]> = {};
+      filteredTeams.forEach(t => {
+          const actName = data.activities.find(a => a.id === t.activityId)?.name || t.activityId;
+          if (!teamsByActivity[actName]) teamsByActivity[actName] = [];
+          teamsByActivity[actName].push(t);
+      });
+
+      const htmlContent = `
+        <html>
+        <head>
+            <title>Summary Report</title>
+            <style>
+                body { font-family: 'Sarabun', 'Kanit', sans-serif; padding: 20px; }
+                h1, h2 { text-align: center; margin-bottom: 10px; }
+                .meta { text-align: center; color: #666; margin-bottom: 30px; font-size: 14px; }
+                table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 12px; }
+                th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                th { background-color: #f2f2f2; font-weight: bold; }
+                .activity-header { background-color: #e6f3ff; font-weight: bold; font-size: 14px; }
+                .status-approved { color: green; }
+                .status-pending { color: orange; }
+                @media print {
+                    .no-print { display: none; }
+                    body { -webkit-print-color-adjust: exact; }
+                }
+            </style>
+            <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600&family=Sarabun:wght@400;600&display=swap" rel="stylesheet">
+        </head>
+        <body>
+            <h1>รายงานสรุปข้อมูลการแข่งขัน</h1>
+            <h2>${scopeTitle} (${roundTitle})</h2>
+            <div class="meta">ข้อมูล ณ วันที่ ${date} | จำนวนทีมทั้งหมด: ${filteredTeams.length} ทีม</div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 5%">#</th>
+                        <th style="width: 30%">ชื่อทีม</th>
+                        <th style="width: 25%">โรงเรียน</th>
+                        <th style="width: 15%">สถานะ</th>
+                        <th style="width: 15%">ผลการแข่งขัน</th>
+                        <th style="width: 10%">หมายเหตุ</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${Object.entries(teamsByActivity).map(([actName, teams]) => `
+                        <tr class="activity-header"><td colspan="6">${actName} (${teams.length} ทีม)</td></tr>
+                        ${teams.map((t, idx) => {
+                             const school = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
+                             const rawScore = viewRound === 'cluster' ? t.score : getAreaInfo(t.stageInfo)?.score;
+                             const displayScore = (typeof rawScore === 'number' && rawScore > 0) ? rawScore : '-';
+                             return `
+                                <tr>
+                                    <td>${idx + 1}</td>
+                                    <td>${t.teamName}</td>
+                                    <td>${school?.SchoolName || t.schoolId}</td>
+                                    <td class="${t.status === 'Approved' ? 'status-approved' : 'status-pending'}">${normalizeStatus(t.status)}</td>
+                                    <td>${displayScore}</td>
+                                    <td>${t.flag === 'TRUE' ? 'ตัวแทนเขต' : ''}</td>
+                                </tr>
+                             `;
+                        }).join('')}
+                    `).join('')}
+                </tbody>
+            </table>
+            <div style="margin-top: 30px; text-align: right; font-size: 12px;">
+                ผู้พิมพ์รายงาน: ${user?.name || user?.username || 'Guest'}
+            </div>
+            <script>
+                window.onload = function() { window.print(); }
+            </script>
+        </body>
+        </html>
+      `;
+
+      printWindow.document.write(htmlContent);
+      printWindow.document.close();
+  };
+
+  const isGroupAdmin = user?.level === 'group_admin';
+  const isSchoolAdmin = user?.level === 'school_admin';
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
+      
+      {/* Enhanced Dashboard Stats */}
+      {dashboardStats && (
+        <div className={`bg-gradient-to-r ${dashboardStats.bgGradient} rounded-2xl p-6 text-white shadow-lg mb-6 transition-all duration-300`}>
+            <div className="flex justify-between items-start mb-6">
+                <h3 className="text-xl font-bold flex items-center">
+                    <dashboardStats.icon className="w-6 h-6 mr-2" />
+                    {dashboardStats.title}
+                </h3>
+                <div className="bg-white/20 px-3 py-1 rounded-lg text-sm font-medium backdrop-blur-sm">
+                    {viewRound === 'cluster' ? 'ผลงานระดับกลุ่มฯ' : 'ผลงานระดับเขตฯ'}
+                </div>
+            </div>
+
+            {/* Area View: Focus on Medals & Top Schools */}
+            {viewRound === 'area' ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Left: Medals */}
+                    <div className="bg-white/10 backdrop-blur-sm rounded-xl p-5 border border-white/20">
+                         <h4 className="text-white/80 text-sm mb-4 font-semibold flex items-center">
+                             <Award className="w-4 h-4 mr-2"/> สรุปเหรียญรางวัลรวม
+                         </h4>
+                         <div className="grid grid-cols-3 gap-2 text-center">
+                            <div className="p-3 bg-yellow-500/20 rounded-lg border border-yellow-400/30 flex flex-col items-center">
+                                <Medal className="w-8 h-8 text-yellow-300 mb-1 drop-shadow-sm" />
+                                <span className="text-2xl font-bold text-white">{dashboardStats.medals.gold}</span>
+                                <span className="text-xs text-yellow-100">Gold</span>
+                            </div>
+                            <div className="p-3 bg-gray-400/20 rounded-lg border border-gray-300/30 flex flex-col items-center">
+                                <Medal className="w-8 h-8 text-gray-300 mb-1 drop-shadow-sm" />
+                                <span className="text-2xl font-bold text-white">{dashboardStats.medals.silver}</span>
+                                <span className="text-xs text-gray-100">Silver</span>
+                            </div>
+                            <div className="p-3 bg-orange-500/20 rounded-lg border border-orange-400/30 flex flex-col items-center">
+                                <Medal className="w-8 h-8 text-orange-300 mb-1 drop-shadow-sm" />
+                                <span className="text-2xl font-bold text-white">{dashboardStats.medals.bronze}</span>
+                                <span className="text-xs text-orange-100">Bronze</span>
+                            </div>
+                         </div>
+                         <div className="mt-4 pt-3 border-t border-white/10 flex justify-between items-center">
+                             <div className="flex flex-col">
+                                <span className="text-xs text-white/70">รายการแข่งขัน</span>
+                                <span className="text-lg font-bold">{dashboardStats.activities}</span>
+                             </div>
+                             <div className="flex flex-col text-right">
+                                <span className="text-xs text-white/70">ทีมทั้งหมด</span>
+                                <span className="text-lg font-bold">{dashboardStats.total}</span>
+                             </div>
+                         </div>
+                    </div>
+
+                    {/* Right: Top Schools */}
+                    <div className="bg-white/10 backdrop-blur-sm rounded-xl p-5 border border-white/20">
+                         <h4 className="text-white/80 text-sm mb-4 font-semibold flex items-center">
+                             <Crown className="w-4 h-4 mr-2 text-yellow-300"/> Top 3 โรงเรียนยอดเยี่ยม (คะแนนรวม)
+                         </h4>
+                         <div className="space-y-3">
+                             {dashboardStats.topSchools.map((school, idx) => (
+                                 <div key={idx} className="flex items-center justify-between p-2 bg-white/5 rounded-lg">
+                                     <div className="flex items-center">
+                                         <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold mr-3 ${idx === 0 ? 'bg-yellow-400 text-yellow-900' : idx === 1 ? 'bg-gray-300 text-gray-800' : 'bg-orange-400 text-orange-900'}`}>
+                                             {idx + 1}
+                                         </div>
+                                         <span className="text-sm font-medium truncate max-w-[150px] sm:max-w-[200px]">{school.name}</span>
+                                     </div>
+                                     <span className="font-bold text-sm bg-white/10 px-2 py-0.5 rounded">{school.score}</span>
+                                 </div>
+                             ))}
+                             {dashboardStats.topSchools.length === 0 && (
+                                 <p className="text-center text-white/50 text-xs py-4">ยังไม่มีข้อมูลคะแนน</p>
+                             )}
+                         </div>
+                    </div>
+                </div>
+            ) : (
+                /* Cluster View: Standard Layout + Qualified Card */
+                <>
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
+                        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
+                            <p className="text-white/80 text-sm mb-1">ทีมทั้งหมด</p>
+                            <div className="flex items-center">
+                                <Users className="w-5 h-5 mr-2 opacity-80" />
+                                <span className="text-2xl font-bold">{dashboardStats.total}</span>
+                            </div>
+                        </div>
+                        
+                        {/* New Activities Card */}
+                        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
+                            <p className="text-blue-100 text-sm mb-1">รายการแข่งขัน</p>
+                            <div className="flex items-center text-blue-200">
+                                <Trophy className="w-5 h-5 mr-2 opacity-80" />
+                                <span className="text-2xl font-bold">{dashboardStats.activities}</span>
+                            </div>
+                        </div>
+
+                        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
+                            <p className="text-yellow-100 text-sm mb-1">รอตรวจสอบ</p>
+                            <div className="flex items-center text-yellow-300">
+                                <Clock className="w-5 h-5 mr-2 opacity-80" />
+                                <span className="text-2xl font-bold">{dashboardStats.pending}</span>
+                            </div>
+                        </div>
+                        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
+                            <p className="text-green-100 text-sm mb-1">อนุมัติแล้ว</p>
+                            <div className="flex items-center text-green-300">
+                                <CheckCircle className="w-5 h-5 mr-2 opacity-80" />
+                                <span className="text-2xl font-bold">{dashboardStats.approved}</span>
+                            </div>
+                        </div>
+
+                        {/* Qualified Card (Cluster ONLY) */}
+                        <div className="bg-white/20 backdrop-blur-md rounded-xl p-4 border border-white/40 ring-2 ring-white/20 shadow-inner">
+                            <p className="text-purple-100 text-sm mb-1 font-semibold">ตัวแทนไปแข่งระดับเขต</p>
+                            <div className="flex items-center text-white">
+                                <Award className="w-6 h-6 mr-2 text-yellow-300 animate-pulse" />
+                                <span className="text-3xl font-bold">{dashboardStats.qualified}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-4 border-t border-white/10 pt-4">
+                         <div className="flex flex-col items-center p-2 rounded-lg bg-yellow-500/20 border border-yellow-400/30">
+                             <Medal className="w-5 h-5 text-yellow-300 mb-1" />
+                             <span className="text-xl font-bold text-white">{dashboardStats.medals.gold}</span>
+                         </div>
+                         <div className="flex flex-col items-center p-2 rounded-lg bg-gray-400/20 border border-gray-400/30">
+                             <Medal className="w-5 h-5 text-gray-300 mb-1" />
+                             <span className="text-xl font-bold text-white">{dashboardStats.medals.silver}</span>
+                         </div>
+                         <div className="flex flex-col items-center p-2 rounded-lg bg-orange-500/20 border border-orange-400/30">
+                             <Medal className="w-5 h-5 text-orange-300 mb-1" />
+                             <span className="text-xl font-bold text-white">{dashboardStats.medals.bronze}</span>
+                         </div>
+                    </div>
+                </>
+            )}
+        </div>
+      )}
+
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-800">รายชื่อทีม (Teams)</h2>
           <p className="text-gray-500">
-             แสดงข้อมูลทีม {viewRound === 'area' ? 'รอบระดับเขตพื้นที่' : 'ทั้งหมด'} <span className="font-semibold text-blue-600">{filteredTeams.length}</span> ทีม 
-             {user && !user.isGuest && <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded border border-blue-200">สิทธิ์: {user.level}</span>}
+             ข้อมูลทีม <span className="font-semibold text-blue-600">{filteredTeams.length}</span> ทีม 
           </p>
         </div>
         
-        {/* Round Toggle */}
-        <div className="flex bg-gray-100 p-1 rounded-lg self-start md:self-auto shadow-inner">
-            <button
-                onClick={() => { setViewRound('area'); setCurrentPage(1); }}
-                className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${viewRound === 'area' ? 'bg-white shadow text-purple-600' : 'text-gray-500 hover:text-gray-700'}`}
+        <div className="flex gap-2">
+            {/* Round Toggle */}
+            <div className="flex bg-gray-100 p-1 rounded-lg shadow-inner">
+                <button
+                    onClick={() => { setViewRound('area'); setCurrentPage(1); setQuickFilter('all'); }}
+                    className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all ${viewRound === 'area' ? 'bg-white shadow text-purple-600' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                    ระดับเขตพื้นที่
+                </button>
+                <button
+                    onClick={() => { setViewRound('cluster'); setCurrentPage(1); setQuickFilter('all'); }}
+                    className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all ${viewRound === 'cluster' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                    ระดับกลุ่มเครือข่าย
+                </button>
+            </div>
+
+            {/* Print Button */}
+            <button 
+                onClick={handlePrintSummary}
+                className="flex items-center px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 hover:text-blue-600 transition-colors shadow-sm"
+                title="พิมพ์สรุปข้อมูล"
             >
-                ระดับเขตพื้นที่ (District)
-            </button>
-            <button
-                onClick={() => { setViewRound('cluster'); setCurrentPage(1); }}
-                className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${viewRound === 'cluster' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-            >
-                ระดับกลุ่มเครือข่าย (Network)
+                <Printer className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">พิมพ์สรุป</span>
             </button>
         </div>
       </div>
 
-      {/* Filters */}
+      {/* Filters & Quick Filter */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col gap-4">
         
-        {/* Row 1: Search and Cluster/Category Filters */}
+        {/* Quick Filter Buttons */}
+        <div className="flex gap-2 pb-2 border-b border-gray-50 overflow-x-auto no-scrollbar">
+            <button
+                onClick={() => setQuickFilter('all')}
+                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap flex items-center ${quickFilter === 'all' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+            >
+                <LayoutGrid className="w-3 h-3 mr-1.5" /> ทั้งหมด
+            </button>
+            <button
+                onClick={() => setQuickFilter('gold')}
+                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap flex items-center ${quickFilter === 'gold' ? 'bg-yellow-500 text-white' : 'bg-yellow-50 text-yellow-700 hover:bg-yellow-100 border border-yellow-200'}`}
+            >
+                <Star className="w-3 h-3 mr-1.5 fill-current" /> เหรียญทอง (80+)
+            </button>
+            <button
+                onClick={() => setQuickFilter('qualified')}
+                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap flex items-center ${quickFilter === 'qualified' ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200'}`}
+            >
+                <Zap className="w-3 h-3 mr-1.5 fill-current" /> ตัวแทน/Qualified
+            </button>
+        </div>
+
         <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
             <div className="relative w-full md:flex-1">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -205,22 +570,22 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
             </div>
 
             <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-                 {/* Cluster Filter */}
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                    <LayoutGrid className="w-5 h-5 text-gray-500 hidden sm:block" />
-                    <select 
-                        className="block w-full pl-3 pr-8 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-lg"
-                        value={clusterFilter}
-                        onChange={(e) => { setClusterFilter(e.target.value); setCurrentPage(1); }}
-                    >
-                        <option value="All">ทุกกลุ่มเครือข่าย</option>
-                        {clusters.map(c => (
-                        <option key={c.ClusterID} value={c.ClusterID}>{c.ClusterName}</option>
-                        ))}
-                    </select>
-                </div>
+                {(!isGroupAdmin && !isSchoolAdmin) && (
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                        <LayoutGrid className="w-5 h-5 text-gray-500 hidden sm:block" />
+                        <select 
+                            className="block w-full pl-3 pr-8 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-lg"
+                            value={clusterFilter}
+                            onChange={(e) => { setClusterFilter(e.target.value); setCurrentPage(1); }}
+                        >
+                            <option value="All">ทุกกลุ่มเครือข่าย</option>
+                            {clusters.map(c => (
+                            <option key={c.ClusterID} value={c.ClusterID}>{c.ClusterName}</option>
+                            ))}
+                        </select>
+                    </div>
+                )}
 
-                {/* Category Filter */}
                 <div className="flex items-center gap-2 w-full sm:w-auto">
                     <Filter className="w-5 h-5 text-gray-500 hidden sm:block" />
                     <select 
@@ -235,7 +600,6 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
                     </select>
                 </div>
 
-                {/* Status Filter */}
                  <div className="flex items-center gap-2 w-full sm:w-auto">
                     <select 
                         className="block w-full pl-3 pr-8 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-lg"
@@ -252,11 +616,10 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
         </div>
       </div>
 
-      {/* Mobile Cards (Visible on Small Screens) */}
+      {/* Mobile Cards */}
       <div className="grid grid-cols-1 gap-4 md:hidden">
         {paginatedTeams.map((team) => {
             const activity = data.activities.find(a => a.id === team.activityId);
-            // Improved lookup
             const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
             const cluster = school ? data.clusters.find(c => c.ClusterID === school.SchoolCluster) : null;
             const areaInfo = getAreaInfo(team.stageInfo);
@@ -312,7 +675,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
         )}
       </div>
 
-      {/* Desktop Table (Hidden on Small Screens) */}
+      {/* Desktop Table */}
       <div className="hidden md:block bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
@@ -332,14 +695,12 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
               {paginatedTeams.length > 0 ? (
                 paginatedTeams.map((team) => {
                   const activity = data.activities.find(a => a.id === team.activityId);
-                  // Improved lookup
                   const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
                   const cluster = school ? data.clusters.find(c => c.ClusterID === school.SchoolCluster) : null;
                   const teamFiles = data.files.filter(f => f.TeamID === team.teamId);
                   const areaInfo = getAreaInfo(team.stageInfo);
                   const imageUrl = getTeamImageUrl(team);
                   
-                  // Score Display Logic
                   const showScore = viewRound === 'cluster' ? team.score : areaInfo?.score;
                   const showRank = viewRound === 'cluster' ? team.rank : (areaInfo?.rank || areaInfo?.medal);
 
@@ -431,7 +792,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
         </div>
       </div>
 
-      {/* Pagination Controls (Shared) */}
+      {/* Pagination Controls */}
       {filteredTeams.length > 0 && (
             <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6 rounded-b-xl shadow-sm">
                 <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">

@@ -44,6 +44,40 @@ function doGet(e) {
     }
   }
 
+  // Register New User
+  if (action === 'registerUser') {
+    try {
+        const payload = JSON.parse(e.postData.contents);
+        const result = registerNewUser(payload);
+        return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
+    } catch(err) {
+        return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: err.toString() })).setMimeType(ContentService.MimeType.JSON);
+    }
+  }
+
+  // Update User
+  if (action === 'updateUser') {
+    try {
+        const payload = JSON.parse(e.postData.contents);
+        const result = updateUserProfile(payload);
+        return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
+    } catch(err) {
+        return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: err.toString() })).setMimeType(ContentService.MimeType.JSON);
+    }
+  }
+  
+  // Update Team Result (Score/Rank/Medal)
+  if (action === 'updateTeamResult') {
+    const teamId = e.parameter.teamId;
+    const score = e.parameter.score;
+    const rank = e.parameter.rank;
+    const medal = e.parameter.medal;
+    
+    const result = updateTeamResult(teamId, score, rank, medal);
+    return ContentService.createTextOutput(JSON.stringify(result))
+        .setMimeType(ContentService.MimeType.JSON);
+  }
+
   // Add Announcement (Admin)
   if (action === 'addAnnouncement') {
     const title = e.parameter.title;
@@ -65,7 +99,21 @@ function doGet(e) {
 }
 
 function doPost(e) {
-    // Handle File Uploads or Data Updates here
+    const action = e.parameter.action;
+    
+    if (action === 'registerUser') {
+         const payload = JSON.parse(e.postData.contents);
+         const result = registerNewUser(payload);
+         return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (action === 'updateUser') {
+         const payload = JSON.parse(e.postData.contents);
+         const result = updateUserProfile(payload);
+         return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // Default Success
     return ContentService.createTextOutput(JSON.stringify({status: 'success'})).setMimeType(ContentService.MimeType.JSON);
 }
 
@@ -171,6 +219,95 @@ function linkUserLineId(userId, lineId) {
         }
     }
     return { status: 'error', message: 'User not found' };
+}
+
+function registerNewUser(userData) {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName('Users');
+    if(!sheet) return { status: 'error', message: 'Sheet not found' };
+    
+    const newId = 'U' + new Date().getTime();
+    // Default values
+    const level = 'user'; 
+    const password = Math.random().toString(36).slice(-8); // Random password for LINE users
+    
+    // Columns: 0:userid, 1:username, 2:password, 3:name, 4:surname, 5:SchoolID, 6:tel, 7:userline_id, 8:level, 9:email, 10:avatarFileId
+    sheet.appendRow([
+        newId,
+        userData.username || newId,
+        password,
+        userData.name,
+        userData.surname,
+        userData.SchoolID,
+        userData.tel,
+        userData.userline_id,
+        level,
+        userData.email,
+        ''
+    ]);
+    
+    // Return the newly created user
+    return { 
+        status: 'success', 
+        user: {
+            userid: newId,
+            username: userData.username || newId,
+            name: userData.name,
+            surname: userData.surname,
+            SchoolID: userData.SchoolID,
+            tel: userData.tel,
+            userline_id: userData.userline_id,
+            level: level,
+            email: userData.email,
+            avatarFileId: ''
+        }
+    };
+}
+
+function updateUserProfile(userData) {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName('Users');
+    if(!sheet) return { status: 'error', message: 'Sheet not found' };
+    
+    const data = sheet.getDataRange().getValues();
+    
+    for(let i=1; i<data.length; i++) {
+        if(String(data[i][0]) === String(userData.userid)) {
+            // Update specific columns
+            // 3:name, 4:surname, 6:tel, 9:email
+            sheet.getRange(i+1, 4).setValue(userData.name);
+            sheet.getRange(i+1, 5).setValue(userData.surname);
+            sheet.getRange(i+1, 7).setValue(userData.tel);
+            sheet.getRange(i+1, 10).setValue(userData.email);
+            
+            return { status: 'success' };
+        }
+    }
+    return { status: 'error', message: 'User not found' };
+}
+
+function updateTeamResult(teamId, score, rank, medal) {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName('Teams');
+    if(!sheet) return { status: 'error', message: 'Sheet not found' };
+    
+    const data = sheet.getDataRange().getValues();
+    
+    for(let i=1; i<data.length; i++) {
+        if(String(data[i][0]) === String(teamId)) {
+            // Columns are 1-based in getRange, but we are updating:
+            // Score is Index 15 (Col P) -> 16
+            // MedalOverride is Index 16 (Col Q) -> 17
+            // Rank is Index 17 (Col R) -> 18
+            
+            sheet.getRange(i+1, 16).setValue(score);
+            sheet.getRange(i+1, 17).setValue(medal);
+            sheet.getRange(i+1, 18).setValue(rank);
+            
+            return { status: 'success' };
+        }
+    }
+    return { status: 'error', message: 'Team not found' };
 }
 
 function getActivities(ss) {

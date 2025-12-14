@@ -1,5 +1,7 @@
+
+
 import React from 'react';
-import { LayoutDashboard, Users, Trophy, School, Settings, LogOut, Award, FileBadge, IdCard, LogIn, UserCircle } from 'lucide-react';
+import { LayoutDashboard, Users, Trophy, School, Settings, LogOut, Award, FileBadge, IdCard, LogIn, UserCircle, Edit3 } from 'lucide-react';
 import { logoutLiff } from '../services/liff';
 import { User } from '../types';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -21,6 +23,7 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile }) => {
 
   const handleLogout = (e: React.MouseEvent) => {
       e.stopPropagation();
+      localStorage.removeItem('comp_user'); // Clear session
       if (isGuest) {
           // If guest, "logout" just reloads to show login screen
           window.location.reload();
@@ -39,10 +42,14 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile }) => {
     }
   };
 
+  const userRole = userProfile?.level?.toLowerCase();
+  const canScore = ['admin', 'area', 'group_admin', 'score'].includes(userRole);
+
   const menuItems = [
     { id: 'dashboard', label: 'หน้าหลัก', icon: LayoutDashboard },
     { id: 'teams', label: 'ทีม', icon: Users },
     { id: 'activities', label: 'รายการ', icon: Trophy },
+    ...(canScore ? [{ id: 'score', label: 'บันทึกคะแนน', icon: Edit3 }] : []),
     { id: 'results', label: 'ผลรางวัล', icon: Award },
     { id: 'certificates', label: 'เกียรติบัตร', icon: FileBadge },
     { id: 'idcards', label: 'บัตร', icon: IdCard },
@@ -193,7 +200,7 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile }) => {
         ))}
         <button
             onClick={() => handleNav('schools')}
-            className={`flex flex-col items-center justify-center w-full h-full space-y-1 ${['schools','activities','certificates','idcards','profile'].includes(activeTab) ? 'text-blue-600' : 'text-gray-400'}`}
+            className={`flex flex-col items-center justify-center w-full h-full space-y-1 ${['schools','activities','certificates','idcards','profile', 'score'].includes(activeTab) ? 'text-blue-600' : 'text-gray-400'}`}
         >
             <div className="w-6 h-6 flex items-center justify-center border-2 border-current rounded-lg">
                 <div className="w-3 h-0.5 bg-current"></div>
