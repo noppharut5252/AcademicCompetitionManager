@@ -4,10 +4,12 @@ import { AppData, Team, TeamStatus, User, AreaStageInfo } from '../types';
 import { Search, Filter, CheckCircle, XCircle, Clock, ChevronLeft, ChevronRight, Eye, Trophy, Medal, Hash, LayoutGrid, Users, Award, School, Printer, FileText, Star, Crown, Zap, Edit, Trash2, Plus, Square, CheckSquare, Loader2, AlertTriangle, Info, X, Calendar } from 'lucide-react';
 import TeamDetailModal from './TeamDetailModal';
 import { updateTeamStatus, deleteTeam } from '../services/api';
+import { formatDeadline } from '../services/utils';
 
 interface TeamListProps {
   data: AppData;
   user?: User | null;
+  onDataUpdate: () => void;
 }
 
 // --- Sub-Components for Beautiful UI ---
@@ -92,7 +94,7 @@ const ConfirmationModal = ({ isOpen, title, description, confirmLabel, confirmCo
 
 const ITEMS_PER_PAGE = 20;
 
-const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
+const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [categoryFilter, setCategoryFilter] = useState<string>('All');
@@ -355,13 +357,27 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
     currentPage * ITEMS_PER_PAGE
   );
 
-  const getStatusBadge = (rawStatus: string) => {
-    const status = normalizeStatus(rawStatus);
+  const getStatusBadge = (team: Team) => {
+    const status = normalizeStatus(team.status);
+    const hasDeadline = team.editDeadline && new Date(team.editDeadline) > new Date();
+    
     switch(status) {
       case TeamStatus.APPROVED:
         return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200"><CheckCircle className="w-3 h-3 mr-1"/> อนุมัติ</span>;
       case TeamStatus.PENDING:
-        return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-50 text-yellow-800 border border-yellow-200"><Clock className="w-3 h-3 mr-1"/> รอตรวจ</span>;
+        return (
+            <div className="flex flex-col items-start gap-1">
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-50 text-yellow-800 border border-yellow-200">
+                    <Clock className="w-3 h-3 mr-1"/> รอตรวจ
+                </span>
+                {hasDeadline && (
+                    <span className="text-[10px] text-orange-600 flex items-center bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100">
+                        <Clock className="w-3 h-3 mr-1" />
+                        ถึง {formatDeadline(team.editDeadline!)}
+                    </span>
+                )}
+            </div>
+        );
       case TeamStatus.REJECTED:
         return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-800 border border-red-200"><XCircle className="w-3 h-3 mr-1"/> ปฏิเสธ</span>;
       default:
@@ -456,9 +472,8 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
           showToast('ดำเนินการสำเร็จ (กำลังรีเฟรช...)', 'success');
           
-          setTimeout(() => {
-              window.location.reload(); 
-          }, 1500);
+          // Trigger data update
+          onDataUpdate();
 
       } catch (err) {
           showToast('เกิดข้อผิดพลาดในการบันทึกข้อมูล', 'error');
@@ -899,7 +914,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
                             <h3 className="text-sm font-bold text-gray-900 truncate">
                                 {viewRound === 'area' && areaInfo?.name ? areaInfo.name : team.teamName}
                             </h3>
-                            {getStatusBadge(team.status)}
+                            {getStatusBadge(team)}
                         </div>
                         <p className="text-xs text-gray-500 mt-1 truncate">{school?.SchoolName}</p>
                          <p className="text-[10px] text-gray-400 mt-0.5 truncate flex items-center">
@@ -1030,17 +1045,11 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        {getStatusBadge(team.status)}
+                        {getStatusBadge(team)}
                         {viewRound === 'area' && team.stageStatus === 'Area' && (
                              <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
                                 ระดับเขตพื้นที่
                              </span>
-                        )}
-                        {team.editDeadline && new Date(team.editDeadline) > new Date() && team.status === 'Pending' && (
-                            <div className="text-[10px] text-orange-600 mt-1 flex items-center" title={`แก้ได้ถึง ${new Date(team.editDeadline).toLocaleString()}`}>
-                                <Clock className="w-3 h-3 mr-1" />
-                                เปิดแก้ไข
-                            </div>
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
@@ -1229,13 +1238,14 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
         </div>
       </div>
 
-      {/* Modal - Pass canEdit status */}
+      {/* Modal - Pass canEdit status and update handler */}
       {selectedTeam && (
           <TeamDetailModal 
             team={selectedTeam} 
             data={data} 
             onClose={() => setSelectedTeam(null)} 
             canEdit={canEditTeam(selectedTeam)}
+            onSaveSuccess={onDataUpdate}
           />
       )}
     </div>
