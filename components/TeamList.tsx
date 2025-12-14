@@ -1,9 +1,9 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { AppData, Team, TeamStatus, User, AreaStageInfo } from '../types';
-import { Search, Filter, CheckCircle, XCircle, Clock, ChevronLeft, ChevronRight, Eye, Trophy, Medal, Hash, LayoutGrid, Users, Award, School, Printer, FileText, Star, Crown, Zap, Edit, Trash2, Plus, Square, CheckSquare, Loader2, AlertTriangle, Info, X } from 'lucide-react';
+import { Search, Filter, CheckCircle, XCircle, Clock, ChevronLeft, ChevronRight, Eye, Trophy, Medal, Hash, LayoutGrid, Users, Award, School, Printer, FileText, Star, Crown, Zap, Edit, Trash2, Plus, Square, CheckSquare, Loader2, AlertTriangle, Info, X, Calendar } from 'lucide-react';
 import TeamDetailModal from './TeamDetailModal';
-import { updateTeamStatus, fetchData } from '../services/api';
+import { updateTeamStatus, deleteTeam } from '../services/api';
 
 interface TeamListProps {
   data: AppData;
@@ -45,7 +45,7 @@ const Toast = ({ message, type, isVisible, onClose }: { message: string, type: '
     );
 };
 
-const ConfirmationModal = ({ isOpen, title, description, confirmLabel, confirmColor, onConfirm, onCancel, isLoading }: any) => {
+const ConfirmationModal = ({ isOpen, title, description, confirmLabel, confirmColor, onConfirm, onCancel, isLoading, children }: any) => {
     if (!isOpen) return null;
     return (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
@@ -58,6 +58,7 @@ const ConfirmationModal = ({ isOpen, title, description, confirmLabel, confirmCo
                     <div className="mt-2">
                         <p className="text-sm text-gray-500">{description}</p>
                     </div>
+                    {children}
                 </div>
                 <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse gap-2">
                     <button
@@ -107,9 +108,12 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
   
   // Toast & Modal State
   const [toast, setToast] = useState({ message: '', type: 'info' as 'success' | 'error' | 'info', isVisible: false });
-  const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean, action: string, statusValue: string, title: string, desc: string, color: string }>({
+  const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean, action: string, statusValue: string, title: string, desc: string, color: string, teamId?: string }>({
       isOpen: false, action: '', statusValue: '', title: '', desc: '', color: 'blue'
   });
+  
+  // New: Deadline for Pending Status
+  const [editDeadline, setEditDeadline] = useState<string>('');
 
   const showToast = (message: string, type: 'success' | 'error' | 'info') => {
       setToast({ message, type, isVisible: true });
@@ -153,12 +157,23 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
   const isGroupAdmin = role === 'group_admin';
   const isSchoolAdmin = role === 'school_admin';
 
+  // Helper: Check if team is currently editable by user
+  const isWithinDeadline = (team: Team) => {
+      if (!team.editDeadline) return true; // No deadline = open
+      const now = new Date();
+      const deadline = new Date(team.editDeadline);
+      return now < deadline;
+  };
+
   const canEditTeam = (team: Team) => {
       if (!user || user.isGuest) return false;
       if (isSuperUser) return true;
 
       const currentStatus = normalizeStatus(team.status);
+      
+      // User/SchoolAdmin/GroupAdmin can only edit if Pending AND (No deadline or Within deadline)
       if (currentStatus !== TeamStatus.PENDING) return false;
+      if (!isWithinDeadline(team)) return false;
 
       if (isGroupAdmin) {
           const userSchool = data.schools.find(s => s.SchoolID === user.SchoolID);
@@ -381,50 +396,66 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
   };
 
   // Open Modal for Confirmation
-  const promptBulkUpdate = (status: string) => {
-      if (selectedTeamIds.size === 0) return;
+  const promptAction = (actionType: 'updateStatus' | 'delete', status: string = '', teamId: string | null = null) => {
       
+      let targetIds = teamId ? [teamId] : Array.from(selectedTeamIds);
+      if (targetIds.length === 0) return;
+
       let title = '';
       let desc = '';
       let color = 'blue';
       
-      if (status === '1') {
+      if (actionType === 'delete') {
+          title = 'ยืนยันการลบทีม (Delete)';
+          desc = `คุณต้องการลบข้อมูลจำนวน ${targetIds.length} ทีม ใช่หรือไม่? การกระทำนี้ไม่สามารถเรียกคืนได้`;
+          color = 'red';
+      } else if (status === '1') {
           title = 'ยืนยันการอนุมัติ (Approve)';
-          desc = `คุณต้องการอนุมัติทีมที่เลือกจำนวน ${selectedTeamIds.size} ทีม ใช่หรือไม่?`;
+          desc = `คุณต้องการอนุมัติทีมจำนวน ${targetIds.length} ทีม ใช่หรือไม่?`;
           color = 'green';
       } else if (status === '2') {
           title = 'ยืนยันการปฏิเสธ (Reject)';
-          desc = `คุณต้องการปฏิเสธทีมที่เลือกจำนวน ${selectedTeamIds.size} ทีม ใช่หรือไม่?`;
+          desc = `คุณต้องการปฏิเสธทีมจำนวน ${targetIds.length} ทีม ใช่หรือไม่?`;
           color = 'red';
       } else if (status === '0') {
           title = 'ตั้งสถานะรอตรวจสอบ (Set Pending)';
-          desc = `คุณต้องการเปลี่ยนสถานะเป็น "รอตรวจสอบ" จำนวน ${selectedTeamIds.size} ทีม ใช่หรือไม่?`;
+          desc = `คุณต้องการเปลี่ยนสถานะเป็น "รอตรวจสอบ" จำนวน ${targetIds.length} ทีม ใช่หรือไม่?`;
           color = 'yellow';
       }
 
+      setEditDeadline(''); // Reset deadline
       setConfirmModal({
           isOpen: true,
-          action: 'updateStatus',
+          action: actionType,
           statusValue: status,
           title,
           desc,
-          color
+          color,
+          teamId: teamId || undefined
       });
   };
 
   // Actual Execute Function
-  const executeBulkUpdate = async () => {
+  const executeAction = async () => {
       setIsUpdatingStatus(true);
       try {
+          const action = confirmModal.action;
           const status = confirmModal.statusValue;
-          const updates = Array.from(selectedTeamIds).map(id => updateTeamStatus(id, status));
-          await Promise.all(updates);
+          const targetIds = confirmModal.teamId ? [confirmModal.teamId] : Array.from(selectedTeamIds);
+
+          if (action === 'delete') {
+              const updates = targetIds.map(id => deleteTeam(id));
+              await Promise.all(updates);
+          } else {
+              // Passing deadline only if status is pending
+              const updates = targetIds.map(id => updateTeamStatus(id, status, '', status === '0' ? editDeadline : ''));
+              await Promise.all(updates);
+          }
           
           setSelectedTeamIds(new Set());
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
-          showToast('บันทึกข้อมูลสำเร็จ (กำลังรีเฟรช...)', 'success');
+          showToast('ดำเนินการสำเร็จ (กำลังรีเฟรช...)', 'success');
           
-          // Delay reload slightly to let toast show
           setTimeout(() => {
               window.location.reload(); 
           }, 1500);
@@ -543,10 +574,26 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
         description={confirmModal.desc}
         confirmLabel="ยืนยัน"
         confirmColor={confirmModal.color}
-        onConfirm={executeBulkUpdate}
+        onConfirm={executeAction}
         onCancel={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
         isLoading={isUpdatingStatus}
-      />
+      >
+          {confirmModal.statusValue === '0' && isSuperUser && (
+              <div className="mt-4 bg-yellow-50 p-3 rounded-lg text-left border border-yellow-100">
+                  <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+                      <Clock className="w-4 h-4 mr-1 text-gray-500" />
+                      กำหนดเวลาสิ้นสุดการแก้ไข (Deadline)
+                  </label>
+                  <input 
+                    type="datetime-local" 
+                    className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                    value={editDeadline}
+                    onChange={(e) => setEditDeadline(e.target.value)}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">* หากไม่ระบุ ผู้ใช้จะสามารถแก้ไขได้ตลอดเวลาจนกว่าจะเปลี่ยนสถานะ</p>
+              </div>
+          )}
+      </ConfirmationModal>
 
       {/* Enhanced Dashboard Stats */}
       {dashboardStats && (
@@ -665,7 +712,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
               
               <div className="flex flex-wrap gap-2 w-full sm:w-auto justify-end">
                   <button 
-                    onClick={() => promptBulkUpdate('1')}
+                    onClick={() => promptAction('updateStatus', '1')}
                     disabled={isUpdatingStatus}
                     className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-all hover:shadow-md disabled:opacity-50"
                   >
@@ -673,7 +720,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
                       อนุมัติ (Approve)
                   </button>
                   <button 
-                    onClick={() => promptBulkUpdate('0')}
+                    onClick={() => promptAction('updateStatus', '0')}
                     disabled={isUpdatingStatus}
                     className="flex items-center px-4 py-2 bg-yellow-500 text-white rounded-lg text-sm font-medium hover:bg-yellow-600 transition-all hover:shadow-md disabled:opacity-50"
                   >
@@ -681,7 +728,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
                       รอตรวจ (Pending)
                   </button>
                   <button 
-                    onClick={() => promptBulkUpdate('2')}
+                    onClick={() => promptAction('updateStatus', '2')}
                     disabled={isUpdatingStatus}
                     className="flex items-center px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-all hover:shadow-md disabled:opacity-50"
                   >
@@ -989,6 +1036,12 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
                                 ระดับเขตพื้นที่
                              </span>
                         )}
+                        {team.editDeadline && new Date(team.editDeadline) > new Date() && team.status === 'Pending' && (
+                            <div className="text-[10px] text-orange-600 mt-1 flex items-center" title={`แก้ได้ถึง ${new Date(team.editDeadline).toLocaleString()}`}>
+                                <Clock className="w-3 h-3 mr-1" />
+                                เปิดแก้ไข
+                            </div>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
                         <div className="flex flex-col">
@@ -1016,14 +1069,14 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
                             {canEdit ? (
                                 <>
                                     <button 
-                                        onClick={(e) => { e.stopPropagation(); alert('Edit ' + team.teamName); }} 
+                                        onClick={(e) => { e.stopPropagation(); setSelectedTeam(team); }} 
                                         className="text-blue-500 hover:text-blue-600 bg-blue-50 p-1.5 rounded-full hover:bg-blue-100 transition-colors"
                                         title="แก้ไข"
                                     >
                                         <Edit className="w-4 h-4" />
                                     </button>
                                     <button 
-                                        onClick={(e) => { e.stopPropagation(); alert('Delete ' + team.teamName); }}
+                                        onClick={(e) => { e.stopPropagation(); promptAction('delete', '', team.teamId); }}
                                         className="text-red-500 hover:text-red-600 bg-red-50 p-1.5 rounded-full hover:bg-red-100 transition-colors"
                                         title="ลบ"
                                     >
@@ -1110,6 +1163,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
 
       {/* Hidden Print Section (Visible only when printing) */}
       <div id="printable-content" className="hidden">
+        {/* ... (Existing Print Logic) ... */}
         <div className="text-center mb-6">
             <h1 className="text-2xl font-bold text-gray-900">สรุปข้อมูลทีมผู้เข้าแข่งขัน</h1>
             <p className="text-gray-500">
@@ -1175,12 +1229,13 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
         </div>
       </div>
 
-      {/* Modal */}
+      {/* Modal - Pass canEdit status */}
       {selectedTeam && (
           <TeamDetailModal 
             team={selectedTeam} 
             data={data} 
             onClose={() => setSelectedTeam(null)} 
+            canEdit={canEditTeam(selectedTeam)}
           />
       )}
     </div>
