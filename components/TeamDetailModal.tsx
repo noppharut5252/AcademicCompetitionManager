@@ -92,6 +92,8 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
   // Refs for file inputs
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
+  const getPhotoUrl = (driveId: string) => `https://drive.google.com/thumbnail?id=${driveId}`;
+
   useEffect(() => {
       setEditTeamName(team.teamName);
       
@@ -104,15 +106,22 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
       // Parse Members
       try {
         const rawMembers = typeof team.members === 'string' ? JSON.parse(team.members) : team.members;
+        
+        // Process existing photoDriveId to displayable image URL
+        const processMember = (m: any) => ({
+            ...m,
+            image: m.image || (m.photoDriveId ? getPhotoUrl(m.photoDriveId) : '')
+        });
+
         if (rawMembers) {
             if (Array.isArray(rawMembers)) {
                 // Legacy format (array of students)
-                setEditStudents(rawMembers);
+                setEditStudents(rawMembers.map(processMember));
                 setEditTeachers([]);
             } else if (typeof rawMembers === 'object') {
                 // New format { teachers: [], students: [] }
-                setEditTeachers(Array.isArray(rawMembers.teachers) ? rawMembers.teachers : []);
-                setEditStudents(Array.isArray(rawMembers.students) ? rawMembers.students : []);
+                setEditTeachers((Array.isArray(rawMembers.teachers) ? rawMembers.teachers : []).map(processMember));
+                setEditStudents((Array.isArray(rawMembers.students) ? rawMembers.students : []).map(processMember));
             }
         }
       } catch { setEditTeachers([]); setEditStudents([]); }
@@ -136,8 +145,6 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
       const name = p.name || `${p.firstname || ''} ${p.lastname || ''}`;
       return `${prefix} ${name}`.trim();
   }
-
-  const getPhotoUrl = (driveId: string) => `https://drive.google.com/thumbnail?id=${driveId}`;
 
   const imageUrl = (team.logoUrl && team.logoUrl.startsWith('http'))
     ? team.logoUrl 
@@ -198,7 +205,7 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
                 
                 if (type === 'teacher') {
                     const newTeachers = [...editTeachers];
-                    // We store the DRIVE ID or URL, not base64
+                    // We store the DRIVE ID (in fileId field for saving later) and URL (in image field for display)
                     newTeachers[index] = { ...newTeachers[index], image: fileUrl, fileId: response.fileId };
                     setEditTeachers(newTeachers);
                 } else {
@@ -238,11 +245,29 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
       }
 
       setIsSaving(true);
+
+      // Prepare members for saving: consolidate fileId into photoDriveId and remove temporary fields
+      const prepareForSave = (m: any) => {
+          const { image, fileId, ...rest } = m; 
+          const updatedMember = { ...rest };
+          
+          // If a new fileId exists from upload, update photoDriveId
+          if (fileId) {
+              updatedMember.photoDriveId = fileId;
+          }
+          // If no new upload, existing photoDriveId (if any) in 'rest' is preserved.
+          
+          return updatedMember;
+      };
+
       const payload = {
           teamId: team.teamId,
           teamName: editTeamName,
           contact: JSON.stringify(editContact),
-          members: JSON.stringify({ teachers: editTeachers, students: editStudents })
+          members: JSON.stringify({ 
+              teachers: editTeachers.map(prepareForSave), 
+              students: editStudents.map(prepareForSave) 
+          })
       };
 
       const success = await updateTeamDetails(payload);
@@ -678,3 +703,4 @@ const AwardIcon = ({ className }: { className?: string }) => (
 );
 
 export default TeamDetailModal;
+
