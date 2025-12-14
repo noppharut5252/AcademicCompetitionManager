@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { AppData, Team, TeamStatus, User, AreaStageInfo } from '../types';
 import { Search, Filter, MoreHorizontal, FileText, CheckCircle, XCircle, Clock, ChevronLeft, ChevronRight, Eye, Trophy, Medal, Hash, Image as ImageIcon, LayoutGrid } from 'lucide-react';
@@ -64,8 +65,20 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
                 teams = [];
             }
         } else if (role === 'school_admin') {
-            // See only teams in their school
-            teams = teams.filter(t => t.schoolId === user.SchoolID);
+            // FIX: School_Admin mapping logic
+            // 1. Find the school object from the user's SchoolID
+            const userSchool = data.schools.find(s => s.SchoolID === user.SchoolID);
+            
+            if (userSchool) {
+                // 2. Filter teams that match the SchoolID directly OR match the SchoolName (since Sheets might store Name)
+                teams = teams.filter(t => 
+                    t.schoolId === user.SchoolID || 
+                    t.schoolId === userSchool.SchoolName
+                );
+            } else {
+                // Fallback if school not found
+                teams = teams.filter(t => t.schoolId === user.SchoolID);
+            }
         } else if (role === 'user') {
             // See only teams created by themselves
             teams = teams.filter(t => t.createdBy === user.userid);
@@ -119,11 +132,11 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
     const status = normalizeStatus(rawStatus);
     switch(status) {
       case TeamStatus.APPROVED:
-        return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"><CheckCircle className="w-3 h-3 mr-1"/> อนุมัติ</span>;
+        return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200"><CheckCircle className="w-3 h-3 mr-1"/> อนุมัติ</span>;
       case TeamStatus.PENDING:
-        return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800"><Clock className="w-3 h-3 mr-1"/> รอตรวจ</span>;
+        return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-50 text-yellow-800 border border-yellow-200"><Clock className="w-3 h-3 mr-1"/> รอตรวจ</span>;
       case TeamStatus.REJECTED:
-        return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800"><XCircle className="w-3 h-3 mr-1"/> ปฏิเสธ</span>;
+        return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-800 border border-red-200"><XCircle className="w-3 h-3 mr-1"/> ปฏิเสธ</span>;
       default:
         return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">{status}</span>;
     }
@@ -146,27 +159,27 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-800">รายชื่อทีม (Teams)</h2>
           <p className="text-gray-500">
-             แสดงข้อมูลทีม {viewRound === 'area' ? 'รอบระดับเขตพื้นที่' : 'ทั้งหมด'} {filteredTeams.length} ทีม 
-             {user && !user.isGuest && <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">สิทธิ์: {user.level}</span>}
+             แสดงข้อมูลทีม {viewRound === 'area' ? 'รอบระดับเขตพื้นที่' : 'ทั้งหมด'} <span className="font-semibold text-blue-600">{filteredTeams.length}</span> ทีม 
+             {user && !user.isGuest && <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded border border-blue-200">สิทธิ์: {user.level}</span>}
           </p>
         </div>
         
         {/* Round Toggle */}
-        <div className="flex bg-gray-100 p-1 rounded-lg self-start md:self-auto">
+        <div className="flex bg-gray-100 p-1 rounded-lg self-start md:self-auto shadow-inner">
             <button
                 onClick={() => { setViewRound('area'); setCurrentPage(1); }}
-                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${viewRound === 'area' ? 'bg-white shadow text-purple-600' : 'text-gray-500 hover:text-gray-700'}`}
+                className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${viewRound === 'area' ? 'bg-white shadow text-purple-600' : 'text-gray-500 hover:text-gray-700'}`}
             >
                 ระดับเขตพื้นที่ (District)
             </button>
             <button
                 onClick={() => { setViewRound('cluster'); setCurrentPage(1); }}
-                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${viewRound === 'cluster' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${viewRound === 'cluster' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
             >
                 ระดับกลุ่มเครือข่าย (Network)
             </button>
@@ -184,7 +197,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
                 </div>
                 <input
                     type="text"
-                    className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                    className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm transition-shadow"
                     placeholder="ค้นหาชื่อทีม, โรงเรียน, กลุ่มเครือข่าย..."
                     value={searchTerm}
                     onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
@@ -255,7 +268,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
                 <div 
                     key={team.teamId} 
                     onClick={() => setSelectedTeam(team)}
-                    className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-start space-x-4 cursor-pointer hover:shadow-md transition-shadow"
+                    className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-start space-x-4 cursor-pointer hover:shadow-md transition-all active:scale-[0.98]"
                 >
                     <div className="flex-shrink-0">
                         <img className="h-16 w-16 rounded-lg object-cover border border-gray-100" src={imageUrl} alt="" />
@@ -333,16 +346,16 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
                   return (
                     <tr 
                         key={team.teamId} 
-                        className="hover:bg-gray-50 transition-colors cursor-pointer"
+                        className="hover:bg-gray-50 transition-colors cursor-pointer group"
                         onClick={() => setSelectedTeam(team)}
                     >
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
                           <div className="flex-shrink-0 h-10 w-10">
-                              <img className="h-10 w-10 rounded-full object-cover border border-gray-100" src={imageUrl} alt="" />
+                              <img className="h-10 w-10 rounded-full object-cover border border-gray-100 group-hover:border-blue-300 transition-colors" src={imageUrl} alt="" />
                           </div>
                           <div className="ml-4">
-                            <div className="text-sm font-medium text-gray-900">
+                            <div className="text-sm font-medium text-gray-900 group-hover:text-blue-600 transition-colors">
                                 {viewRound === 'area' && areaInfo?.name ? areaInfo.name : team.teamName}
                             </div>
                             <div className="text-xs text-gray-500">ID: {team.teamId}</div>
@@ -398,7 +411,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
                                     <FileText className="w-4 h-4" />
                                 </div>
                             )}
-                            <button className="text-blue-500 hover:text-blue-700 bg-blue-50 p-1.5 rounded-full">
+                            <button className="text-blue-500 hover:text-blue-700 bg-blue-50 p-1.5 rounded-full group-hover:bg-blue-100 transition-colors">
                                 <Eye className="w-4 h-4" />
                             </button>
                          </div>
