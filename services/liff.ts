@@ -60,8 +60,9 @@ export const shareScoreResult = async (
     const textSummary = `🏆 ผลการแข่งขัน: ${activityName}\nทีม: ${teamName}\nโรงเรียน: ${schoolName}\n\n⭐ คะแนน: ${score}\n🏅 รางวัล: ${medalThai}${rankText}`;
 
     // 1. Try LINE Flex Message
+    // Check isApiAvailable to allow desktop/external browser sharing if enabled in LINE Developers
     // @ts-ignore
-    if (typeof liff !== 'undefined' && liff.isInClient() && liff.isApiAvailable('shareTargetPicker')) {
+    if (typeof liff !== 'undefined' && liff.isLoggedIn() && liff.isApiAvailable('shareTargetPicker')) {
         const medalColor = (medal === 'Gold') ? '#E6B800' : (medal === 'Silver') ? '#A0A0A0' : (medal === 'Bronze') ? '#CD7F32' : '#333333';
         
         const flexMessage = {
@@ -140,7 +141,7 @@ export const shareScoreResult = async (
             return { success: true, method: 'line' };
         } catch (error) {
             console.error("LINE Share failed", error);
-            // Fallback to Web Share
+            // Fallback to Web Share logic below
         }
     }
 
@@ -154,12 +155,125 @@ export const shareScoreResult = async (
             });
             return { success: true, method: 'share' };
         } catch (error) {
-            // User cancelled or failed, try copy
             console.log("Web Share cancelled/failed");
         }
     }
 
     // 3. Fallback: Copy to Clipboard
+    try {
+        await navigator.clipboard.writeText(textSummary);
+        return { success: true, method: 'copy' };
+    } catch (err) {
+        return { success: false, method: 'error' };
+    }
+}
+
+export const shareTop3Result = async (
+  activityName: string,
+  winners: { rank: number; teamName: string; schoolName: string; score: string; medal: string }[]
+): Promise<{ success: boolean; method: 'line' | 'share' | 'copy' | 'error' }> => {
+    
+    // Construct Text Summary for Fallback
+    let textSummary = `🏆 สรุปผลการแข่งขัน (Top 3)\nรายการ: ${activityName}\n\n`;
+    winners.forEach(w => {
+        textSummary += `${w.rank}. ${w.teamName} (${w.score} คะแนน)\n`;
+    });
+
+    // @ts-ignore
+    if (typeof liff !== 'undefined' && liff.isLoggedIn() && liff.isApiAvailable('shareTargetPicker')) {
+        
+        const createRankRow = (winner: any) => {
+             const color = winner.rank === 1 ? '#E6B800' : winner.rank === 2 ? '#A0A0A0' : '#CD7F32';
+             return {
+                "type": "box",
+                "layout": "vertical",
+                "margin": "md",
+                "contents": [
+                  {
+                    "type": "box",
+                    "layout": "baseline",
+                    "contents": [
+                      { "type": "text", "text": `${winner.rank}`, "flex": 1, "color": color, "weight": "bold", "size": "xl" },
+                      { "type": "text", "text": winner.teamName, "flex": 5, "weight": "bold", "size": "sm", "wrap": true },
+                      { "type": "text", "text": `${winner.score}`, "flex": 2, "align": "end", "weight": "bold", "color": "#1DB446" }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "text": winner.schoolName,
+                    "size": "xs",
+                    "color": "#aaaaaa",
+                    "margin": "none",
+                    "offsetStart": "30px"
+                  }
+                ]
+             };
+        };
+
+        const rows = winners.map(w => createRankRow(w));
+        // Fill empty slots if less than 3 (Optional, but looks better to just list available)
+        
+        const flexMessage = {
+            type: "flex",
+            altText: `สรุปผล Top 3: ${activityName}`,
+            contents: {
+                "type": "bubble",
+                "header": {
+                    "type": "box",
+                    "layout": "vertical",
+                    "contents": [
+                    { "type": "text", "text": "สรุปผลการแข่งขัน (TOP 3)", "color": "#FFFFFF", "weight": "bold" }
+                    ],
+                    "backgroundColor": "#007AFF",
+                    "paddingAll": "lg"
+                },
+                "body": {
+                    "type": "box",
+                    "layout": "vertical",
+                    "contents": [
+                        { "type": "text", "text": activityName, "weight": "bold", "size": "md", "wrap": true, "margin": "md" },
+                        { "type": "separator", "margin": "lg" },
+                        ...rows,
+                        { "type": "separator", "margin": "lg" },
+                         { "type": "text", "text": "ดูผลการแข่งขันทั้งหมดได้ที่เว็บไซต์", "size": "xs", "color": "#aaaaaa", "align": "center", "margin": "lg" }
+                    ]
+                },
+                "footer": {
+                    "type": "box",
+                    "layout": "vertical",
+                    "contents": [
+                        {
+                            "type": "button",
+                            "style": "link",
+                            "height": "sm",
+                            "action": { "type": "uri", "label": "เปิดระบบ", "uri": window.location.href }
+                        }
+                    ]
+                }
+            }
+        };
+
+        try {
+            // @ts-ignore
+            await liff.shareTargetPicker([flexMessage]);
+            return { success: true, method: 'line' };
+        } catch (error) {
+            console.error("LINE Share Top 3 failed", error);
+        }
+    }
+
+    // Fallbacks
+    if (navigator.share) {
+        try {
+            await navigator.share({
+                title: 'สรุปผล Top 3',
+                text: textSummary,
+                url: window.location.href,
+            });
+            return { success: true, method: 'share' };
+        } catch (error) { console.log("Web Share cancelled"); }
+    }
+
     try {
         await navigator.clipboard.writeText(textSummary);
         return { success: true, method: 'copy' };
