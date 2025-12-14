@@ -178,6 +178,22 @@ export const updateTeamDetails = async (team: Partial<Team>): Promise<boolean> =
     }
 }
 
+export const uploadImage = async (base64Image: string, filename: string = 'upload.jpg'): Promise<{ status: 'success' | 'error', fileId?: string, fileUrl?: string, message?: string }> => {
+    try {
+        const response = await fetch(`${API_URL}?action=uploadImage`, {
+            method: 'POST',
+            mode: 'cors',
+            body: JSON.stringify({ image: base64Image, filename })
+        });
+        
+        if (!response.ok) return { status: 'error', message: 'Network error' };
+        return await response.json();
+    } catch (e: any) {
+        console.error("Upload failed", e);
+        return { status: 'error', message: e.toString() };
+    }
+}
+
 export const getTeamCountByStatus = (data: AppData) => {
   const counts: Record<string, number> = {};
   data.teams.forEach(team => {
