@@ -2,8 +2,8 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { AppData, User, Team } from '../types';
 import { updateTeamResult } from '../services/api';
-import { shareScoreResult } from '../services/liff';
-import { Save, Filter, AlertCircle, CheckCircle, Lock, Trophy, Search, ChevronRight, Share2, AlertTriangle, Calculator, X, Copy, PieChart, Check, ChevronDown, Flag, History, Loader2, ListChecks, Edit2 } from 'lucide-react';
+import { shareScoreResult, shareTop3Result } from '../services/liff';
+import { Save, Filter, AlertCircle, CheckCircle, Lock, Trophy, Search, ChevronRight, Share2, AlertTriangle, Calculator, X, Copy, PieChart, Check, ChevronDown, Flag, History, Loader2, ListChecks, Edit2, Crown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 // --- Types & Interfaces ---
@@ -184,7 +184,7 @@ const ConfirmModal: React.FC<ConfirmModalProps> = (props) => {
                                                  <td className="px-3 py-2 text-center text-gray-600">{item.rank || '-'}</td>
                                                  <td className="px-3 py-2 text-center text-gray-600">{displayMedal}</td>
                                                  <td className="px-3 py-2 text-center">
-                                                    {item.flag === 'TRUE' ? (
+                                                    {String(item.flag).toUpperCase() === 'TRUE' ? (
                                                         <div className="flex justify-center"><Check className="w-4 h-4 text-green-600" /></div>
                                                     ) : <span className="text-gray-300">-</span>}
                                                  </td>
@@ -542,6 +542,44 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
      }
   };
 
+  const handleShareTop3 = async () => {
+    if (filteredTeams.length === 0) return;
+    const currentActivityName = availableActivities.find(a => a.id === selectedActivityId)?.name || selectedActivityId;
+    
+    // Sort logic same as render: High score first
+    const sorted = [...filteredTeams].sort((a, b) => {
+         const scoreA = edits[a.teamId]?.score ? parseFloat(edits[a.teamId].score) : a.score;
+         const scoreB = edits[b.teamId]?.score ? parseFloat(edits[b.teamId].score) : b.score;
+         return scoreB - scoreA;
+    });
+
+    // Take top 3
+    const top3 = sorted.slice(0, 3).map((t, index) => {
+        const edit = edits[t.teamId];
+        const score = edit?.score ?? String(t.score);
+        const manualMedal = edit?.medal ?? t.medalOverride;
+        const medal = calculateMedal(score, manualMedal);
+        const schoolName = data.schools.find(s => s.SchoolID === t.schoolId)?.SchoolName || t.schoolId;
+
+        return {
+            rank: index + 1,
+            teamName: t.teamName,
+            schoolName,
+            score,
+            medal
+        };
+    });
+
+    const result = await shareTop3Result(currentActivityName, top3);
+    if (result.success) {
+         if (result.method === 'copy') {
+             showToast('คัดลอกผลสรุปแล้ว', 'success');
+         }
+     } else {
+         showToast('ไม่สามารถแชร์ข้อมูลได้', 'error');
+     }
+  };
+
   // Helper for confirm data
   const getSingleConfirmData = () => {
       if (confirmState.type !== 'single' || !confirmState.teamId) return null;
@@ -665,15 +703,26 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                             <div className="bg-green-500 h-2 rounded-full transition-all duration-500" style={{ width: `${activityProgress.percent}%` }}></div>
                         </div>
                    </div>
-                   <div className="w-full md:w-auto relative">
-                        <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-                        <input
-                            type="text"
-                            className="block w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:outline-none"
-                            placeholder="ค้นหาชื่อทีม..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                        />
+                   <div className="w-full md:w-auto relative flex items-center gap-2">
+                         <div className="relative flex-1">
+                            <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                            <input
+                                type="text"
+                                className="block w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:outline-none"
+                                placeholder="ค้นหาชื่อทีม..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                         </div>
+                         {/* Share Top 3 Button */}
+                         <button 
+                            onClick={handleShareTop3}
+                            className="p-2 bg-amber-50 text-amber-600 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors whitespace-nowrap flex items-center"
+                            title="แชร์ผล Top 3"
+                         >
+                             <Crown className="w-4 h-4 sm:mr-1" />
+                             <span className="hidden sm:inline text-xs font-bold">แชร์ Top 3</span>
+                         </button>
                    </div>
               </div>
 
@@ -766,7 +815,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                               <input 
                                                 type="checkbox"
                                                 className="w-5 h-5 accent-blue-600 cursor-pointer"
-                                                checked={displayFlag === 'TRUE'}
+                                                checked={String(displayFlag).toUpperCase() === 'TRUE'}
                                                 onChange={(e) => handleInputChange(team.teamId, 'flag', e.target.checked ? 'TRUE' : '')}
                                               />
                                           </td>
@@ -859,3 +908,4 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
 };
 
 export default ScoreEntry;
+
