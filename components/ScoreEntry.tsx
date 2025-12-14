@@ -1,15 +1,17 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { AppData, User, Team } from '../types';
 import { updateTeamResult } from '../services/api';
 import { shareScoreResult } from '../services/liff';
-import { Save, Filter, AlertCircle, CheckCircle, Lock, Trophy, Search, ChevronRight, Share2, AlertTriangle, Calculator } from 'lucide-react';
+import { Save, Filter, AlertCircle, CheckCircle, Lock, Trophy, Search, ChevronRight, Share2, AlertTriangle, Calculator, X, Copy, PieChart, Check } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+
+// --- Types & Interfaces ---
 
 interface ScoreEntryProps {
   data: AppData;
   user?: User | null;
-  onDataUpdate: () => void; // Callback to refresh data after save
+  onDataUpdate: () => void;
 }
 
 interface ConfirmModalProps {
@@ -21,6 +23,39 @@ interface ConfirmModalProps {
     newRank: string;
     newMedal: string;
 }
+
+interface ToastProps {
+    message: string;
+    type: 'success' | 'error' | 'info';
+    isVisible: boolean;
+    onClose: () => void;
+}
+
+// --- Sub-Components ---
+
+const Toast: React.FC<ToastProps> = ({ message, type, isVisible, onClose }) => {
+    useEffect(() => {
+        if (isVisible) {
+            const timer = setTimeout(onClose, 3000);
+            return () => clearTimeout(timer);
+        }
+    }, [isVisible, onClose]);
+
+    if (!isVisible) return null;
+
+    const bgClass = type === 'success' ? 'bg-green-600' : type === 'error' ? 'bg-red-600' : 'bg-blue-600';
+    const icon = type === 'success' ? <CheckCircle className="w-5 h-5" /> : type === 'error' ? <AlertCircle className="w-5 h-5" /> : <Trophy className="w-5 h-5" />;
+
+    return (
+        <div className={`fixed top-4 right-4 z-[100] flex items-center p-4 mb-4 text-white rounded-lg shadow-lg ${bgClass} animate-in slide-in-from-top-5 duration-300`}>
+            <div className="mr-3">{icon}</div>
+            <div className="text-sm font-medium">{message}</div>
+            <button onClick={onClose} className="ml-4 p-1 hover:bg-white/20 rounded-full transition-colors">
+                <X className="w-4 h-4" />
+            </button>
+        </div>
+    );
+};
 
 const ConfirmModal: React.FC<ConfirmModalProps> = ({ isOpen, onConfirm, onCancel, teamName, newScore, newRank, newMedal }) => {
     if (!isOpen) return null;
@@ -57,17 +92,22 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({ isOpen, onConfirm, onCancel
     );
 };
 
+// --- Main Component ---
+
 const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => {
   const navigate = useNavigate();
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [selectedActivityId, setSelectedActivityId] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
   
-  // Confirmation State
+  // UI State
+  const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info', isVisible: boolean }>({ message: '', type: 'info', isVisible: false });
   const [confirmState, setConfirmState] = useState<{ isOpen: boolean, teamId: string | null }>({ isOpen: false, teamId: null });
-
-  // Local state for edits: { teamId: { score, rank, medal, isDirty, isSaving } }
   const [edits, setEdits] = useState<Record<string, { score: string, rank: string, medal: string, isDirty: boolean, isSaving: boolean }>>({});
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info') => {
+      setToast({ message, type, isVisible: true });
+  };
 
   // 1. Check Permissions
   const role = user?.level?.toLowerCase();
@@ -84,68 +124,74 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       );
   }
 
-  // 2. Logic to filter Categories and Activities based on available teams
-  // Only show options that have at least one team
-  const { availableCategories, availableActivities } = useMemo(() => {
-      // Base allow list
+  // 2. Data Filtering & Stats
+  const { availableCategories, availableActivities, allAuthorizedTeams } = useMemo(() => {
       let validActivities = data.activities;
       
-      // Filter by Role Permission
+      // Filter activities by Role
       if (role === 'score') {
           const assigned = user.assignedActivities || [];
           validActivities = validActivities.filter(a => assigned.includes(a.id));
       }
 
-      // Filter by Team Existence & Group Admin Cluster
-      const teamCountsByActivity: Record<string, number> = {};
-      data.teams.forEach(t => {
-          // If Group Admin, only count teams in their cluster
-          if (role === 'group_admin') {
-              const userSchool = data.schools.find(s => s.SchoolID === user.SchoolID);
-              const teamSchool = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
-              if (!userSchool || !teamSchool || userSchool.SchoolCluster !== teamSchool.SchoolCluster) {
-                  return; // Skip this team
-              }
+      // Filter teams by Group Admin Cluster
+      let relevantTeams = data.teams;
+      if (role === 'group_admin') {
+          const userSchool = data.schools.find(s => s.SchoolID === user.SchoolID);
+          const clusterId = userSchool?.SchoolCluster;
+          if (clusterId) {
+             relevantTeams = relevantTeams.filter(t => {
+                  const teamSchool = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
+                  return teamSchool && teamSchool.SchoolCluster === clusterId;
+             });
+          } else {
+             relevantTeams = [];
           }
+      }
+
+      // Count teams per activity
+      const teamCountsByActivity: Record<string, number> = {};
+      relevantTeams.forEach(t => {
           teamCountsByActivity[t.activityId] = (teamCountsByActivity[t.activityId] || 0) + 1;
       });
 
-      // Filter activities that have > 0 teams
       const activeActivities = validActivities.filter(a => (teamCountsByActivity[a.id] || 0) > 0);
-
-      // Extract Categories from active activities
       const categories = Array.from(new Set(activeActivities.map(a => a.category))).sort();
+      
+      // Filter teams to only those in valid activities
+      const authorizedTeams = relevantTeams.filter(t => activeActivities.some(a => a.id === t.activityId));
 
-      return { availableCategories: categories, availableActivities: activeActivities };
+      return { 
+          availableCategories: categories, 
+          availableActivities: activeActivities,
+          allAuthorizedTeams: authorizedTeams
+      };
   }, [data.activities, data.teams, data.schools, role, user]);
 
-  // 3. Filter Activities based on Category Selection
+  // Global Dashboard Stats
+  const globalStats = useMemo(() => {
+      const total = allAuthorizedTeams.length;
+      const scored = allAuthorizedTeams.filter(t => t.score > 0).length;
+      const pending = total - scored;
+      const gold = allAuthorizedTeams.filter(t => t.score >= 80).length;
+      const silver = allAuthorizedTeams.filter(t => t.score >= 70 && t.score < 80).length;
+      const bronze = allAuthorizedTeams.filter(t => t.score >= 60 && t.score < 70).length;
+      
+      const percent = total > 0 ? Math.round((scored / total) * 100) : 0;
+
+      return { total, scored, pending, percent, gold, silver, bronze };
+  }, [allAuthorizedTeams]);
+
+  // Activity Specific Filtering
   const filteredActivities = useMemo(() => {
       if (!selectedCategory) return [];
       return availableActivities.filter(a => a.category === selectedCategory);
   }, [selectedCategory, availableActivities]);
 
-  // 4. Filter Teams for Table
   const filteredTeams = useMemo(() => {
       if (!selectedActivityId) return [];
+      let teams = allAuthorizedTeams.filter(t => t.activityId === selectedActivityId);
 
-      let teams = data.teams.filter(t => t.activityId === selectedActivityId);
-
-      // If Group Admin, restricted to their cluster
-      if (role === 'group_admin') {
-          const userSchool = data.schools.find(s => s.SchoolID === user.SchoolID);
-          if (userSchool) {
-              const clusterId = userSchool.SchoolCluster;
-              teams = teams.filter(t => {
-                  const teamSchool = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
-                  return teamSchool && teamSchool.SchoolCluster === clusterId;
-              });
-          } else {
-              teams = []; 
-          }
-      }
-
-      // Search Filter
       if (searchTerm) {
           const lower = searchTerm.toLowerCase();
           teams = teams.filter(t => 
@@ -154,22 +200,18 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
               t.schoolId.toLowerCase().includes(lower)
           );
       }
+      return teams.sort((a, b) => b.score - a.score); // Sort by saved score
+  }, [allAuthorizedTeams, selectedActivityId, searchTerm]);
 
-      // Sort by score descending (showing current standings)
-      // Note: This sort is based on SAVED data, not edits, to prevent jumping rows while editing
-      return teams.sort((a, b) => b.score - a.score);
-  }, [data.teams, selectedActivityId, role, user, data.schools, searchTerm]);
-
-  // 5. Progress Statistics
-  const progressStats = useMemo(() => {
+  // Activity Specific Progress
+  const activityProgress = useMemo(() => {
       const total = filteredTeams.length;
       const recorded = filteredTeams.filter(t => t.score > 0).length;
       const percent = total > 0 ? Math.round((recorded / total) * 100) : 0;
       return { total, recorded, percent };
   }, [filteredTeams]);
 
-
-  // Helper to handle input changes
+  // Handlers
   const handleInputChange = (teamId: string, field: 'score' | 'rank' | 'medal', value: string) => {
       setEdits(prev => {
           const team = data.teams.find(t => t.teamId === teamId);
@@ -183,7 +225,6 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
 
           const newState = { ...baseState, [field]: value, isDirty: true, isSaving: false };
           
-          // Auto-calculate Medal based on Score
           if (field === 'score') {
               const numScore = parseFloat(value);
               if (!isNaN(numScore)) {
@@ -201,6 +242,15 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
   };
 
   const initiateSave = (teamId: string) => {
+      const edit = edits[teamId];
+      // Validation: Check if score is within range 0-100
+      if(edit) {
+        const score = parseFloat(edit.score);
+        if(score < 0 || score > 100) {
+            showToast('คะแนนต้องอยู่ระหว่าง 0 - 100', 'error');
+            return;
+        }
+      }
       setConfirmState({ isOpen: true, teamId });
   };
 
@@ -215,7 +265,6 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
 
       setEdits(prev => ({ ...prev, [teamId]: { ...edit, isSaving: true } }));
 
-      // Default rank/medal to empty string if 'undefined' string
       const finalScore = parseFloat(edit.score) || 0;
       const finalRank = edit.rank === 'undefined' ? '' : edit.rank;
       const finalMedal = edit.medal === 'undefined' ? '' : edit.medal;
@@ -228,24 +277,31 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
               const { [teamId]: _, ...rest } = prev;
               return rest;
           });
+          showToast('บันทึกคะแนนเรียบร้อยแล้ว', 'success');
       } else {
           setEdits(prev => ({ ...prev, [teamId]: { ...edit, isSaving: false } }));
-          alert('บันทึกข้อมูลล้มเหลว กรุณาลองใหม่');
+          showToast('บันทึกข้อมูลล้มเหลว กรุณาลองใหม่', 'error');
       }
   };
 
-  const handleShare = (team: Team) => {
-     // Prefer edited values if saved, else current team values
-     // Since share button is usually enabled after save, we use team values from props (assuming onDataUpdate refreshed it)
+  const handleShare = async (team: Team) => {
      const activityName = data.activities.find(a => a.id === team.activityId)?.name || team.activityId;
      const schoolName = data.schools.find(s => s.SchoolID === team.schoolId)?.SchoolName || team.schoolId;
-     
      const medal = team.medalOverride || (team.score >= 80 ? 'Gold' : team.score >= 70 ? 'Silver' : team.score >= 60 ? 'Bronze' : 'Participant');
      
-     shareScoreResult(team.teamName, schoolName, activityName, team.score, medal, team.rank);
+     const result = await shareScoreResult(team.teamName, schoolName, activityName, team.score, medal, team.rank);
+     
+     if (result.success) {
+         if (result.method === 'copy') {
+             showToast('คัดลอกผลการแข่งขันแล้ว', 'success');
+         } else if (result.method === 'share') {
+             // Web share doesn't always guarantee success callback accurately in all browsers, but if here, it launched
+         }
+     } else {
+         showToast('ไม่สามารถแชร์ข้อมูลได้', 'error');
+     }
   };
 
-  // Helper to get current edit values for Confirm Modal
   const getConfirmData = () => {
       const teamId = confirmState.teamId;
       if (!teamId) return null;
@@ -265,14 +321,56 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20">
+      <Toast message={toast.message} type={toast.type} isVisible={toast.isVisible} onClose={() => setToast(prev => ({...prev, isVisible: false}))} />
+      
       <div>
         <h2 className="text-2xl font-bold text-gray-800">บันทึกผลการแข่งขัน (Score Entry)</h2>
-        <p className="text-gray-500">สำหรับกรรมการและผู้ดูแลระบบในการบันทึกคะแนนระดับกลุ่มเครือข่าย</p>
+        <p className="text-gray-500">จัดการคะแนนและประกาศผลรางวัล</p>
       </div>
 
-      {/* Selection Card */}
+      {/* 1. Global Progress Dashboard */}
+      <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-xl p-6 text-white shadow-lg">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-6">
+              <div className="flex-1 w-full">
+                  <h3 className="text-lg font-bold mb-1 flex items-center">
+                      <PieChart className="w-5 h-5 mr-2 text-blue-400" />
+                      ภาพรวมการบันทึกคะแนน
+                  </h3>
+                  <p className="text-slate-400 text-sm mb-4">สถานะการบันทึกคะแนนของทีมที่คุณดูแลทั้งหมด</p>
+                  
+                  <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                          <span className="text-slate-300">ความคืบหน้า ({globalStats.scored}/{globalStats.total})</span>
+                          <span className="font-bold text-blue-400">{globalStats.percent}%</span>
+                      </div>
+                      <div className="w-full bg-slate-700/50 rounded-full h-3">
+                          <div 
+                            className="bg-blue-500 h-3 rounded-full transition-all duration-700 ease-out shadow-[0_0_10px_rgba(59,130,246,0.5)]" 
+                            style={{ width: `${globalStats.percent}%` }}
+                          ></div>
+                      </div>
+                  </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3 w-full md:w-auto">
+                  <div className="bg-slate-700/50 p-3 rounded-lg border border-slate-600/50 text-center min-w-[80px]">
+                      <div className="text-yellow-400 font-bold text-xl">{globalStats.gold}</div>
+                      <div className="text-[10px] text-slate-400 uppercase tracking-wide">Gold</div>
+                  </div>
+                  <div className="bg-slate-700/50 p-3 rounded-lg border border-slate-600/50 text-center min-w-[80px]">
+                      <div className="text-slate-300 font-bold text-xl">{globalStats.silver}</div>
+                      <div className="text-[10px] text-slate-400 uppercase tracking-wide">Silver</div>
+                  </div>
+                  <div className="bg-slate-700/50 p-3 rounded-lg border border-slate-600/50 text-center min-w-[80px]">
+                      <div className="text-orange-400 font-bold text-xl">{globalStats.bronze}</div>
+                      <div className="text-[10px] text-slate-400 uppercase tracking-wide">Bronze</div>
+                  </div>
+              </div>
+          </div>
+      </div>
+
+      {/* 2. Selection Card */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Level 1: Category */}
           <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">1. เลือกหมวดหมู่ (Category)</label>
               <div className="relative">
@@ -290,7 +388,6 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
               </div>
           </div>
 
-          {/* Level 2: Activity */}
           <div>
               <label className={`block text-sm font-medium mb-2 ${!selectedCategory ? 'text-gray-400' : 'text-gray-700'}`}>2. เลือกรายการแข่งขัน (Activity)</label>
               <div className="relative">
@@ -312,18 +409,18 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
           </div>
       </div>
 
-      {/* Table Section */}
+      {/* 3. Table Section */}
       {selectedActivityId && (
           <div className="space-y-4">
-              {/* Toolbar & Progress */}
+              {/* Activity Toolbar */}
               <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col md:flex-row justify-between items-center gap-4">
                    <div className="w-full md:w-1/2">
                         <div className="flex justify-between items-end mb-1">
-                            <span className="text-sm font-medium text-gray-700">ความคืบหน้าการบันทึก</span>
-                            <span className="text-xs text-gray-500">{progressStats.recorded} / {progressStats.total} ทีม ({progressStats.percent}%)</span>
+                            <span className="text-sm font-medium text-gray-700">รายการนี้บันทึกแล้ว</span>
+                            <span className="text-xs text-gray-500">{activityProgress.recorded} / {activityProgress.total} ทีม ({activityProgress.percent}%)</span>
                         </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2.5">
-                            <div className="bg-green-500 h-2.5 rounded-full transition-all duration-500" style={{ width: `${progressStats.percent}%` }}></div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                            <div className="bg-green-500 h-2 rounded-full transition-all duration-500" style={{ width: `${activityProgress.percent}%` }}></div>
                         </div>
                    </div>
 
@@ -341,6 +438,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                    </div>
               </div>
 
+              {/* Data Table */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                   <div className="overflow-x-auto">
                       <table className="min-w-full divide-y divide-gray-200">
@@ -348,8 +446,8 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                               <tr>
                                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">#</th>
                                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ทีม (Team)</th>
-                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">คะแนน (0-100)</th>
-                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-40">เหรียญ (Auto)</th>
+                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">คะแนน</th>
+                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-40">เหรียญ</th>
                                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">ลำดับ</th>
                                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">จัดการ</th>
                               </tr>
@@ -380,10 +478,11 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                           <td className="px-6 py-4 whitespace-nowrap">
                                               <input 
                                                 type="number" 
+                                                step="0.01"
                                                 className={`w-full border rounded px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none ${isDirty ? 'border-blue-400 bg-white' : 'border-gray-300'}`}
                                                 value={displayScore}
                                                 onChange={(e) => handleInputChange(team.teamId, 'score', e.target.value)}
-                                                placeholder="0"
+                                                placeholder="0.00"
                                                 min="0"
                                                 max="100"
                                               />
@@ -421,15 +520,15 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                                             : isSaving ? 'bg-blue-400 cursor-wait' : 'bg-blue-600 hover:bg-blue-700 hover:shadow-md'
                                                         }`}
                                                   >
-                                                      {isSaving ? 'Saving...' : <><Save className="w-4 h-4 mr-1" /> บันทึก</>}
+                                                      {isSaving ? '...' : <><Save className="w-4 h-4 mr-1" /> บันทึก</>}
                                                   </button>
                                                   
-                                                  {/* Share Button (Only visible if saved score exists) */}
+                                                  {/* Share Button */}
                                                   {hasSavedScore && (
                                                       <button 
                                                         onClick={() => handleShare(team)}
-                                                        className="p-1.5 bg-[#06C755]/10 text-[#06C755] rounded-md hover:bg-[#06C755]/20 transition-colors"
-                                                        title="แชร์ผลทาง LINE"
+                                                        className="p-1.5 bg-green-50 text-green-600 rounded-md hover:bg-green-100 transition-colors border border-green-200"
+                                                        title="แชร์ผล"
                                                       >
                                                           <Share2 className="w-4 h-4" />
                                                       </button>
@@ -477,3 +576,4 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
 };
 
 export default ScoreEntry;
+
