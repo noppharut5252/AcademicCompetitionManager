@@ -1,9 +1,9 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { AppData, User, Team } from '../types';
 import { updateTeamResult } from '../services/api';
 import { shareScoreResult } from '../services/liff';
-import { Save, Filter, AlertCircle, CheckCircle, Lock, Trophy, Search, ChevronRight, Share2, AlertTriangle, Calculator, X, Copy, PieChart, Check } from 'lucide-react';
+import { Save, Filter, AlertCircle, CheckCircle, Lock, Trophy, Search, ChevronRight, Share2, AlertTriangle, Calculator, X, Copy, PieChart, Check, ChevronDown, Flag } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 // --- Types & Interfaces ---
@@ -22,6 +22,7 @@ interface ConfirmModalProps {
     newScore: string;
     newRank: string;
     newMedal: string;
+    newFlag: string;
 }
 
 interface ToastProps {
@@ -30,6 +31,104 @@ interface ToastProps {
     isVisible: boolean;
     onClose: () => void;
 }
+
+// --- Searchable Select Component (Select2 style) ---
+interface SearchableSelectProps {
+  options: { label: string; value: string }[];
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  disabled?: boolean;
+  icon?: React.ReactNode;
+}
+
+const SearchableSelect: React.FC<SearchableSelectProps> = ({ options, value, onChange, placeholder, disabled, icon }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [filterText, setFilterText] = useState('');
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const selectedLabel = options.find(o => o.value === value)?.label || '';
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (isOpen && inputRef.current) {
+        inputRef.current.focus();
+    }
+  }, [isOpen]);
+
+  const filteredOptions = options.filter(opt => 
+      opt.label.toLowerCase().includes(filterText.toLowerCase())
+  );
+
+  return (
+    <div className="relative" ref={wrapperRef}>
+        <div 
+            className={`w-full bg-white border rounded-lg py-2.5 pl-3 pr-10 text-sm shadow-sm cursor-pointer flex items-center justify-between
+                ${disabled ? 'bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200' : 'border-gray-300 hover:border-gray-400'}
+                ${isOpen ? 'ring-2 ring-blue-500 border-blue-500' : ''}
+            `}
+            onClick={() => !disabled && setIsOpen(!isOpen)}
+        >
+            <span className={`block truncate ${!value ? 'text-gray-500' : 'text-gray-900'}`}>
+                {value ? selectedLabel : placeholder}
+            </span>
+            <span className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none text-gray-400">
+               {icon || <ChevronDown className="h-4 w-4" />}
+            </span>
+        </div>
+
+        {isOpen && (
+            <div className="absolute z-50 mt-1 w-full bg-white shadow-lg max-h-60 rounded-md py-1 text-base ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none sm:text-sm">
+                <div className="sticky top-0 bg-white p-2 border-b border-gray-100">
+                    <input
+                        ref={inputRef}
+                        type="text"
+                        className="w-full border border-gray-300 rounded-md px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
+                        placeholder="ค้นหา..."
+                        value={filterText}
+                        onChange={(e) => setFilterText(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                    />
+                </div>
+                {filteredOptions.length > 0 ? (
+                    filteredOptions.map((opt) => (
+                        <div
+                            key={opt.value}
+                            className={`cursor-pointer select-none relative py-2 pl-3 pr-9 hover:bg-blue-50 hover:text-blue-900 ${value === opt.value ? 'bg-blue-50 text-blue-900 font-medium' : 'text-gray-900'}`}
+                            onClick={() => {
+                                onChange(opt.value);
+                                setIsOpen(false);
+                                setFilterText('');
+                            }}
+                        >
+                            <span className="block truncate">{opt.label}</span>
+                            {value === opt.value && (
+                                <span className="absolute inset-y-0 right-0 flex items-center pr-4 text-blue-600">
+                                    <Check className="h-4 w-4" />
+                                </span>
+                            )}
+                        </div>
+                    ))
+                ) : (
+                    <div className="cursor-default select-none relative py-2 px-4 text-gray-500 italic text-center">
+                        ไม่พบข้อมูล
+                    </div>
+                )}
+            </div>
+        )}
+    </div>
+  );
+};
 
 // --- Sub-Components ---
 
@@ -57,7 +156,7 @@ const Toast: React.FC<ToastProps> = ({ message, type, isVisible, onClose }) => {
     );
 };
 
-const ConfirmModal: React.FC<ConfirmModalProps> = ({ isOpen, onConfirm, onCancel, teamName, newScore, newRank, newMedal }) => {
+const ConfirmModal: React.FC<ConfirmModalProps> = ({ isOpen, onConfirm, onCancel, teamName, newScore, newRank, newMedal, newFlag }) => {
     if (!isOpen) return null;
     return (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
@@ -81,6 +180,12 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({ isOpen, onConfirm, onCancel
                         <span className="text-gray-500">ลำดับที่:</span>
                         <span className="font-medium text-gray-900">{newRank || '-'}</span>
                     </div>
+                     <div className="flex justify-between">
+                        <span className="text-gray-500">สถานะตัวแทน (Q):</span>
+                        <span className={`font-medium ${newFlag === 'TRUE' ? 'text-green-600' : 'text-gray-400'}`}>
+                            {newFlag === 'TRUE' ? 'ใช่' : 'ไม่ใช่'}
+                        </span>
+                    </div>
                 </div>
 
                 <div className="flex gap-3 pt-2">
@@ -103,7 +208,8 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
   // UI State
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info', isVisible: boolean }>({ message: '', type: 'info', isVisible: false });
   const [confirmState, setConfirmState] = useState<{ isOpen: boolean, teamId: string | null }>({ isOpen: false, teamId: null });
-  const [edits, setEdits] = useState<Record<string, { score: string, rank: string, medal: string, isDirty: boolean, isSaving: boolean }>>({});
+  // Include flag in edits state
+  const [edits, setEdits] = useState<Record<string, { score: string, rank: string, medal: string, flag: string, isDirty: boolean, isSaving: boolean }>>({});
 
   const showToast = (message: string, type: 'success' | 'error' | 'info') => {
       setToast({ message, type, isVisible: true });
@@ -212,7 +318,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
   }, [filteredTeams]);
 
   // Handlers
-  const handleInputChange = (teamId: string, field: 'score' | 'rank' | 'medal', value: string) => {
+  const handleInputChange = (teamId: string, field: 'score' | 'rank' | 'medal' | 'flag', value: string) => {
       setEdits(prev => {
           const team = data.teams.find(t => t.teamId === teamId);
           if (!team) return prev;
@@ -221,6 +327,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
               score: prev[teamId]?.score ?? String(team.score > 0 ? team.score : ''),
               rank: prev[teamId]?.rank ?? String(team.rank || ''),
               medal: prev[teamId]?.medal ?? String(team.medalOverride || ''),
+              flag: prev[teamId]?.flag ?? String(team.flag || ''),
           };
 
           const newState = { ...baseState, [field]: value, isDirty: true, isSaving: false };
@@ -246,7 +353,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       // Validation: Check if score is within range 0-100
       if(edit) {
         const score = parseFloat(edit.score);
-        if(score < 0 || score > 100) {
+        if(!isNaN(score) && (score < 0 || score > 100)) {
             showToast('คะแนนต้องอยู่ระหว่าง 0 - 100', 'error');
             return;
         }
@@ -268,8 +375,9 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       const finalScore = parseFloat(edit.score) || 0;
       const finalRank = edit.rank === 'undefined' ? '' : edit.rank;
       const finalMedal = edit.medal === 'undefined' ? '' : edit.medal;
+      const finalFlag = edit.flag === 'undefined' ? '' : edit.flag;
 
-      const success = await updateTeamResult(teamId, finalScore, finalRank, finalMedal);
+      const success = await updateTeamResult(teamId, finalScore, finalRank, finalMedal, finalFlag);
 
       if (success) {
           onDataUpdate(); 
@@ -295,7 +403,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
          if (result.method === 'copy') {
              showToast('คัดลอกผลการแข่งขันแล้ว', 'success');
          } else if (result.method === 'share') {
-             // Web share doesn't always guarantee success callback accurately in all browsers, but if here, it launched
+             // Web share doesn't always guarantee success callback accurately in all browsers
          }
      } else {
          showToast('ไม่สามารถแชร์ข้อมูลได้', 'error');
@@ -313,7 +421,8 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
           teamName: team.teamName,
           newScore: edit.score,
           newRank: edit.rank,
-          newMedal: edit.medal
+          newMedal: edit.medal,
+          newFlag: edit.flag
       };
   };
 
@@ -369,43 +478,29 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
           </div>
       </div>
 
-      {/* 2. Selection Card */}
+      {/* 2. Selection Card with Searchable Selects */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">1. เลือกหมวดหมู่ (Category)</label>
-              <div className="relative">
-                  <select 
-                    value={selectedCategory}
-                    onChange={(e) => { setSelectedCategory(e.target.value); setSelectedActivityId(''); }}
-                    className="block w-full pl-3 pr-10 py-2.5 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-lg shadow-sm"
-                  >
-                      <option value="">-- กรุณาเลือกหมวดหมู่ --</option>
-                      {availableCategories.map(cat => (
-                          <option key={cat} value={cat}>{cat}</option>
-                      ))}
-                  </select>
-                  <Filter className="absolute right-3 top-3 h-5 w-5 text-gray-400 pointer-events-none" />
-              </div>
+              <SearchableSelect 
+                options={availableCategories.map(cat => ({ label: cat, value: cat }))}
+                value={selectedCategory}
+                onChange={(val) => { setSelectedCategory(val); setSelectedActivityId(''); }}
+                placeholder="-- ค้นหาหมวดหมู่ --"
+                icon={<Filter className="h-4 w-4" />}
+              />
           </div>
 
           <div>
               <label className={`block text-sm font-medium mb-2 ${!selectedCategory ? 'text-gray-400' : 'text-gray-700'}`}>2. เลือกรายการแข่งขัน (Activity)</label>
-              <div className="relative">
-                  <select 
-                    value={selectedActivityId}
-                    onChange={(e) => setSelectedActivityId(e.target.value)}
-                    disabled={!selectedCategory}
-                    className="block w-full pl-3 pr-10 py-2.5 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-lg shadow-sm disabled:bg-gray-100 disabled:text-gray-400"
-                  >
-                      <option value="">-- กรุณาเลือกรายการ --</option>
-                      {filteredActivities.map(act => (
-                          <option key={act.id} value={act.id}>
-                              {act.name}
-                          </option>
-                      ))}
-                  </select>
-                  <Trophy className={`absolute right-3 top-3 h-5 w-5 pointer-events-none ${!selectedCategory ? 'text-gray-300' : 'text-gray-400'}`} />
-              </div>
+              <SearchableSelect 
+                options={filteredActivities.map(act => ({ label: act.name, value: act.id }))}
+                value={selectedActivityId}
+                onChange={setSelectedActivityId}
+                placeholder="-- ค้นหารายการแข่งขัน --"
+                disabled={!selectedCategory}
+                icon={<Trophy className="h-4 w-4" />}
+              />
           </div>
       </div>
 
@@ -447,8 +542,9 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">#</th>
                                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ทีม (Team)</th>
                                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">คะแนน</th>
-                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-40">เหรียญ</th>
+                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">เหรียญ</th>
                                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">ลำดับ</th>
+                                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-20">ตัวแทน (Q)</th>
                                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">จัดการ</th>
                               </tr>
                           </thead>
@@ -460,6 +556,8 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                   const displayScore = edit?.score ?? (team.score > 0 ? String(team.score) : '');
                                   const displayRank = edit?.rank ?? team.rank ?? '';
                                   const displayMedal = edit?.medal ?? team.medalOverride ?? '';
+                                  const displayFlag = edit?.flag ?? team.flag ?? '';
+                                  
                                   const isDirty = edit?.isDirty;
                                   const isSaving = edit?.isSaving;
                                   const hasSavedScore = team.score > 0 && !isDirty;
@@ -509,6 +607,15 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                                 placeholder="-"
                                               />
                                           </td>
+                                          <td className="px-6 py-4 whitespace-nowrap text-center">
+                                              <input 
+                                                type="checkbox"
+                                                className="w-5 h-5 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer"
+                                                checked={displayFlag === 'TRUE'}
+                                                onChange={(e) => handleInputChange(team.teamId, 'flag', e.target.checked ? 'TRUE' : '')}
+                                                title="ทำเครื่องหมายว่าเป็นตัวแทนไปแข่งระดับเขต"
+                                              />
+                                          </td>
                                           <td className="px-6 py-4 whitespace-nowrap text-right">
                                               <div className="flex items-center justify-end space-x-2">
                                                   <button 
@@ -540,7 +647,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                               })}
                               {filteredTeams.length === 0 && (
                                   <tr>
-                                      <td colSpan={6} className="px-6 py-10 text-center text-gray-500">
+                                      <td colSpan={7} className="px-6 py-10 text-center text-gray-500">
                                           ไม่พบข้อมูลทีมในรายการนี้
                                       </td>
                                   </tr>
@@ -567,6 +674,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
               newScore={confirmData.newScore}
               newRank={confirmData.newRank}
               newMedal={confirmData.newMedal}
+              newFlag={confirmData.newFlag}
               onConfirm={handleConfirmSave}
               onCancel={() => setConfirmState({ isOpen: false, teamId: null })}
           />
