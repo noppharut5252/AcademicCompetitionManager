@@ -1,3 +1,4 @@
+
 import { AppData, User } from '../types';
 import { getMockData } from './mockData';
 
@@ -30,6 +31,7 @@ export const checkUserPermission = async (lineUserId: string): Promise<User | nu
     });
     if (!response.ok) return null;
     const user = await response.json();
+    // Verify that we actually got a user object with an ID
     return user.userid ? user : null;
    } catch (e) {
        console.error("Error checking user", e);
@@ -40,7 +42,7 @@ export const checkUserPermission = async (lineUserId: string): Promise<User | nu
 export const loginStandardUser = async (username: string, password: string): Promise<User | null> => {
     try {
         const response = await fetch(`${API_URL}?action=login&username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`, {
-            method: 'GET', // Using GET for simplicity in GAS deployment context, though POST is better practice
+            method: 'GET',
             mode: 'cors'
         });
         
@@ -54,6 +56,24 @@ export const loginStandardUser = async (username: string, password: string): Pro
     } catch (e) {
         console.error("Login failed", e);
         return null;
+    }
+}
+
+export const linkLineAccount = async (userId: string, lineId: string): Promise<boolean> => {
+    try {
+        // Use no-cors for simple trigger execution if needed, or cors if returning JSON
+        // Using GET here to match existing patterns for simplicity
+        const response = await fetch(`${API_URL}?action=linkLineAccount&userId=${encodeURIComponent(userId)}&lineId=${encodeURIComponent(lineId)}`, {
+            method: 'GET',
+            mode: 'cors'
+        });
+        
+        if (!response.ok) return false;
+        const result = await response.json();
+        return result.status === 'success';
+    } catch (e) {
+        console.error("Link LINE failed", e);
+        return false;
     }
 }
 

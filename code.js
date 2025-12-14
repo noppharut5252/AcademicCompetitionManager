@@ -1,3 +1,4 @@
+
 // --- Google Apps Script Backend ---
 
 const FOLDER_ID = "1T6P3E7K1kWsaEOeO-vZdfrAGwh0dDHwo";
@@ -16,6 +17,15 @@ function doGet(e) {
     const lineId = e.parameter.lineId;
     const user = getUserByLineId(lineId);
     return ContentService.createTextOutput(JSON.stringify(user || {}))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // Link LINE Account
+  if (action === 'linkLineAccount') {
+    const userId = e.parameter.userId;
+    const lineId = e.parameter.lineId;
+    const result = linkUserLineId(userId, lineId);
+    return ContentService.createTextOutput(JSON.stringify(result))
       .setMimeType(ContentService.MimeType.JSON);
   }
 
@@ -77,22 +87,33 @@ function getScoreAssignments(ss, userId) {
     if (!sheet) return [];
     
     const data = sheet.getDataRange().getValues();
-    // Headers assumed: "userId","activityIds","updatedAt","updatedBy"
-    // Skip header
     for(let i=1; i<data.length; i++) {
         if (String(data[i][0]) === String(userId)) {
-            // activityIds (column 1) might be comma separated or JSON
             const raw = data[i][1];
             try {
-                // Try JSON first
                 return JSON.parse(raw);
             } catch (e) {
-                // Fallback to comma separated
                 return raw.toString().split(',').map(s => s.trim());
             }
         }
     }
     return [];
+}
+
+function rowToUser(row) {
+    // Columns: 0:userid, 1:username, 2:password, 3:name, 4:surname, 5:SchoolID, 6:tel, 7:userline_id, 8:level, 9:email, 10:avatarFileId
+    return {
+        userid: String(row[0]),
+        username: String(row[1]),
+        name: String(row[3]),
+        surname: String(row[4]),
+        SchoolID: String(row[5]),
+        tel: String(row[6]),
+        userline_id: String(row[7]),
+        level: String(row[8]),
+        email: String(row[9]),
+        avatarFileId: String(row[10])
+    };
 }
 
 function authenticateUser(username, password) {
@@ -104,23 +125,10 @@ function authenticateUser(username, password) {
     
     for(let i=1; i<data.length; i++) {
         if(String(data[i][1]) === String(username) && String(data[i][2]) === String(password)) {
-            const userId = data[i][0];
-            const user = {
-                userid: userId,
-                username: data[i][1],
-                name: data[i][3],
-                surname: data[i][4],
-                SchoolID: data[i][5],
-                level: data[i][8],
-                email: data[i][9],
-                avatarFileId: data[i][10]
-            };
-            
-            // If user level is 'score', fetch assignments
+            const user = rowToUser(data[i]);
             if (user.level === 'score') {
-                user.assignedActivities = getScoreAssignments(ss, userId);
+                user.assignedActivities = getScoreAssignments(ss, user.userid);
             }
-            
             return user;
         }
     }
@@ -128,6 +136,7 @@ function authenticateUser(username, password) {
 }
 
 function getUserByLineId(lineId) {
+    if (!lineId) return null;
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sheet = ss.getSheetByName('Users');
     if(!sheet) return null;
@@ -135,26 +144,33 @@ function getUserByLineId(lineId) {
     const data = sheet.getDataRange().getValues();
     
     for(let i=1; i<data.length; i++) {
-        if(data[i][7] == lineId) { 
-            const userId = data[i][0];
-            const user = {
-                userid: userId,
-                username: data[i][1],
-                name: data[i][3],
-                surname: data[i][4],
-                SchoolID: data[i][5],
-                level: data[i][8],
-                email: data[i][9],
-                avatarFileId: data[i][10]
-            };
-            
+        // userline_id is at index 7
+        if(String(data[i][7]) === String(lineId)) { 
+            const user = rowToUser(data[i]);
             if (user.level === 'score') {
-                user.assignedActivities = getScoreAssignments(ss, userId);
+                user.assignedActivities = getScoreAssignments(ss, user.userid);
             }
             return user;
         }
     }
     return null;
+}
+
+function linkUserLineId(userId, lineId) {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName('Users');
+    if(!sheet) return { status: 'error', message: 'Sheet not found' };
+    
+    const data = sheet.getDataRange().getValues();
+    
+    for(let i=1; i<data.length; i++) {
+        if(String(data[i][0]) === String(userId)) {
+            // Update userline_id at index 7 (column H, so row i+1, col 8)
+            sheet.getRange(i+1, 8).setValue(lineId);
+            return { status: 'success' };
+        }
+    }
+    return { status: 'error', message: 'User not found' };
 }
 
 function getActivities(ss) {
@@ -181,18 +197,7 @@ function getTeams(ss) {
   const data = sheet.getDataRange().getValues();
   data.shift();
   
-  // Mapping based on: TeamID, ActivityID, TeamName, School, Level, Contact, Members, RequiredTeachers, RequiredStudents, Status, LogoUrl, TeamPhotoId, CreatedByUserId, CreatedByUsername, StatusReason, ScoreTotal, ScoreManualMedal, RankOverride, RepresentativeOverride, CompetitionStage, AreaTeamName, AreaContact, AreaMembers, AreaScore, AreaRank
-  
   return data.map(row => {
-    // 0:TeamID, 1:ActivityID, 2:TeamName, 3:School, 4:Level
-    // 5:Contact, 6:Members, 7:ReqTeachers, 8:ReqStudents
-    // 9:Status, 10:LogoUrl, 11:TeamPhotoId
-    // 12:CreatedByUserId, 13:CreatedByUsername
-    // 14:StatusReason, 15:ScoreTotal
-    // 16:ScoreManualMedal, 17:RankOverride, 18:RepresentativeOverride
-    // 19:CompetitionStage
-    // 20:AreaTeamName, 21:AreaContact, 22:AreaMembers, 23:AreaScore, 24:AreaRank
-    
     const scoreVal = parseFloat(row[15]); 
     const areaScoreVal = parseFloat(row[23]);
     
@@ -219,10 +224,10 @@ function getTeams(ss) {
       createdBy: String(row[12]),
       statusReason: String(row[14]), 
       score: isNaN(scoreVal) ? 0 : scoreVal, 
-      medalOverride: String(row[16]), // Maps to ScoreManualMedal (e.g., "Gold")
-      rank: String(row[17]), // Maps to RankOverride (e.g., "1")
-      flag: String(row[18]), // Representative
-      stageInfo: JSON.stringify(stageInfo), // Area Info
+      medalOverride: String(row[16]), 
+      rank: String(row[17]), 
+      flag: String(row[18]), 
+      stageInfo: JSON.stringify(stageInfo), 
       stageStatus: String(row[19])
     };
   }).filter(t => t.teamId);
@@ -286,7 +291,7 @@ function getAnnouncements(ss) {
     type: String(row[4]),
     link: String(row[5]),
     author: String(row[6])
-  })).filter(a => a.title).reverse(); // Show newest first
+  })).filter(a => a.title).reverse(); 
 }
 
 function addAnnouncement(title, content, type, link, author) {

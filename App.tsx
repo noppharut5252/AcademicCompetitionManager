@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
@@ -5,10 +6,11 @@ import TeamList from './components/TeamList';
 import ActivityList from './components/ActivityList';
 import ResultsView from './components/ResultsView';
 import DocumentsView from './components/DocumentsView';
+import ProfileView from './components/ProfileView'; // Import ProfileView
 import { AppData, User } from './types';
-import { fetchData, loginStandardUser } from './services/api';
+import { fetchData, loginStandardUser, checkUserPermission } from './services/api';
 import { initLiff, loginLiff, LiffProfile } from './services/liff';
-import { Loader2, LogIn, User as UserIcon, Lock, Globe } from 'lucide-react';
+import { Loader2, LogIn, User as UserIcon, Lock, Globe, AlertCircle } from 'lucide-react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 
 const App: React.FC = () => {
@@ -31,13 +33,30 @@ const App: React.FC = () => {
   // Initialize LIFF on mount
   useEffect(() => {
     const initialize = async () => {
-      const profile = await initLiff();
-      if (profile) {
-        setCurrentUser(profile);
-        setIsAuthenticated(true);
-        fetchAppData();
+      try {
+        const liffProfile = await initLiff();
+        if (liffProfile) {
+          // If LIFF is logged in, check if this LINE ID exists in our Database
+          setLoading(true);
+          const dbUser = await checkUserPermission(liffProfile.userId);
+          
+          if (dbUser) {
+             // Success: Found in DB
+             setCurrentUser({ ...dbUser, pictureUrl: liffProfile.pictureUrl, displayName: liffProfile.displayName });
+             setIsAuthenticated(true);
+             fetchAppData();
+          } else {
+             // Failed: Not linked yet. 
+             // We do NOT log them in, but we stop checking so they see the login screen.
+             console.log("LINE connected but not linked to any user in DB");
+          }
+          setLoading(false);
+        }
+      } catch (e) {
+          console.error("Auth check failed", e);
+      } finally {
+          setLiffChecking(false);
       }
-      setLiffChecking(false);
     };
     initialize();
   }, []);
@@ -133,6 +152,9 @@ const App: React.FC = () => {
                         >
                             <span className="mr-2 font-bold">Log in with LINE</span>
                         </button>
+                        <p className="text-xs text-gray-400 mt-4">
+                            * หากกดปุ่มแล้วเข้าไม่ได้ แสดงว่าท่านยังไม่ได้ผูกบัญชี<br/>กรุณาเข้าสู่ระบบด้วย Username/Password แล้วไปที่หน้า "ข้อมูลส่วนตัว" เพื่อเชื่อมต่อ LINE
+                        </p>
                     </div>
                 ) : (
                     <form onSubmit={handleStandardLogin} className="space-y-4">
@@ -251,6 +273,10 @@ const App: React.FC = () => {
                 <Route path="/idcards" element={<DocumentsView data={data} type="idcard" />} />
                 <Route path="/schools" element={<PlaceholderMenu title="ข้อมูลโรงเรียน" />} />
                 <Route path="/settings" element={<PlaceholderMenu title="ตั้งค่าระบบ" />} />
+                <Route 
+                    path="/profile" 
+                    element={currentUser ? <ProfileView user={currentUser} data={data} onUpdateUser={setCurrentUser} /> : <Navigate to="/dashboard" />} 
+                />
             </Routes>
         ))}
       </Layout>

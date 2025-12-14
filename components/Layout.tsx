@@ -19,7 +19,8 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile }) => {
   // Handle root case or nested paths if necessary, simpler here:
   const activeTab = currentPath.split('/')[0] || 'dashboard';
 
-  const handleLogout = () => {
+  const handleLogout = (e: React.MouseEvent) => {
+      e.stopPropagation();
       if (isGuest) {
           // If guest, "logout" just reloads to show login screen
           window.location.reload();
@@ -30,6 +31,12 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile }) => {
 
   const handleNav = (id: string) => {
       navigate(`/${id}`);
+  };
+
+  const handleProfileClick = () => {
+    if(!isGuest) {
+      navigate('/profile');
+    }
   };
 
   const menuItems = [
@@ -55,7 +62,7 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile }) => {
       
       {/* Desktop Sidebar */}
       <aside className="hidden md:flex md:w-64 bg-white border-r border-gray-200 flex-col fixed inset-y-0">
-        <div className="h-16 flex items-center px-6 border-b border-gray-100">
+        <div className="h-16 flex items-center px-6 border-b border-gray-100 cursor-pointer" onClick={() => handleNav('dashboard')}>
           <Trophy className="w-8 h-8 text-blue-600 mr-2" />
           <div>
             <span className="text-lg font-bold text-gray-900 tracking-tight block">CompManager</span>
@@ -81,7 +88,11 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile }) => {
         </nav>
 
         <div className="p-4 border-t border-gray-100">
-          <div className="flex items-center">
+          <div 
+            className={`flex items-center p-2 rounded-lg transition-colors ${!isGuest ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+            onClick={handleProfileClick}
+            title={!isGuest ? "แก้ไขข้อมูลส่วนตัว" : ""}
+          >
             {userProfile?.pictureUrl || userProfile?.avatarFileId ? (
                 <img 
                 src={userProfile?.pictureUrl || `https://drive.google.com/thumbnail?id=${userProfile?.avatarFileId}`} 
@@ -98,7 +109,7 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile }) => {
                 </div>
             )}
             
-            <div className="ml-3 overflow-hidden">
+            <div className="ml-3 overflow-hidden flex-1">
               <p className="text-sm font-medium text-gray-700 truncate">
                   {userProfile?.displayName || userProfile?.name || 'Guest'}
               </p>
@@ -107,7 +118,7 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile }) => {
               </p>
             </div>
             <button 
-                className={`ml-auto ${isGuest ? 'text-blue-500 hover:text-blue-600' : 'text-gray-400 hover:text-red-500'}`}
+                className={`ml-1 ${isGuest ? 'text-blue-500 hover:text-blue-600' : 'text-gray-400 hover:text-red-500'}`}
                 title={isGuest ? "เข้าสู่ระบบ" : "ออกจากระบบ"}
                 onClick={handleLogout}
             >
@@ -121,25 +132,30 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile }) => {
       <div className="flex-1 flex flex-col md:ml-64 mb-16 md:mb-0 h-screen overflow-hidden">
         {/* Mobile Header */}
         <header className="md:hidden h-14 bg-white border-b border-gray-200 flex items-center justify-between px-4 sticky top-0 z-20">
-            <div className="flex items-center">
+            <div className="flex items-center" onClick={() => handleNav('dashboard')}>
                 <Trophy className="w-6 h-6 text-blue-600 mr-2" />
                 <span className="font-bold text-gray-900 text-lg">CompManager</span>
             </div>
             <div className="flex items-center gap-2">
-                 <div className="text-right mr-2">
-                    <p className="text-xs font-bold text-gray-700 max-w-[100px] truncate">{userProfile?.displayName || userProfile?.name || 'Guest'}</p>
+                 <div 
+                    className="flex items-center gap-2 cursor-pointer"
+                    onClick={handleProfileClick}
+                 >
+                     <div className="text-right">
+                        <p className="text-xs font-bold text-gray-700 max-w-[100px] truncate">{userProfile?.displayName || userProfile?.name || 'Guest'}</p>
+                     </div>
+                     {userProfile?.pictureUrl ? (
+                        <img 
+                            src={userProfile.pictureUrl} 
+                            alt="User" 
+                            className="h-8 w-8 rounded-full bg-gray-200"
+                        />
+                     ) : (
+                        <div className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400">
+                            <UserCircle className="w-6 h-6" />
+                        </div>
+                     )}
                  </div>
-                 {userProfile?.pictureUrl ? (
-                    <img 
-                        src={userProfile.pictureUrl} 
-                        alt="User" 
-                        className="h-8 w-8 rounded-full bg-gray-200"
-                    />
-                 ) : (
-                    <div className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400">
-                        <UserCircle className="w-6 h-6" />
-                    </div>
-                 )}
                  <button onClick={handleLogout} className="ml-1 text-gray-500">
                      {isGuest ? <LogIn className="w-5 h-5" /> : <LogOut className="w-5 h-5" />}
                  </button>
@@ -177,7 +193,7 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile }) => {
         ))}
         <button
             onClick={() => handleNav('schools')}
-            className={`flex flex-col items-center justify-center w-full h-full space-y-1 ${['schools','activities','certificates','idcards'].includes(activeTab) ? 'text-blue-600' : 'text-gray-400'}`}
+            className={`flex flex-col items-center justify-center w-full h-full space-y-1 ${['schools','activities','certificates','idcards','profile'].includes(activeTab) ? 'text-blue-600' : 'text-gray-400'}`}
         >
             <div className="w-6 h-6 flex items-center justify-center border-2 border-current rounded-lg">
                 <div className="w-3 h-0.5 bg-current"></div>

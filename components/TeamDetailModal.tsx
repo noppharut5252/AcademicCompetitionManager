@@ -1,6 +1,6 @@
 import React from 'react';
 import { Team, AppData, AreaStageInfo } from '../types';
-import { X, User, Phone, School, FileText, Medal, Flag, LayoutGrid, Users, Hash } from 'lucide-react';
+import { X, User, Phone, School, FileText, Medal, Flag, LayoutGrid, Users, Hash, Trophy } from 'lucide-react';
 
 interface TeamDetailModalProps {
   team: Team;
@@ -73,6 +73,9 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose }
 
   const displayStatus = normalizeStatus(team.status);
 
+  // Determine if we should show Area Result box even if no score (to show status)
+  const isAreaLevel = team.stageStatus === 'Area' || team.flag === 'TRUE';
+
   return (
     <div 
         className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
@@ -111,6 +114,59 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose }
         {/* Scrollable Content */}
         <div className="overflow-y-auto p-6 space-y-6">
             
+             {/* Scores Section - Moved to top for visibility */}
+             {(team.score > 0 || isAreaLevel) && (
+                <div className="mb-6">
+                    <h4 className="font-semibold text-gray-800 flex items-center mb-3">
+                        <Medal className="w-4 h-4 mr-2 text-amber-500" />
+                        ผลการแข่งขัน
+                    </h4>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {/* Area Round (Priority Display) */}
+                        {isAreaLevel && (
+                             <div className="p-4 bg-gradient-to-br from-purple-600 to-indigo-700 text-white shadow-md rounded-xl relative overflow-hidden ring-1 ring-purple-200">
+                                <div className="absolute top-0 right-0 p-4 opacity-10">
+                                    <Trophy className="w-24 h-24" />
+                                </div>
+                                <div className="text-xs font-bold text-purple-200 uppercase tracking-wider mb-2 flex items-center">
+                                    <Trophy className="w-3 h-3 mr-1" /> ระดับเขตพื้นที่ (District)
+                                </div>
+                                <div className="flex justify-between items-end relative z-10">
+                                    <div>
+                                        {areaInfo?.rank ? (
+                                             <div className="text-lg font-bold text-white mb-1">อันดับที่ {areaInfo.rank}</div>
+                                        ) : (
+                                            <div className="text-sm text-purple-100">รอประกาศผล</div>
+                                        )}
+                                        {areaInfo?.medal && <div className="text-sm text-purple-200 font-medium px-2 py-0.5 bg-white/20 rounded inline-block">{areaInfo.medal}</div>}
+                                    </div>
+                                    <div className="text-4xl font-bold text-white">{areaInfo?.score > 0 ? areaInfo.score : '-'}</div>
+                                </div>
+                            </div>
+                        )}
+
+                         {/* Cluster Round */}
+                        <div className="p-4 bg-gradient-to-br from-white to-gray-50 border border-gray-200 rounded-xl relative overflow-hidden">
+                            <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 flex items-center">
+                                <LayoutGrid className="w-3 h-3 mr-1" /> ระดับกลุ่มเครือข่าย
+                            </div>
+                            <div className="flex justify-between items-end">
+                                <div>
+                                    {team.rank && (
+                                        <div className="flex items-center text-gray-700 font-bold mt-1">
+                                            <Hash className="w-4 h-4 mr-1"/> ลำดับที่ {team.rank}
+                                        </div>
+                                    )}
+                                    <div className="text-xs text-gray-400 mt-1">{cluster?.ClusterName || 'Network Level'}</div>
+                                </div>
+                                <div className="text-3xl font-bold text-gray-600">{team.score || '-'}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Info Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="p-4 bg-blue-50/50 rounded-xl border border-blue-100">
@@ -268,47 +324,6 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose }
                     </div>
                 </div>
             </div>
-
-            {/* Scores Section */}
-            {(team.score > 0 || areaInfo?.score) && (
-                <div className="pt-4 border-t border-gray-100">
-                    <h4 className="font-semibold text-gray-800 flex items-center mb-3">
-                        <Medal className="w-4 h-4 mr-2 text-amber-500" />
-                        ผลการแข่งขัน
-                    </h4>
-                    
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                         {/* Cluster Round */}
-                        <div className="p-4 bg-gradient-to-br from-yellow-50 to-orange-50 border border-yellow-100 rounded-xl relative overflow-hidden">
-                            <div className="text-xs font-bold text-yellow-800 uppercase tracking-wider mb-1">ระดับกลุ่มเครือข่าย</div>
-                            <div className="flex justify-between items-end">
-                                <div>
-                                    {team.rank && (
-                                        <div className="flex items-center text-yellow-700 font-bold mt-1">
-                                            <Hash className="w-4 h-4 mr-1"/> ลำดับที่ {team.rank}
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="text-4xl font-bold text-yellow-600">{team.score || '-'}</div>
-                            </div>
-                        </div>
-
-                        {/* Area Round (if applicable) */}
-                        {(areaInfo?.score || team.stageStatus === 'Area') && (
-                             <div className="p-4 bg-gradient-to-br from-purple-50 to-indigo-50 border border-purple-100 rounded-xl relative overflow-hidden">
-                                <div className="text-xs font-bold text-purple-800 uppercase tracking-wider mb-1">ระดับเขตพื้นที่</div>
-                                <div className="flex justify-between items-end">
-                                    <div>
-                                        {areaInfo?.rank && <div className="text-sm text-purple-700 font-bold">อันดับที่ {areaInfo.rank}</div>}
-                                        {areaInfo?.medal && <div className="text-xs text-purple-500 mt-1">{areaInfo.medal}</div>}
-                                    </div>
-                                    <div className="text-4xl font-bold text-purple-600">{areaInfo?.score || '-'}</div>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            )}
         </div>
       </div>
     </div>

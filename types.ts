@@ -1,3 +1,4 @@
+
 // Enums mirroring the logic described
 export enum TeamStatus {
   PENDING = 'Pending',
@@ -81,6 +82,12 @@ export interface User {
   avatarFileId: string;
   isGuest?: boolean;
   assignedActivities?: string[]; // For 'score' role
+  pictureUrl?: string; // From LIFF or Avatar
+  displayName?: string; // From LIFF
+  
+  // New fields matching DB columns
+  tel?: string;
+  userline_id?: string;
 }
 
 export interface FileLog {

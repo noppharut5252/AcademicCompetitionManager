@@ -17,7 +17,8 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
   const [clusterFilter, setClusterFilter] = useState<string>('All');
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
-  const [viewRound, setViewRound] = useState<'cluster' | 'area'>('cluster');
+  // Default to 'area' as requested
+  const [viewRound, setViewRound] = useState<'cluster' | 'area'>('area');
 
   // Extract unique categories
   const categories = useMemo(() => {
@@ -80,7 +81,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
         teams = teams.filter(team => {
             const isRepresentative = String(team.flag).toLowerCase() === 'true';
             const isAreaStage = String(team.stageStatus).toLowerCase() === 'area';
-            return isRepresentative && isAreaStage;
+            return isRepresentative || isAreaStage;
         });
     }
 
@@ -158,16 +159,16 @@ const TeamList: React.FC<TeamListProps> = ({ data, user }) => {
         {/* Round Toggle */}
         <div className="flex bg-gray-100 p-1 rounded-lg self-start md:self-auto">
             <button
-                onClick={() => { setViewRound('cluster'); setCurrentPage(1); }}
-                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${viewRound === 'cluster' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-            >
-                ระดับกลุ่มเครือข่าย (Network)
-            </button>
-            <button
                 onClick={() => { setViewRound('area'); setCurrentPage(1); }}
                 className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${viewRound === 'area' ? 'bg-white shadow text-purple-600' : 'text-gray-500 hover:text-gray-700'}`}
             >
                 ระดับเขตพื้นที่ (District)
+            </button>
+            <button
+                onClick={() => { setViewRound('cluster'); setCurrentPage(1); }}
+                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${viewRound === 'cluster' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+                ระดับกลุ่มเครือข่าย (Network)
             </button>
         </div>
       </div>
