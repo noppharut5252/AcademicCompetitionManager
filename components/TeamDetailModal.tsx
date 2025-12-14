@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Team, AppData, AreaStageInfo } from '../types';
-import { X, User, Phone, School, FileText, Medal, Flag, LayoutGrid, Users, Hash, Trophy, Edit3, Save, Loader2, Camera, Upload, Clock, CheckCircle, AlertCircle, Info } from 'lucide-react';
-import { updateTeamDetails } from '../services/api';
+import { X, User, Phone, School, FileText, Medal, Flag, LayoutGrid, Users, Hash, Trophy, Edit3, Save, Loader2, Camera, Upload, Clock, CheckCircle, AlertCircle, Info, ChevronDown } from 'lucide-react';
+import { updateTeamDetails, uploadImage } from '../services/api';
 import { resizeImage, formatDeadline } from '../services/utils';
 
 interface TeamDetailModalProps {
@@ -22,9 +23,62 @@ const ModalToast = ({ message, type, isVisible }: { message: string, type: 'succ
     );
 };
 
+// Helper: Custom Input with Dropdown for Prefix
+const PrefixInput = ({ value, onChange, placeholder }: { value: string, onChange: (val: string) => void, placeholder?: string }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const wrapperRef = useRef<HTMLDivElement>(null);
+    const options = ['เด็กชาย', 'เด็กหญิง', 'นาย', 'นางสาว', 'นาง', 'ว่าที่ร้อยตรี'];
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    return (
+        <div className="relative w-full sm:w-28 shrink-0" ref={wrapperRef}>
+            <div className="relative">
+                <input 
+                    type="text"
+                    className="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 outline-none pr-6"
+                    value={value}
+                    onChange={(e) => onChange(e.target.value)}
+                    onFocus={() => setIsOpen(true)}
+                    placeholder={placeholder || "คำนำหน้า"}
+                />
+                <button 
+                    type="button"
+                    className="absolute right-1 top-1.5 text-gray-400 hover:text-gray-600"
+                    onClick={() => setIsOpen(!isOpen)}
+                >
+                    <ChevronDown className="w-4 h-4" />
+                </button>
+            </div>
+            {isOpen && (
+                <div className="absolute z-50 mt-1 w-full bg-white shadow-lg rounded-md border border-gray-200 max-h-40 overflow-auto">
+                    {options.map(opt => (
+                        <div 
+                            key={opt}
+                            className="px-3 py-1.5 text-sm hover:bg-gray-100 cursor-pointer"
+                            onClick={() => { onChange(opt); setIsOpen(false); }}
+                        >
+                            {opt}
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
+
 const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, canEdit = false }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [uploadingState, setUploadingState] = useState<{ id: string, loading: boolean }>({ id: '', loading: false });
   
   // Notification State
   const [toast, setToast] = useState<{ msg: string, type: 'success' | 'error', show: boolean }>({ msg: '', type: 'success', show: false });
@@ -80,7 +134,7 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
   const getFullName = (p: any) => {
       const prefix = p.prefix || '';
       const name = p.name || `${p.firstname || ''} ${p.lastname || ''}`;
-      return `${prefix}${name}`.trim();
+      return `${prefix} ${name}`.trim();
   }
 
   const getPhotoUrl = (driveId: string) => `https://drive.google.com/thumbnail?id=${driveId}`;
@@ -128,21 +182,44 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
       const file = e.target.files?.[0];
       if (!file) return;
 
+      const uploadId = `${type}-${index}`;
+      setUploadingState({ id: uploadId, loading: true });
+
       try {
           // Resize image to max 400x400px and compress
           const base64Image = await resizeImage(file);
           
-          if (type === 'teacher') {
-              const newTeachers = [...editTeachers];
-              newTeachers[index] = { ...newTeachers[index], image: base64Image };
-              setEditTeachers(newTeachers);
+          // Upload to Server immediately
+          const response = await uploadImage(base64Image, `avatar_${team.teamId}_${type}_${index}.jpg`);
+
+          if (response.status === 'success' && response.fileId) {
+                // Construct the full URL using the fileId
+                const fileUrl = getPhotoUrl(response.fileId); 
+                
+                if (type === 'teacher') {
+                    const newTeachers = [...editTeachers];
+                    // We store the DRIVE ID or URL, not base64
+                    newTeachers[index] = { ...newTeachers[index], image: fileUrl, fileId: response.fileId };
+                    setEditTeachers(newTeachers);
+                } else {
+                    const newStudents = [...editStudents];
+                    newStudents[index] = { ...newStudents[index], image: fileUrl, fileId: response.fileId };
+                    setEditStudents(newStudents);
+                }
+                showNotification('อัปโหลดรูปภาพสำเร็จ', 'success');
           } else {
-              const newStudents = [...editStudents];
-              newStudents[index] = { ...newStudents[index], image: base64Image };
-              setEditStudents(newStudents);
+                throw new Error(response.message || 'Upload failed');
           }
+
       } catch (err) {
+          console.error(err);
           showNotification('เกิดข้อผิดพลาดในการอัปโหลดรูปภาพ', 'error');
+      } finally {
+          setUploadingState({ id: '', loading: false });
+          // Reset file input
+          if (fileInputRefs.current[uploadId]) {
+              fileInputRefs.current[uploadId]!.value = '';
+          }
       }
   };
 
@@ -155,6 +232,11 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
   };
 
   const handleSave = async () => {
+      if (uploadingState.loading) {
+          showNotification('กำลังอัปโหลดรูปภาพ กรุณารอสักครู่', 'error');
+          return;
+      }
+
       setIsSaving(true);
       const payload = {
           teamId: team.teamId,
@@ -169,7 +251,6 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
       if (success) {
           showNotification('บันทึกข้อมูลเรียบร้อยแล้ว', 'success');
           setIsEditing(false);
-          // Optional: Trigger refresh if needed via props
       } else {
           showNotification('บันทึกข้อมูลล้มเหลว กรุณาลองใหม่อีกครั้ง', 'error');
       }
@@ -178,15 +259,21 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
   // Helper to render member avatar
   const MemberAvatar = ({ member, index, type }: { member: any, index: number, type: 'teacher' | 'student' }) => {
       const inputId = `${type}-${index}`;
+      const isUploading = uploadingState.loading && uploadingState.id === inputId;
       const hasImage = !!member.image;
       
       return (
           <div className="relative shrink-0">
-              {hasImage ? (
+              {isUploading ? (
+                  <div className="w-12 h-12 rounded-full flex items-center justify-center bg-gray-100 border border-gray-200">
+                      <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
+                  </div>
+              ) : hasImage ? (
                   <img 
                     src={member.image} 
                     alt="Profile" 
                     className="w-12 h-12 rounded-full object-cover border border-gray-200 shadow-sm"
+                    onError={(e) => { (e.target as HTMLImageElement).src = "https://cdn-icons-png.flaticon.com/512/3135/3135768.png"; }}
                   />
               ) : (
                   <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xs font-bold border ${type === 'teacher' ? 'bg-blue-100 text-blue-600 border-blue-200' : 'bg-green-100 text-green-600 border-green-200'}`}>
@@ -194,7 +281,7 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
                   </div>
               )}
 
-              {isEditing && (
+              {isEditing && !isUploading && (
                   <>
                       <button 
                         onClick={() => triggerFileInput(inputId)}
@@ -276,7 +363,7 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
               {isEditing && (
                   <button 
                     onClick={handleSave} 
-                    disabled={isSaving}
+                    disabled={isSaving || uploadingState.loading}
                     className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm disabled:opacity-50 font-bold shadow-md transition-all"
                   >
                       {isSaving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <Save className="w-4 h-4 mr-1.5" />}
@@ -413,12 +500,18 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
                                     <div className="ml-3 min-w-0 flex-1">
                                         {isEditing ? (
                                             <div className="space-y-1.5">
-                                                <input 
-                                                    className="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 outline-none" 
-                                                    placeholder="ชื่อ-สกุล"
-                                                    value={m.name} 
-                                                    onChange={(e) => handleTeacherChange(idx, 'name', e.target.value)}
-                                                />
+                                                <div className="flex gap-2">
+                                                    <PrefixInput 
+                                                        value={m.prefix || ''}
+                                                        onChange={(val) => handleTeacherChange(idx, 'prefix', val)}
+                                                    />
+                                                    <input 
+                                                        className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 outline-none" 
+                                                        placeholder="ชื่อ-สกุล"
+                                                        value={m.name} 
+                                                        onChange={(e) => handleTeacherChange(idx, 'name', e.target.value)}
+                                                    />
+                                                </div>
                                                 <input 
                                                     className="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-blue-500 outline-none" 
                                                     placeholder="เบอร์โทร"
@@ -453,12 +546,18 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
                                     <div className="ml-3 min-w-0 flex-1">
                                         {isEditing ? (
                                             <div className="space-y-1.5">
-                                                <input 
-                                                    className="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 outline-none" 
-                                                    placeholder="ชื่อ-สกุล"
-                                                    value={m.name} 
-                                                    onChange={(e) => handleStudentChange(idx, 'name', e.target.value)}
-                                                />
+                                                <div className="flex gap-2">
+                                                    <PrefixInput 
+                                                        value={m.prefix || ''}
+                                                        onChange={(val) => handleStudentChange(idx, 'prefix', val)}
+                                                    />
+                                                    <input 
+                                                        className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 outline-none" 
+                                                        placeholder="ชื่อ-สกุล"
+                                                        value={m.name} 
+                                                        onChange={(e) => handleStudentChange(idx, 'name', e.target.value)}
+                                                    />
+                                                </div>
                                                 <input 
                                                     className="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-blue-500 outline-none" 
                                                     placeholder="ระดับชั้น"
