@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { CertificateTemplate, AppData, User } from '../types';
-import { Save, X, Image as ImageIcon, Plus, Trash2, LayoutTemplate, PenTool, CheckCircle, Upload, Loader2, AlertCircle } from 'lucide-react';
+import { Save, X, Image as ImageIcon, Plus, Trash2, LayoutTemplate, PenTool, CheckCircle, Upload, Loader2, AlertCircle, Hash, Info } from 'lucide-react';
 import { uploadImage, saveCertificateConfig } from '../services/api';
 import { resizeImage } from '../services/utils';
 
@@ -26,7 +26,9 @@ const DEFAULT_TEMPLATE: CertificateTemplate = {
         { name: 'นายสมชาย ใจดี', position: 'ผู้อำนวยการเขตพื้นที่การศึกษา', signatureUrl: '' }
     ],
     dateText: `ให้ไว้ ณ วันที่ ${new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric'})}`,
-    showRank: true
+    showRank: true,
+    serialFormat: 'REF-{year}-{run:4}',
+    serialStart: 1
 };
 
 const CertificateConfigModal: React.FC<CertificateConfigModalProps> = ({ isOpen, onClose, data, onSave, initialTemplates, currentUser }) => {
@@ -49,7 +51,7 @@ const CertificateConfigModal: React.FC<CertificateConfigModalProps> = ({ isOpen,
       // Sync on mount or context change
       const existing = templates[selectedContext];
       if (existing) {
-          setCurrentTemplate(existing);
+          setCurrentTemplate({ ...DEFAULT_TEMPLATE, ...existing }); // Merge with default to ensure new fields exist
       } else {
           // Initialize new
           const clusterName = data.clusters.find(c => c.ClusterID === selectedContext)?.ClusterName || 'ระดับเขตพื้นที่';
@@ -147,6 +149,42 @@ const CertificateConfigModal: React.FC<CertificateConfigModalProps> = ({ isOpen,
       } else {
           alert('บันทึกข้อมูลไม่สำเร็จ กรุณาลองใหม่');
       }
+  };
+
+  const toggleIncludeTeamId = (checked: boolean) => {
+      let currentFormat = currentTemplate.serialFormat || 'REF-{year}-{run:4}';
+      if (checked) {
+          if (!currentFormat.includes('{id}')) {
+              updateField('serialFormat', currentFormat + '-{id}');
+          }
+      } else {
+          updateField('serialFormat', currentFormat.replace(/-?{id}/g, ''));
+      }
+  };
+
+  // Serial Number Preview
+  const getSerialPreview = () => {
+      const fmt = currentTemplate.serialFormat || 'REF-{year}-{run:4}';
+      const start = currentTemplate.serialStart || 1;
+      const year = new Date().getFullYear();
+      const thYear = year + 543;
+      
+      let sample = fmt
+        .replace('{year}', String(year))
+        .replace('{th_year}', String(thYear))
+        .replace('{id}', 'T001');
+
+      if (sample.includes('{run:')) {
+          const match = sample.match(/{run:(\d+)}/);
+          if (match) {
+              const digits = parseInt(match[1]);
+              sample = sample.replace(match[0], String(start).padStart(digits, '0'));
+          }
+      } else {
+          sample = sample.replace('{run}', String(start));
+      }
+      
+      return sample;
   };
 
   if (!isOpen) return null;
@@ -298,62 +336,117 @@ const CertificateConfigModal: React.FC<CertificateConfigModalProps> = ({ isOpen,
                         </div>
                     </div>
 
-                    {/* Signatories */}
-                    <div className="space-y-4">
-                        <h4 className="font-bold text-gray-800 border-b pb-2 mb-2 flex items-center">
-                            <PenTool className="w-4 h-4 mr-2" /> ผู้ลงนาม (Signatories)
-                        </h4>
-                        
-                        <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2">
-                            {currentTemplate.signatories.map((sig, idx) => (
-                                <div key={idx} className="bg-white p-3 rounded-lg border border-gray-200 relative">
-                                    <button 
-                                        onClick={() => removeSignatory(idx)}
-                                        className="absolute top-2 right-2 text-red-400 hover:text-red-600"
-                                    >
-                                        <Trash2 className="w-4 h-4" />
-                                    </button>
-                                    <div className="space-y-2">
+                    <div className="space-y-6">
+                        {/* Serial Number Configuration */}
+                        <div className="bg-white p-3 rounded-lg border border-orange-100 shadow-sm">
+                            <h4 className="font-bold text-gray-800 border-b pb-2 mb-2 flex items-center text-sm">
+                                <Hash className="w-4 h-4 mr-2 text-orange-500" /> ตั้งค่าเลขทะเบียน (Serial Number)
+                            </h4>
+                            <div className="space-y-3">
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-600 mb-1">รูปแบบ (Format)</label>
+                                    <input 
+                                        type="text" 
+                                        className="w-full border border-gray-300 rounded px-3 py-2 text-sm font-mono"
+                                        placeholder="REF-{year}-{run:4}"
+                                        value={currentTemplate.serialFormat}
+                                        onChange={(e) => updateField('serialFormat', e.target.value)}
+                                    />
+                                    <div className="flex items-center mt-2">
                                         <input 
-                                            type="text" 
-                                            className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
-                                            placeholder="ชื่อ-นามสกุล"
-                                            value={sig.name}
-                                            onChange={(e) => updateSignatory(idx, 'name', e.target.value)}
+                                            type="checkbox" 
+                                            id="includeTeamId" 
+                                            className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                                            checked={currentTemplate.serialFormat?.includes('{id}')}
+                                            onChange={(e) => toggleIncludeTeamId(e.target.checked)}
                                         />
+                                        <label htmlFor="includeTeamId" className="ml-2 text-xs text-gray-600">
+                                            รวม Team ID ในเลขทะเบียน (Include Team ID)
+                                        </label>
+                                    </div>
+                                    <div className="text-[10px] text-gray-400 mt-1 flex flex-wrap gap-1">
+                                        <span className="bg-gray-100 px-1 rounded">{"{year}"}: 2024</span>
+                                        <span className="bg-gray-100 px-1 rounded">{"{th_year}"}: 2567</span>
+                                        <span className="bg-gray-100 px-1 rounded">{"{run:4}"}: 0001</span>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-600 mb-1">เลขเริ่มต้น (Start At)</label>
                                         <input 
-                                            type="text" 
-                                            className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
-                                            placeholder="ตำแหน่ง"
-                                            value={sig.position}
-                                            onChange={(e) => updateSignatory(idx, 'position', e.target.value)}
+                                            type="number" 
+                                            className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                                            value={currentTemplate.serialStart}
+                                            onChange={(e) => updateField('serialStart', parseInt(e.target.value))}
                                         />
-                                        <div className="flex gap-2">
-                                            <input 
-                                                type="text" 
-                                                className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
-                                                placeholder="URL ลายเซ็นต์ (ถ้ามี)"
-                                                value={sig.signatureUrl}
-                                                onChange={(e) => updateSignatory(idx, 'signatureUrl', e.target.value)}
-                                            />
-                                            <button 
-                                                onClick={() => triggerUpload(`signatory-${idx}`)}
-                                                disabled={uploadingState.loading}
-                                                className="px-2 py-1 bg-gray-100 rounded border border-gray-300 hover:bg-gray-200"
-                                            >
-                                                {uploadingState.loading && uploadingState.field === `signatory-${idx}` ? <Loader2 className="w-4 h-4 animate-spin"/> : <Upload className="w-4 h-4"/>}
-                                            </button>
+                                    </div>
+                                    <div className="bg-gray-50 rounded p-2 flex flex-col justify-center">
+                                        <label className="text-[10px] text-gray-500 font-medium">ตัวอย่าง (Preview):</label>
+                                        <div className="text-sm font-bold text-blue-600 font-mono">
+                                            {getSerialPreview()}
                                         </div>
                                     </div>
                                 </div>
-                            ))}
+                            </div>
                         </div>
-                        <button 
-                            onClick={addSignatory}
-                            className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-blue-500 hover:text-blue-500 transition-colors flex items-center justify-center text-sm font-medium"
-                        >
-                            <Plus className="w-4 h-4 mr-1" /> เพิ่มผู้ลงนาม
-                        </button>
+
+                        {/* Signatories */}
+                        <div>
+                            <h4 className="font-bold text-gray-800 border-b pb-2 mb-2 flex items-center">
+                                <PenTool className="w-4 h-4 mr-2" /> ผู้ลงนาม (Signatories)
+                            </h4>
+                            
+                            <div className="space-y-4 max-h-[250px] overflow-y-auto pr-2 custom-scrollbar">
+                                {currentTemplate.signatories.map((sig, idx) => (
+                                    <div key={idx} className="bg-white p-3 rounded-lg border border-gray-200 relative">
+                                        <button 
+                                            onClick={() => removeSignatory(idx)}
+                                            className="absolute top-2 right-2 text-red-400 hover:text-red-600"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                        <div className="space-y-2">
+                                            <input 
+                                                type="text" 
+                                                className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
+                                                placeholder="ชื่อ-นามสกุล"
+                                                value={sig.name}
+                                                onChange={(e) => updateSignatory(idx, 'name', e.target.value)}
+                                            />
+                                            <textarea 
+                                                className="w-full border border-gray-300 rounded px-2 py-1 text-sm resize-none"
+                                                placeholder="ตำแหน่ง (รองรับหลายบรรทัด)"
+                                                rows={2}
+                                                value={sig.position}
+                                                onChange={(e) => updateSignatory(idx, 'position', e.target.value)}
+                                            />
+                                            <div className="flex gap-2">
+                                                <input 
+                                                    type="text" 
+                                                    className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
+                                                    placeholder="URL ลายเซ็นต์ (ถ้ามี)"
+                                                    value={sig.signatureUrl}
+                                                    onChange={(e) => updateSignatory(idx, 'signatureUrl', e.target.value)}
+                                                />
+                                                <button 
+                                                    onClick={() => triggerUpload(`signatory-${idx}`)}
+                                                    disabled={uploadingState.loading}
+                                                    className="px-2 py-1 bg-gray-100 rounded border border-gray-300 hover:bg-gray-200"
+                                                >
+                                                    {uploadingState.loading && uploadingState.field === `signatory-${idx}` ? <Loader2 className="w-4 h-4 animate-spin"/> : <Upload className="w-4 h-4"/>}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                            <button 
+                                onClick={addSignatory}
+                                className="w-full mt-3 py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-blue-500 hover:text-blue-500 transition-colors flex items-center justify-center text-sm font-medium"
+                            >
+                                <Plus className="w-4 h-4 mr-1" /> เพิ่มผู้ลงนาม
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -380,3 +473,4 @@ const CertificateConfigModal: React.FC<CertificateConfigModalProps> = ({ isOpen,
 };
 
 export default CertificateConfigModal;
+
