@@ -4,6 +4,7 @@ import { Team, AppData, AreaStageInfo, User } from '../types';
 import { X, User as UserIcon, Phone, School, FileText, Medal, Flag, LayoutGrid, Users, Hash, Trophy, Edit3, Save, Loader2, Camera, Upload, Clock, CheckCircle, AlertCircle, Info, ChevronDown, Plus, Trash2, History } from 'lucide-react';
 import { updateTeamDetails, uploadImage } from '../services/api';
 import { resizeImage, formatDeadline } from '../services/utils';
+import ConfirmationModal from './ConfirmationModal';
 
 interface TeamDetailModalProps {
   team: Team;
@@ -15,7 +16,7 @@ interface TeamDetailModalProps {
   currentUser?: User | null;
 }
 
-const ALL_CLASS_OPTIONS = [
+const DEFAULT_CLASS_OPTIONS = [
   "อนุบาล 1", "อนุบาล 2", "อนุบาล 3",
   "ป.1", "ป.2", "ป.3", "ป.4", "ป.5", "ป.6",
   "ม.1", "ม.2", "ม.3", "ม.4", "ม.5", "ม.6",
@@ -23,26 +24,62 @@ const ALL_CLASS_OPTIONS = [
   "ปวส.1", "ปวส.2"
 ];
 
-// Helper to filter levels based on activity config
-const getAvailableLevels = (levelConfig: string): string[] => {
-    try {
-        const levels = JSON.parse(levelConfig);
-        const searchStr = Array.isArray(levels) ? levels.join(' ').toLowerCase() : String(levels).toLowerCase();
-        const allowed: string[] = [];
+// Smart parser for level strings like "ป.1-ป.6,อ.1-อ.3,,ม.1-ม.3"
+const parseLevelConfig = (configStr: string): string[] => {
+    if (!configStr) return DEFAULT_CLASS_OPTIONS;
 
-        // Check patterns
-        if (searchStr.includes('anuban') || searchStr.includes('อนุบาล')) allowed.push("อนุบาล 1", "อนุบาล 2", "อนุบาล 3");
-        if (searchStr.includes('p1-3') || searchStr.includes('g1-3') || searchStr.includes('grade 1-3') || searchStr.includes('ป.1-3')) allowed.push("ป.1", "ป.2", "ป.3");
-        if (searchStr.includes('p4-6') || searchStr.includes('g4-6') || searchStr.includes('grade 4-6') || searchStr.includes('ป.4-6')) allowed.push("ป.4", "ป.5", "ป.6");
-        if (searchStr.includes('m1-3') || searchStr.includes('g7-9') || searchStr.includes('grade 7-9') || searchStr.includes('ม.1-3')) allowed.push("ม.1", "ม.2", "ม.3");
-        if (searchStr.includes('m4-6') || searchStr.includes('g10-12') || searchStr.includes('grade 10-12') || searchStr.includes('ม.4-6')) allowed.push("ม.4", "ม.5", "ม.6");
-        if (searchStr.includes('vocational') || searchStr.includes('ปวช')) allowed.push("ปวช.1", "ปวช.2", "ปวช.3");
-        if (searchStr.includes('high vocational') || searchStr.includes('ปวส')) allowed.push("ปวส.1", "ปวส.2");
+    const options: Set<string> = new Set();
+    const parts = configStr.split(',').map(s => s.trim()).filter(s => s);
 
-        return allowed.length > 0 ? allowed : ALL_CLASS_OPTIONS;
-    } catch {
-        return ALL_CLASS_OPTIONS;
-    }
+    const addRange = (prefix: string, start: number, end: number) => {
+        for (let i = start; i <= end; i++) {
+            options.add(`${prefix}${i}`);
+        }
+    };
+
+    const processPart = (part: string) => {
+        // Handle "X.1-Y.3" or "X.1-3" ranges
+        const rangeMatch = part.match(/^([^\d]+)(\d+)-([^\d]*)(\d+)$/);
+        
+        if (rangeMatch) {
+            const prefix1 = rangeMatch[1];
+            const start = parseInt(rangeMatch[2]);
+            const prefix2 = rangeMatch[3] || prefix1; // if 2nd prefix missing, use 1st
+            const end = parseInt(rangeMatch[4]);
+
+            // Normalize prefixes for display
+            let cleanPrefix = prefix1.replace('ป.', 'ป.').replace('ม.', 'ม.').replace('อ.', 'อนุบาล ').replace('ปวช.', 'ปวช.').replace('ปวส.', 'ปวส.');
+            if (cleanPrefix.includes('อนุบาล')) cleanPrefix = "อนุบาล "; // Ensure spacing
+
+            if (prefix1 === prefix2 || !rangeMatch[3]) {
+                 addRange(cleanPrefix, start, end);
+            } else {
+                // If prefixes differ (rare "ป.6-ม.1"), add explicit logic if needed, but usually same level type
+                // Just fallback to simple add
+                options.add(part); 
+            }
+        } else {
+            // Single items or simpler patterns
+            let display = part.replace('อ.', 'อนุบาล ');
+            // If it's just "ป.1" -> add
+            options.add(display);
+        }
+    };
+
+    parts.forEach(processPart);
+
+    // If parsing failed to produce options (e.g. complex text), allow defaults to be safe, 
+    // or if it produced some, sort them roughly?
+    if (options.size === 0) return DEFAULT_CLASS_OPTIONS;
+
+    // Sort based on logical order
+    const order = ["อนุบาล", "ป.", "ม.", "ปวช.", "ปวส."];
+    return Array.from(options).sort((a, b) => {
+        const aIdx = order.findIndex(o => a.startsWith(o));
+        const bIdx = order.findIndex(o => b.startsWith(o));
+        if (aIdx !== bIdx) return aIdx - bIdx;
+        return a.localeCompare(b, undefined, { numeric: true });
+    });
 };
 
 // Internal Toast Component for Modal
@@ -116,6 +153,7 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
   
   // Notification State
   const [toast, setToast] = useState<{ msg: string, type: 'success' | 'error', show: boolean }>({ msg: '', type: 'success', show: false });
+  const [confirmDelete, setConfirmDelete] = useState<{ show: boolean, type: 'teacher' | 'student', index: number }>({ show: false, type: 'teacher', index: -1 });
 
   // Form States
   const [editTeamName, setEditTeamName] = useState(team.teamName);
@@ -139,8 +177,8 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
   const cluster = data.clusters.find(c => c.ClusterID === school?.SchoolCluster);
   const files = data.files.filter(f => f.TeamID === team.teamId);
 
-  // Dynamic Level Options
-  const levelOptions = useMemo(() => getAvailableLevels(activity?.levels || ''), [activity]);
+  // Dynamic Level Options from Team's specific level column
+  const levelOptions = useMemo(() => parseLevelConfig(team.level || ''), [team.level]);
 
   useEffect(() => {
       // Logic: If Area Context, load data from 'stageInfo'. If not, use standard columns.
@@ -260,11 +298,7 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
   };
 
   const handleRemoveTeacher = (index: number) => {
-      if(!window.confirm('ต้องการลบรายชื่อครูท่านนี้ใช่หรือไม่?')) return;
-      setHasUnsavedChanges(true);
-      const newTeachers = [...editTeachers];
-      newTeachers.splice(index, 1);
-      setEditTeachers(newTeachers);
+      setConfirmDelete({ show: true, type: 'teacher', index });
   };
 
   const handleAddStudent = () => {
@@ -273,11 +307,21 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
   };
 
   const handleRemoveStudent = (index: number) => {
-      if(!window.confirm('ต้องการลบรายชื่อนักเรียนคนนี้ใช่หรือไม่?')) return;
+      setConfirmDelete({ show: true, type: 'student', index });
+  };
+
+  const executeDelete = () => {
       setHasUnsavedChanges(true);
-      const newStudents = [...editStudents];
-      newStudents.splice(index, 1);
-      setEditStudents(newStudents);
+      if (confirmDelete.type === 'teacher') {
+          const newTeachers = [...editTeachers];
+          newTeachers.splice(confirmDelete.index, 1);
+          setEditTeachers(newTeachers);
+      } else {
+          const newStudents = [...editStudents];
+          newStudents.splice(confirmDelete.index, 1);
+          setEditStudents(newStudents);
+      }
+      setConfirmDelete({ show: false, type: 'teacher', index: -1 });
   };
 
   const handleImageUpload = async (index: number, type: 'teacher' | 'student', e: React.ChangeEvent<HTMLInputElement>) => {
@@ -435,437 +479,451 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
   const reqStudents = activity?.reqStudents || 0;
 
   return (
-    <div 
-        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-        onClick={handleClose}
-    >
-      {/* Toast Notification */}
-      <ModalToast message={toast.msg} type={toast.type} isVisible={toast.show} />
+    <>
+        {/* Shared Confirmation Modal - Rendered outside to prevent parent click propagation closing */}
+        <ConfirmationModal 
+            isOpen={confirmDelete.show}
+            title={`ลบ${confirmDelete.type === 'teacher' ? 'ครูผู้ฝึกสอน' : 'นักเรียน'}`}
+            description={`คุณต้องการลบรายชื่อ${confirmDelete.type === 'teacher' ? 'ครู' : 'นักเรียน'}ลำดับที่ ${confirmDelete.index + 1} ใช่หรือไม่?`}
+            confirmLabel="ยืนยันการลบ"
+            confirmColor="red"
+            actionType="removeMember"
+            onConfirm={executeDelete}
+            onCancel={() => setConfirmDelete({ show: false, type: 'teacher', index: -1 })}
+        />
 
-      <div 
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col animate-in fade-in zoom-in duration-200"
-        onClick={(e) => e.stopPropagation()}
-      >
-        
-        {/* Header - Sticky */}
-        <div className="bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between shrink-0 z-10 shadow-sm relative">
-          
-          <div className="flex items-center gap-4 overflow-hidden flex-1">
-             <img src={imageUrl} className="w-14 h-14 rounded-xl object-cover border border-gray-200 bg-gray-50 shrink-0 shadow-sm" alt="Logo"/>
-            <div className="min-w-0 flex-1">
-                {isEditing ? (
-                    <div className="flex flex-col">
-                        {isAreaContext && <span className="text-[10px] text-purple-600 font-bold mb-1 bg-purple-50 px-2 py-0.5 rounded self-start border border-purple-100 flex items-center"><Trophy className="w-3 h-3 mr-1"/> กำลังแก้ไขข้อมูลระดับเขตพื้นที่</span>}
-                        <input 
-                            type="text" 
-                            className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-lg font-bold text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none" 
-                            value={editTeamName}
-                            onChange={(e) => { setHasUnsavedChanges(true); setEditTeamName(e.target.value); }}
-                            placeholder={isAreaContext ? "ชื่อทีม (ระดับเขต)..." : "ชื่อทีม..."}
-                        />
-                    </div>
-                ) : (
-                    <h3 className="text-xl font-bold text-gray-900 truncate">
-                        {/* Use local state for instant updates */}
-                        {displayTeamName}
-                    </h3>
-                )}
-                
-                <div className="flex flex-wrap items-center gap-2 text-sm text-gray-500 mt-1">
-                    <span className="shrink-0 bg-gray-100 px-2 py-0.5 rounded text-xs font-mono">{team.teamId}</span>
-                    <span className={`font-medium px-2 py-0.5 rounded text-xs flex items-center ${displayStatus === 'Approved' ? 'bg-green-100 text-green-700' : displayStatus === 'Pending' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-700'}`}>
-                        {displayStatus === 'Approved' && <CheckCircle className="w-3 h-3 mr-1"/>}
-                        {displayStatus === 'Pending' && <Clock className="w-3 h-3 mr-1"/>}
-                        {displayStatus}
-                    </span>
-                    {(team.stageStatus === 'Area' || team.flag === 'TRUE') && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 shrink-0">
-                            <Flag className="w-3 h-3 mr-1" /> ตัวแทนเขต
-                        </span>
+        <div 
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={handleClose}
+        >
+        {/* Toast Notification */}
+        <ModalToast message={toast.msg} type={toast.type} isVisible={toast.show} />
+
+        <div 
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col animate-in fade-in zoom-in duration-200"
+            onClick={(e) => e.stopPropagation()}
+        >
+            
+            {/* Header - Sticky */}
+            <div className="bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between shrink-0 z-10 shadow-sm relative">
+            
+            <div className="flex items-center gap-4 overflow-hidden flex-1">
+                <img src={imageUrl} className="w-14 h-14 rounded-xl object-cover border border-gray-200 bg-gray-50 shrink-0 shadow-sm" alt="Logo"/>
+                <div className="min-w-0 flex-1">
+                    {isEditing ? (
+                        <div className="flex flex-col">
+                            {isAreaContext && <span className="text-[10px] text-purple-600 font-bold mb-1 bg-purple-50 px-2 py-0.5 rounded self-start border border-purple-100 flex items-center"><Trophy className="w-3 h-3 mr-1"/> กำลังแก้ไขข้อมูลระดับเขตพื้นที่</span>}
+                            <input 
+                                type="text" 
+                                className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-lg font-bold text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none" 
+                                value={editTeamName}
+                                onChange={(e) => { setHasUnsavedChanges(true); setEditTeamName(e.target.value); }}
+                                placeholder={isAreaContext ? "ชื่อทีม (ระดับเขต)..." : "ชื่อทีม..."}
+                            />
+                        </div>
+                    ) : (
+                        <h3 className="text-xl font-bold text-gray-900 truncate">
+                            {/* Use local state for instant updates */}
+                            {displayTeamName}
+                        </h3>
                     )}
+                    
+                    <div className="flex flex-wrap items-center gap-2 text-sm text-gray-500 mt-1">
+                        <span className="shrink-0 bg-gray-100 px-2 py-0.5 rounded text-xs font-mono">{team.teamId}</span>
+                        <span className={`font-medium px-2 py-0.5 rounded text-xs flex items-center ${displayStatus === 'Approved' ? 'bg-green-100 text-green-700' : displayStatus === 'Pending' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-700'}`}>
+                            {displayStatus === 'Approved' && <CheckCircle className="w-3 h-3 mr-1"/>}
+                            {displayStatus === 'Pending' && <Clock className="w-3 h-3 mr-1"/>}
+                            {displayStatus}
+                        </span>
+                        {(team.stageStatus === 'Area' || team.flag === 'TRUE') && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 shrink-0">
+                                <Flag className="w-3 h-3 mr-1" /> ตัวแทนเขต
+                            </span>
+                        )}
+                    </div>
                 </div>
             </div>
-          </div>
-          
-          <div className="flex items-center gap-2 ml-2">
-              {canEdit && !isEditing && (
-                  <button 
-                    onClick={() => setIsEditing(true)} 
-                    className="p-2 text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-all flex items-center text-sm font-medium shadow-sm hover:shadow-md"
-                  >
-                      <Edit3 className="w-4 h-4 sm:mr-1.5" /> 
-                      <span className="hidden sm:inline">แก้ไขข้อมูล</span>
-                  </button>
-              )}
-              {isEditing && (
-                  <button 
-                    onClick={handleSave} 
-                    disabled={isSaving || uploadingState.loading}
-                    className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm disabled:opacity-50 font-bold shadow-md transition-all"
-                  >
-                      {isSaving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <Save className="w-4 h-4 mr-1.5" />}
-                      บันทึก
-                  </button>
-              )}
-              <button onClick={handleClose} className="p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 rounded-full transition-colors shrink-0">
-                <X className="w-6 h-6" />
-              </button>
-          </div>
-        </div>
-
-        {/* Deadline Alert Banner */}
-        {hasDeadline && displayStatus === 'Pending' && (
-            <div className="bg-orange-50 border-b border-orange-100 px-6 py-2 text-xs font-medium text-orange-800 flex items-center justify-center animate-pulse">
-                <Clock className="w-3.5 h-3.5 mr-2" />
-                เปิดให้แก้ไขข้อมูลได้ถึง: {deadlineText}
-            </div>
-        )}
-
-        {/* Scrollable Content */}
-        <div className="overflow-y-auto p-6 space-y-6 bg-gray-50/50">
             
-             {/* Scores Section */}
-             {(team.score > 0 || (team.stageStatus === 'Area' || team.flag === 'TRUE')) && !isEditing && (
-                <div className="mb-6">
-                    <h4 className="font-semibold text-gray-800 flex items-center mb-3 text-sm uppercase tracking-wide">
-                        <Medal className="w-4 h-4 mr-2 text-amber-500" />
-                        ผลการแข่งขัน (Competition Result)
-                    </h4>
-                    
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {/* Area Round (Priority Display) */}
-                        {(team.stageStatus === 'Area' || team.flag === 'TRUE') && (
-                             <div className="p-4 bg-gradient-to-br from-purple-600 to-indigo-700 text-white shadow-lg rounded-xl relative overflow-hidden ring-1 ring-white/20">
-                                <div className="absolute top-0 right-0 p-4 opacity-10">
-                                    <Trophy className="w-24 h-24" />
-                                </div>
-                                <div className="text-xs font-bold text-purple-200 uppercase tracking-wider mb-2 flex items-center">
-                                    <Trophy className="w-3 h-3 mr-1" /> ระดับเขตพื้นที่ (District)
-                                </div>
-                                <div className="flex justify-between items-end relative z-10">
-                                    <div>
-                                        {areaInfo?.rank ? (
-                                             <div className="text-lg font-bold text-white mb-1">อันดับที่ {areaInfo.rank}</div>
-                                        ) : (
-                                            <div className="text-sm text-purple-100">รอประกาศผล</div>
-                                        )}
-                                        {areaInfo?.medal && <div className="text-xs text-white font-bold px-2 py-1 bg-white/20 rounded inline-block backdrop-blur-sm">{areaInfo.medal}</div>}
-                                    </div>
-                                    <div className="text-4xl font-black text-white tracking-tight">{areaInfo?.score > 0 ? areaInfo.score : '-'}</div>
-                                </div>
-                            </div>
-                        )}
+            <div className="flex items-center gap-2 ml-2">
+                {canEdit && !isEditing && (
+                    <button 
+                        onClick={() => setIsEditing(true)} 
+                        className="p-2 text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-all flex items-center text-sm font-medium shadow-sm hover:shadow-md"
+                    >
+                        <Edit3 className="w-4 h-4 sm:mr-1.5" /> 
+                        <span className="hidden sm:inline">แก้ไขข้อมูล</span>
+                    </button>
+                )}
+                {isEditing && (
+                    <button 
+                        onClick={handleSave} 
+                        disabled={isSaving || uploadingState.loading}
+                        className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm disabled:opacity-50 font-bold shadow-md transition-all"
+                    >
+                        {isSaving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <Save className="w-4 h-4 mr-1.5" />}
+                        บันทึก
+                    </button>
+                )}
+                <button onClick={handleClose} className="p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 rounded-full transition-colors shrink-0">
+                    <X className="w-6 h-6" />
+                </button>
+            </div>
+            </div>
 
-                         {/* Cluster Round */}
-                        <div className="p-4 bg-white border border-gray-200 rounded-xl relative overflow-hidden shadow-sm">
-                            <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 flex items-center">
-                                <LayoutGrid className="w-3 h-3 mr-1" /> ระดับกลุ่มเครือข่าย
-                            </div>
-                            <div className="flex justify-between items-end">
-                                <div>
-                                    {team.rank && (
-                                        <div className="flex items-center text-gray-800 font-bold mt-1 text-lg">
-                                            <Hash className="w-4 h-4 mr-1 text-gray-400"/> ลำดับที่ {team.rank}
-                                        </div>
-                                    )}
-                                    <div className="text-xs text-gray-400 mt-1">{cluster?.ClusterName || 'Network Level'}</div>
-                                </div>
-                                <div className="text-3xl font-bold text-gray-700">{team.score || '-'}</div>
-                            </div>
-                        </div>
-                    </div>
+            {/* Deadline Alert Banner */}
+            {hasDeadline && displayStatus === 'Pending' && (
+                <div className="bg-orange-50 border-b border-orange-100 px-6 py-2 text-xs font-medium text-orange-800 flex items-center justify-center animate-pulse">
+                    <Clock className="w-3.5 h-3.5 mr-2" />
+                    เปิดให้แก้ไขข้อมูลได้ถึง: {deadlineText}
                 </div>
             )}
 
-            {/* Info Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="p-4 bg-white rounded-xl border border-blue-100 shadow-sm relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-16 h-16 bg-blue-50 rounded-bl-full -mr-8 -mt-8 z-0"></div>
-                    <div className="relative z-10">
-                        <div className="flex items-center mb-2 text-blue-900 font-semibold text-sm">
-                            <School className="w-4 h-4 mr-2 text-blue-500" />
-                            ข้อมูลโรงเรียน
-                        </div>
-                        <p className="text-gray-800 font-medium ml-6 line-clamp-1">
-                            {school?.SchoolName || team.schoolId || '-'}
-                        </p>
-                        <div className="flex items-center ml-6 mt-1 text-gray-500 text-xs">
-                            <LayoutGrid className="w-3 h-3 mr-1" />
-                            <span>{cluster?.ClusterName || 'ไม่ระบุกลุ่มเครือข่าย'}</span>
-                        </div>
-                    </div>
-                </div>
-                <div className="p-4 bg-white rounded-xl border border-amber-100 shadow-sm relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-16 h-16 bg-amber-50 rounded-bl-full -mr-8 -mt-8 z-0"></div>
-                    <div className="relative z-10">
-                        <div className="flex items-center mb-2 text-amber-900 font-semibold text-sm">
-                            <AwardIcon className="w-4 h-4 mr-2 text-amber-500" />
-                            รายการแข่งขัน
-                        </div>
-                        <div className="ml-6">
-                            {activity?.category && (
-                                <span className="inline-block px-2 py-0.5 mb-1 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-100">
-                                    {activity.category}
-                                </span>
+            {/* Scrollable Content */}
+            <div className="overflow-y-auto p-6 space-y-6 bg-gray-50/50">
+                
+                {/* Scores Section */}
+                {(team.score > 0 || (team.stageStatus === 'Area' || team.flag === 'TRUE')) && !isEditing && (
+                    <div className="mb-6">
+                        <h4 className="font-semibold text-gray-800 flex items-center mb-3 text-sm uppercase tracking-wide">
+                            <Medal className="w-4 h-4 mr-2 text-amber-500" />
+                            ผลการแข่งขัน (Competition Result)
+                        </h4>
+                        
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {/* Area Round (Priority Display) */}
+                            {(team.stageStatus === 'Area' || team.flag === 'TRUE') && (
+                                <div className="p-4 bg-gradient-to-br from-purple-600 to-indigo-700 text-white shadow-lg rounded-xl relative overflow-hidden ring-1 ring-white/20">
+                                    <div className="absolute top-0 right-0 p-4 opacity-10">
+                                        <Trophy className="w-24 h-24" />
+                                    </div>
+                                    <div className="text-xs font-bold text-purple-200 uppercase tracking-wider mb-2 flex items-center">
+                                        <Trophy className="w-3 h-3 mr-1" /> ระดับเขตพื้นที่ (District)
+                                    </div>
+                                    <div className="flex justify-between items-end relative z-10">
+                                        <div>
+                                            {areaInfo?.rank ? (
+                                                <div className="text-lg font-bold text-white mb-1">อันดับที่ {areaInfo.rank}</div>
+                                            ) : (
+                                                <div className="text-sm text-purple-100">รอประกาศผล</div>
+                                            )}
+                                            {areaInfo?.medal && <div className="text-xs text-white font-bold px-2 py-1 bg-white/20 rounded inline-block backdrop-blur-sm">{areaInfo.medal}</div>}
+                                        </div>
+                                        <div className="text-4xl font-black text-white tracking-tight">{areaInfo?.score > 0 ? areaInfo.score : '-'}</div>
+                                    </div>
+                                </div>
                             )}
-                            <p className="text-gray-800 font-medium line-clamp-1">{activity?.name || '-'}</p>
-                            <p className="text-gray-500 text-xs mt-1">ระดับชั้น: {team.level}</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
 
-            {/* Members Section */}
-            <div>
-                <h4 className="font-bold text-gray-800 mb-4 flex items-center pb-2 border-b border-gray-200 justify-between">
-                    <div className="flex items-center">
-                        <Users className="w-5 h-5 mr-2 text-gray-600" />
-                        สมาชิกในทีม {isAreaContext && <span className="text-purple-600 text-xs ml-2 font-normal">(ระดับเขตพื้นที่)</span>}
-                        <span className="ml-2 text-xs font-normal text-gray-500 bg-gray-200 px-2 py-0.5 rounded-full">
-                            {editTeachers.length + editStudents.length} คน
-                        </span>
-                    </div>
-                    {team.lastEditedBy && !isEditing && (
-                        <div className="flex items-center text-[10px] text-gray-400 font-normal">
-                             <History className="w-3 h-3 mr-1" />
-                             แก้ไขล่าสุด: {formatDeadline(team.lastEditedAt || '')} โดย {team.lastEditedBy}
-                        </div>
-                    )}
-                </h4>
-
-                {/* Teachers */}
-                <div className="mb-6">
-                    <div className="flex justify-between items-center mb-3">
-                        <h5 className="text-xs font-bold text-gray-500 uppercase tracking-wider pl-1">
-                            ครูผู้ฝึกสอน ({editTeachers.length}/{reqTeachers})
-                        </h5>
-                        {isEditing && editTeachers.length < reqTeachers && (
-                            <button 
-                                onClick={handleAddTeacher}
-                                className="text-xs flex items-center text-blue-600 bg-blue-50 px-2 py-1 rounded-lg border border-blue-200 hover:bg-blue-100 transition-colors"
-                            >
-                                <Plus className="w-3 h-3 mr-1" /> เพิ่มครู
-                            </button>
-                        )}
-                    </div>
-                    {editTeachers.length > 0 ? (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            {editTeachers.map((m: any, idx: number) => (
-                                <div key={`t-${idx}`} className="flex items-center p-3 bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-shadow relative group">
-                                    <MemberAvatar member={m} index={idx} type="teacher" />
-                                    
-                                    <div className="ml-3 min-w-0 flex-1">
-                                        {isEditing ? (
-                                            <div className="space-y-1.5">
-                                                <div className="flex gap-2">
-                                                    <PrefixInput 
-                                                        value={m.prefix || ''}
-                                                        onChange={(val) => handleTeacherChange(idx, 'prefix', val)}
-                                                    />
-                                                    <input 
-                                                        className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 outline-none" 
-                                                        placeholder="ชื่อ-สกุล"
-                                                        value={m.name} 
-                                                        onChange={(e) => handleTeacherChange(idx, 'name', e.target.value)}
-                                                    />
-                                                </div>
-                                                <input 
-                                                    className="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-blue-500 outline-none" 
-                                                    placeholder="เบอร์โทร"
-                                                    value={m.phone} 
-                                                    onChange={(e) => handleTeacherChange(idx, 'phone', e.target.value)}
-                                                />
-                                            </div>
-                                        ) : (
-                                            <>
-                                                <p className="text-sm font-semibold text-gray-900 truncate">{getFullName(m)}</p>
-                                                <p className="text-xs text-gray-500 flex items-center mt-0.5">
-                                                    <Phone className="w-3 h-3 mr-1" /> {m.phone || '-'}
-                                                </p>
-                                            </>
-                                        )}
-                                    </div>
-                                    {isEditing && (
-                                        <button 
-                                            onClick={() => handleRemoveTeacher(idx)}
-                                            className="absolute -top-2 -right-2 bg-red-100 text-red-500 rounded-full p-1 shadow-sm border border-red-200 hover:bg-red-200 z-10"
-                                            title="ลบรายชื่อ"
-                                        >
-                                            <Trash2 className="w-3.5 h-3.5" />
-                                        </button>
-                                    )}
+                            {/* Cluster Round */}
+                            <div className="p-4 bg-white border border-gray-200 rounded-xl relative overflow-hidden shadow-sm">
+                                <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 flex items-center">
+                                    <LayoutGrid className="w-3 h-3 mr-1" /> ระดับกลุ่มเครือข่าย
                                 </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="p-4 text-center border-2 border-dashed border-gray-200 rounded-xl text-gray-400 text-sm">
-                            ยังไม่มีข้อมูลครูผู้ฝึกสอน
-                        </div>
-                    )}
-                </div>
-
-                {/* Students */}
-                <div>
-                    <div className="flex justify-between items-center mb-3">
-                        <h5 className="text-xs font-bold text-gray-500 uppercase tracking-wider pl-1">
-                            นักเรียน ({editStudents.length}/{reqStudents})
-                        </h5>
-                        {isEditing && editStudents.length < reqStudents && (
-                            <button 
-                                onClick={handleAddStudent}
-                                className="text-xs flex items-center text-green-600 bg-green-50 px-2 py-1 rounded-lg border border-green-200 hover:bg-green-100 transition-colors"
-                            >
-                                <Plus className="w-3 h-3 mr-1" /> เพิ่มนักเรียน
-                            </button>
-                        )}
-                    </div>
-                    {editStudents.length > 0 ? (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            {editStudents.map((m: any, idx: number) => (
-                                <div key={`s-${idx}`} className="flex items-center p-3 bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-shadow relative group">
-                                    <MemberAvatar member={m} index={idx} type="student" />
-                                    
-                                    <div className="ml-3 min-w-0 flex-1">
-                                        {isEditing ? (
-                                            <div className="space-y-1.5">
-                                                <div className="flex gap-2">
-                                                    <PrefixInput 
-                                                        value={m.prefix || ''}
-                                                        onChange={(val) => handleStudentChange(idx, 'prefix', val)}
-                                                    />
-                                                    <input 
-                                                        className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 outline-none" 
-                                                        placeholder="ชื่อ-สกุล"
-                                                        value={m.name} 
-                                                        onChange={(e) => handleStudentChange(idx, 'name', e.target.value)}
-                                                    />
-                                                </div>
-                                                <select 
-                                                    className="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-blue-500 outline-none" 
-                                                    value={m.class || ''} 
-                                                    onChange={(e) => handleStudentChange(idx, 'class', e.target.value)}
-                                                >
-                                                    <option value="">-- เลือกระดับชั้น --</option>
-                                                    {levelOptions.map(opt => (
-                                                        <option key={opt} value={opt}>{opt}</option>
-                                                    ))}
-                                                </select>
+                                <div className="flex justify-between items-end">
+                                    <div>
+                                        {team.rank && (
+                                            <div className="flex items-center text-gray-800 font-bold mt-1 text-lg">
+                                                <Hash className="w-4 h-4 mr-1 text-gray-400"/> ลำดับที่ {team.rank}
                                             </div>
-                                        ) : (
-                                            <>
-                                                <p className="text-sm font-semibold text-gray-900 truncate">{getFullName(m)}</p>
-                                                <p className="text-xs text-gray-500 mt-0.5">
-                                                    {m.class ? `ชั้น ${m.class}` : 'นักเรียน'}
-                                                </p>
-                                            </>
                                         )}
+                                        <div className="text-xs text-gray-400 mt-1">{cluster?.ClusterName || 'Network Level'}</div>
                                     </div>
-                                    {isEditing && (
-                                        <button 
-                                            onClick={() => handleRemoveStudent(idx)}
-                                            className="absolute -top-2 -right-2 bg-red-100 text-red-500 rounded-full p-1 shadow-sm border border-red-200 hover:bg-red-200 z-10"
-                                            title="ลบรายชื่อ"
-                                        >
-                                            <Trash2 className="w-3.5 h-3.5" />
-                                        </button>
-                                    )}
+                                    <div className="text-3xl font-bold text-gray-700">{team.score || '-'}</div>
                                 </div>
-                            ))}
+                            </div>
                         </div>
-                    ) : (
-                        <div className="p-4 text-center border-2 border-dashed border-gray-200 rounded-xl text-gray-400 text-sm">
-                            ยังไม่มีข้อมูลนักเรียน
-                        </div>
-                    )}
-                </div>
-            </div>
+                    </div>
+                )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-gray-200">
-                {/* Contact */}
+                {/* Info Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="p-4 bg-white rounded-xl border border-blue-100 shadow-sm relative overflow-hidden">
+                        <div className="absolute top-0 right-0 w-16 h-16 bg-blue-50 rounded-bl-full -mr-8 -mt-8 z-0"></div>
+                        <div className="relative z-10">
+                            <div className="flex items-center mb-2 text-blue-900 font-semibold text-sm">
+                                <School className="w-4 h-4 mr-2 text-blue-500" />
+                                ข้อมูลโรงเรียน
+                            </div>
+                            <p className="text-gray-800 font-medium ml-6 line-clamp-1">
+                                {school?.SchoolName || team.schoolId || '-'}
+                            </p>
+                            <div className="flex items-center ml-6 mt-1 text-gray-500 text-xs">
+                                <LayoutGrid className="w-3 h-3 mr-1" />
+                                <span>{cluster?.ClusterName || 'ไม่ระบุกลุ่มเครือข่าย'}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="p-4 bg-white rounded-xl border border-amber-100 shadow-sm relative overflow-hidden">
+                        <div className="absolute top-0 right-0 w-16 h-16 bg-amber-50 rounded-bl-full -mr-8 -mt-8 z-0"></div>
+                        <div className="relative z-10">
+                            <div className="flex items-center mb-2 text-amber-900 font-semibold text-sm">
+                                <AwardIcon className="w-4 h-4 mr-2 text-amber-500" />
+                                รายการแข่งขัน
+                            </div>
+                            <div className="ml-6">
+                                {activity?.category && (
+                                    <span className="inline-block px-2 py-0.5 mb-1 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-100">
+                                        {activity.category}
+                                    </span>
+                                )}
+                                <p className="text-gray-800 font-medium line-clamp-1">{activity?.name || '-'}</p>
+                                <p className="text-gray-500 text-xs mt-1">ระดับชั้น: {team.level}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Members Section */}
                 <div>
-                    <h4 className="font-semibold text-gray-800 mb-3 flex items-center text-sm uppercase tracking-wide">
-                        <Phone className="w-4 h-4 mr-2" />
-                        ผู้ประสานงาน (Coordinator)
+                    <h4 className="font-bold text-gray-800 mb-4 flex items-center pb-2 border-b border-gray-200 justify-between">
+                        <div className="flex items-center">
+                            <Users className="w-5 h-5 mr-2 text-gray-600" />
+                            สมาชิกในทีม {isAreaContext && <span className="text-purple-600 text-xs ml-2 font-normal">(ระดับเขตพื้นที่)</span>}
+                            <span className="ml-2 text-xs font-normal text-gray-500 bg-gray-200 px-2 py-0.5 rounded-full">
+                                {editTeachers.length + editStudents.length} คน
+                            </span>
+                        </div>
+                        {team.lastEditedBy && !isEditing && (
+                            <div className="flex items-center text-[10px] text-gray-400 font-normal">
+                                <History className="w-3 h-3 mr-1" />
+                                แก้ไขล่าสุด: {formatDeadline(team.lastEditedAt || '')} โดย {team.lastEditedBy}
+                            </div>
+                        )}
                     </h4>
-                    <div className="text-sm text-gray-600 bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-                        {isEditing ? (
-                            <div className="grid gap-y-3">
-                                <div>
-                                    <label className="text-xs text-gray-400 block mb-1">ชื่อผู้ประสานงาน</label>
-                                    <input 
-                                        className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 outline-none" 
-                                        placeholder="ชื่อผู้ประสานงาน"
-                                        value={editContact.name || ''} 
-                                        onChange={(e) => handleContactChange('name', e.target.value)}
-                                    />
-                                </div>
-                                <div>
-                                    <label className="text-xs text-gray-400 block mb-1">เบอร์โทร</label>
-                                    <input 
-                                        className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 outline-none" 
-                                        placeholder="เบอร์โทร"
-                                        value={editContact.phone || ''} 
-                                        onChange={(e) => handleContactChange('phone', e.target.value)}
-                                    />
-                                </div>
-                                <div>
-                                    <label className="text-xs text-gray-400 block mb-1">Line ID</label>
-                                    <input 
-                                        className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 outline-none" 
-                                        placeholder="Line ID"
-                                        value={editContact.lineId || ''} 
-                                        onChange={(e) => handleContactChange('lineId', e.target.value)}
-                                    />
-                                </div>
+
+                    {/* Teachers */}
+                    <div className="mb-6">
+                        <div className="flex justify-between items-center mb-3">
+                            <h5 className="text-xs font-bold text-gray-500 uppercase tracking-wider pl-1">
+                                ครูผู้ฝึกสอน ({editTeachers.length}/{reqTeachers})
+                            </h5>
+                            {isEditing && editTeachers.length < reqTeachers && (
+                                <button 
+                                    onClick={handleAddTeacher}
+                                    className="text-xs flex items-center text-blue-600 bg-blue-50 px-2 py-1 rounded-lg border border-blue-200 hover:bg-blue-100 transition-colors"
+                                >
+                                    <Plus className="w-3 h-3 mr-1" /> เพิ่มครู
+                                </button>
+                            )}
+                        </div>
+                        {editTeachers.length > 0 ? (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                {editTeachers.map((m: any, idx: number) => (
+                                    <div key={`t-${idx}`} className="flex items-center p-3 bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-shadow relative group">
+                                        <MemberAvatar member={m} index={idx} type="teacher" />
+                                        
+                                        <div className="ml-3 min-w-0 flex-1">
+                                            {isEditing ? (
+                                                <div className="space-y-1.5">
+                                                    <div className="flex gap-2">
+                                                        <PrefixInput 
+                                                            value={m.prefix || ''}
+                                                            onChange={(val) => handleTeacherChange(idx, 'prefix', val)}
+                                                        />
+                                                        <input 
+                                                            className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 outline-none" 
+                                                            placeholder="ชื่อ-สกุล"
+                                                            value={m.name} 
+                                                            onChange={(e) => handleTeacherChange(idx, 'name', e.target.value)}
+                                                        />
+                                                    </div>
+                                                    <input 
+                                                        className="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-blue-500 outline-none" 
+                                                        placeholder="เบอร์โทร"
+                                                        value={m.phone} 
+                                                        onChange={(e) => handleTeacherChange(idx, 'phone', e.target.value)}
+                                                    />
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <p className="text-sm font-semibold text-gray-900 truncate">{getFullName(m)}</p>
+                                                    <p className="text-xs text-gray-500 flex items-center mt-0.5">
+                                                        <Phone className="w-3 h-3 mr-1" /> {m.phone || '-'}
+                                                    </p>
+                                                </>
+                                            )}
+                                        </div>
+                                        {isEditing && (
+                                            <button 
+                                                onClick={() => handleRemoveTeacher(idx)}
+                                                className="absolute -top-2 -right-2 bg-red-100 text-red-500 rounded-full p-1 shadow-sm border border-red-200 hover:bg-red-200 z-10"
+                                                title="ลบรายชื่อ"
+                                            >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                            </button>
+                                        )}
+                                    </div>
+                                ))}
                             </div>
                         ) : (
-                            <div className="grid grid-cols-[80px_1fr] gap-y-2">
-                                <span className="text-gray-400">ชื่อ:</span>
-                                <span className="font-medium text-gray-900">{editContact.name || '-'}</span>
-                                <span className="text-gray-400">โทร:</span>
-                                <span className="font-medium text-gray-900">{editContact.phone || '-'}</span>
-                                <span className="text-gray-400">Line ID:</span>
-                                <span className="font-medium text-gray-900">{editContact.lineId || '-'}</span>
+                            <div className="p-4 text-center border-2 border-dashed border-gray-200 rounded-xl text-gray-400 text-sm">
+                                ยังไม่มีข้อมูลครูผู้ฝึกสอน
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Students */}
+                    <div>
+                        <div className="flex justify-between items-center mb-3">
+                            <h5 className="text-xs font-bold text-gray-500 uppercase tracking-wider pl-1">
+                                นักเรียน ({editStudents.length}/{reqStudents})
+                            </h5>
+                            {isEditing && editStudents.length < reqStudents && (
+                                <button 
+                                    onClick={handleAddStudent}
+                                    className="text-xs flex items-center text-green-600 bg-green-50 px-2 py-1 rounded-lg border border-green-200 hover:bg-green-100 transition-colors"
+                                >
+                                    <Plus className="w-3 h-3 mr-1" /> เพิ่มนักเรียน
+                                </button>
+                            )}
+                        </div>
+                        {editStudents.length > 0 ? (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                {editStudents.map((m: any, idx: number) => (
+                                    <div key={`s-${idx}`} className="flex items-center p-3 bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-shadow relative group">
+                                        <MemberAvatar member={m} index={idx} type="student" />
+                                        
+                                        <div className="ml-3 min-w-0 flex-1">
+                                            {isEditing ? (
+                                                <div className="space-y-1.5">
+                                                    <div className="flex gap-2">
+                                                        <PrefixInput 
+                                                            value={m.prefix || ''}
+                                                            onChange={(val) => handleStudentChange(idx, 'prefix', val)}
+                                                        />
+                                                        <input 
+                                                            className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 outline-none" 
+                                                            placeholder="ชื่อ-สกุล"
+                                                            value={m.name} 
+                                                            onChange={(e) => handleStudentChange(idx, 'name', e.target.value)}
+                                                        />
+                                                    </div>
+                                                    <select 
+                                                        className="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-blue-500 outline-none" 
+                                                        value={m.class || ''} 
+                                                        onChange={(e) => handleStudentChange(idx, 'class', e.target.value)}
+                                                    >
+                                                        <option value="">-- เลือกระดับชั้น --</option>
+                                                        {levelOptions.map(opt => (
+                                                            <option key={opt} value={opt}>{opt}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <p className="text-sm font-semibold text-gray-900 truncate">{getFullName(m)}</p>
+                                                    <p className="text-xs text-gray-500 mt-0.5">
+                                                        {m.class ? `ชั้น ${m.class}` : 'นักเรียน'}
+                                                    </p>
+                                                </>
+                                            )}
+                                        </div>
+                                        {isEditing && (
+                                            <button 
+                                                onClick={() => handleRemoveStudent(idx)}
+                                                className="absolute -top-2 -right-2 bg-red-100 text-red-500 rounded-full p-1 shadow-sm border border-red-200 hover:bg-red-200 z-10"
+                                                title="ลบรายชื่อ"
+                                            >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                            </button>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="p-4 text-center border-2 border-dashed border-gray-200 rounded-xl text-gray-400 text-sm">
+                                ยังไม่มีข้อมูลนักเรียน
                             </div>
                         )}
                     </div>
                 </div>
 
-                {/* Files */}
-                <div>
-                     <h4 className="font-semibold text-gray-800 mb-3 flex items-center text-sm uppercase tracking-wide">
-                        <FileText className="w-4 h-4 mr-2" />
-                        ไฟล์แนบ ({files.length})
-                    </h4>
-                    <div className="space-y-2">
-                        {files.map(f => (
-                            <a 
-                                key={f.FileLogID} 
-                                href={f.FileUrl} 
-                                target="_blank" 
-                                rel="noreferrer"
-                                className="flex items-center p-3 bg-white border border-gray-200 rounded-xl hover:bg-blue-50 hover:border-blue-200 transition-colors group shadow-sm"
-                            >
-                                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 group-hover:bg-blue-200 shrink-0 transition-colors">
-                                    <FileText className="w-5 h-5" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-gray-200">
+                    {/* Contact */}
+                    <div>
+                        <h4 className="font-semibold text-gray-800 mb-3 flex items-center text-sm uppercase tracking-wide">
+                            <Phone className="w-4 h-4 mr-2" />
+                            ผู้ประสานงาน (Coordinator)
+                        </h4>
+                        <div className="text-sm text-gray-600 bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+                            {isEditing ? (
+                                <div className="grid gap-y-3">
+                                    <div>
+                                        <label className="text-xs text-gray-400 block mb-1">ชื่อผู้ประสานงาน</label>
+                                        <input 
+                                            className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 outline-none" 
+                                            placeholder="ชื่อผู้ประสานงาน"
+                                            value={editContact.name || ''} 
+                                            onChange={(e) => handleContactChange('name', e.target.value)}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs text-gray-400 block mb-1">เบอร์โทร</label>
+                                        <input 
+                                            className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 outline-none" 
+                                            placeholder="เบอร์โทร"
+                                            value={editContact.phone || ''} 
+                                            onChange={(e) => handleContactChange('phone', e.target.value)}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs text-gray-400 block mb-1">Line ID</label>
+                                        <input 
+                                            className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 outline-none" 
+                                            placeholder="Line ID"
+                                            value={editContact.lineId || ''} 
+                                            onChange={(e) => handleContactChange('lineId', e.target.value)}
+                                        />
+                                    </div>
                                 </div>
-                                <div className="ml-3 min-w-0">
-                                    <p className="text-sm font-medium text-gray-900 truncate">{f.FileType}</p>
-                                    <p className="text-[10px] text-gray-500">{f.Status}</p>
+                            ) : (
+                                <div className="grid grid-cols-[80px_1fr] gap-y-2">
+                                    <span className="text-gray-400">ชื่อ:</span>
+                                    <span className="font-medium text-gray-900">{editContact.name || '-'}</span>
+                                    <span className="text-gray-400">โทร:</span>
+                                    <span className="font-medium text-gray-900">{editContact.phone || '-'}</span>
+                                    <span className="text-gray-400">Line ID:</span>
+                                    <span className="font-medium text-gray-900">{editContact.lineId || '-'}</span>
                                 </div>
-                            </a>
-                        ))}
-                        {files.length === 0 && (
-                            <div className="text-center py-6 border-2 border-dashed border-gray-200 rounded-xl">
-                                <p className="text-sm text-gray-400 italic">ไม่มีไฟล์แนบ</p>
-                            </div>
-                        )}
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Files */}
+                    <div>
+                        <h4 className="font-semibold text-gray-800 mb-3 flex items-center text-sm uppercase tracking-wide">
+                            <FileText className="w-4 h-4 mr-2" />
+                            ไฟล์แนบ ({files.length})
+                        </h4>
+                        <div className="space-y-2">
+                            {files.map(f => (
+                                <a 
+                                    key={f.FileLogID} 
+                                    href={f.FileUrl} 
+                                    target="_blank" 
+                                    rel="noreferrer"
+                                    className="flex items-center p-3 bg-white border border-gray-200 rounded-xl hover:bg-blue-50 hover:border-blue-200 transition-colors group shadow-sm"
+                                >
+                                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 group-hover:bg-blue-200 shrink-0 transition-colors">
+                                        <FileText className="w-5 h-5" />
+                                    </div>
+                                    <div className="ml-3 min-w-0">
+                                        <p className="text-sm font-medium text-gray-900 truncate">{f.FileType}</p>
+                                        <p className="text-[10px] text-gray-500">{f.Status}</p>
+                                    </div>
+                                </a>
+                            ))}
+                            {files.length === 0 && (
+                                <div className="text-center py-6 border-2 border-dashed border-gray-200 rounded-xl">
+                                    <p className="text-sm text-gray-400 italic">ไม่มีไฟล์แนบ</p>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
-      </div>
-    </div>
+        </div>
+    </>
   );
 };
 
