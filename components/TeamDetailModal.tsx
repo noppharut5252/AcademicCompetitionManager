@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Team, AppData, AreaStageInfo, User } from '../types';
-import { X, User as UserIcon, Phone, School, FileText, Medal, Flag, LayoutGrid, Users, Hash, Trophy, Edit3, Save, Loader2, Camera, Upload, Clock, CheckCircle, AlertCircle, Info, ChevronDown, Plus, Trash2, History } from 'lucide-react';
+import { X, User as UserIcon, Phone, School, FileText, Medal, Flag, LayoutGrid, Users, Hash, Trophy, Edit3, Save, Loader2, Camera, Upload, Clock, CheckCircle, AlertCircle, Info, ChevronDown, Plus, Trash2, History, ArrowDown, Copy } from 'lucide-react';
 import { updateTeamDetails, uploadImage } from '../services/api';
 import { resizeImage, formatDeadline } from '../services/utils';
 import ConfirmationModal from './ConfirmationModal';
@@ -154,6 +154,7 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
   // Notification State
   const [toast, setToast] = useState<{ msg: string, type: 'success' | 'error', show: boolean }>({ msg: '', type: 'success', show: false });
   const [confirmDelete, setConfirmDelete] = useState<{ show: boolean, type: 'teacher' | 'student', index: number }>({ show: false, type: 'teacher', index: -1 });
+  const [transferConfirm, setTransferConfirm] = useState<{ show: boolean, previewData: any }>({ show: false, previewData: null });
 
   // Form States
   const [editTeamName, setEditTeamName] = useState(team.teamName);
@@ -324,6 +325,55 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
       setConfirmDelete({ show: false, type: 'teacher', index: -1 });
   };
 
+  // Logic to parse cluster members for transfer
+  const handleTransferFromCluster = () => {
+      let clusterMembers = { teachers: [], students: [] };
+      try {
+          const raw = typeof team.members === 'string' ? JSON.parse(team.members) : team.members;
+          
+          if (Array.isArray(raw)) {
+              // Legacy array (students only)
+              clusterMembers.students = raw;
+          } else if (typeof raw === 'object' && raw !== null) {
+              clusterMembers.teachers = Array.isArray(raw.teachers) ? raw.teachers : [];
+              clusterMembers.students = Array.isArray(raw.students) ? raw.students : [];
+          }
+          
+          setTransferConfirm({ 
+              show: true, 
+              previewData: {
+                  ...clusterMembers,
+                  name: team.teamName // Include Team Name in preview data
+              } 
+          });
+
+      } catch (e) {
+          showNotification('ไม่สามารถอ่านข้อมูลระดับกลุ่มฯ ได้', 'error');
+      }
+  };
+
+  const executeTransfer = () => {
+      if (transferConfirm.previewData) {
+          const { teachers, students, name } = transferConfirm.previewData;
+          // Process images for display
+          const process = (list: any[]) => list.map(m => ({
+              ...m,
+              image: m.image || (m.photoDriveId ? getPhotoUrl(m.photoDriveId) : '')
+          }));
+
+          setEditTeachers(process(teachers));
+          setEditStudents(process(students));
+          
+          if (name) {
+              setEditTeamName(name); // Update Team Name
+          }
+
+          setHasUnsavedChanges(true);
+          setTransferConfirm({ show: false, previewData: null });
+          showNotification('ดึงข้อมูลเรียบร้อยแล้ว (กรุณากดบันทึก)', 'success');
+      }
+  };
+
   const handleImageUpload = async (index: number, type: 'teacher' | 'student', e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
@@ -491,6 +541,30 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
             onConfirm={executeDelete}
             onCancel={() => setConfirmDelete({ show: false, type: 'teacher', index: -1 })}
         />
+
+        {/* Transfer Confirmation Modal */}
+        <ConfirmationModal
+            isOpen={transferConfirm.show}
+            title="ยืนยันการดึงข้อมูลจากระดับกลุ่มฯ"
+            description="การดึงข้อมูลจะทับข้อมูลชื่อทีมและสมาชิกปัจจุบันในระดับเขตพื้นที่ คุณต้องการดำเนินการต่อหรือไม่?"
+            confirmLabel="ยืนยันการดึงข้อมูล"
+            confirmColor="blue"
+            onConfirm={executeTransfer}
+            onCancel={() => setTransferConfirm({ show: false, previewData: null })}
+        >
+            {transferConfirm.previewData && (
+                <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 text-left mt-3">
+                    <h4 className="text-sm font-bold text-blue-800 mb-2 flex items-center">
+                        <Info className="w-4 h-4 mr-1"/> ข้อมูลที่จะถูกดึงมา:
+                    </h4>
+                    <ul className="text-sm text-blue-700 list-disc list-inside">
+                        <li>ชื่อทีม: <b>{transferConfirm.previewData.name}</b></li>
+                        <li>ครูผู้ฝึกสอน: <b>{transferConfirm.previewData.teachers?.length || 0}</b> คน</li>
+                        <li>นักเรียน: <b>{transferConfirm.previewData.students?.length || 0}</b> คน</li>
+                    </ul>
+                </div>
+            )}
+        </ConfirmationModal>
 
         <div 
             className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
@@ -674,7 +748,7 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
 
                 {/* Members Section */}
                 <div>
-                    <h4 className="font-bold text-gray-800 mb-4 flex items-center pb-2 border-b border-gray-200 justify-between">
+                    <h4 className="font-bold text-gray-800 mb-4 flex items-center pb-2 border-b border-gray-200 justify-between flex-wrap gap-2">
                         <div className="flex items-center">
                             <Users className="w-5 h-5 mr-2 text-gray-600" />
                             สมาชิกในทีม {isAreaContext && <span className="text-purple-600 text-xs ml-2 font-normal">(ระดับเขตพื้นที่)</span>}
@@ -682,12 +756,23 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
                                 {editTeachers.length + editStudents.length} คน
                             </span>
                         </div>
-                        {team.lastEditedBy && !isEditing && (
-                            <div className="flex items-center text-[10px] text-gray-400 font-normal">
-                                <History className="w-3 h-3 mr-1" />
-                                แก้ไขล่าสุด: {formatDeadline(team.lastEditedAt || '')} โดย {team.lastEditedBy}
-                            </div>
-                        )}
+                        <div className="flex items-center gap-2">
+                            {isEditing && isAreaContext && (
+                                <button 
+                                    type="button"
+                                    onClick={handleTransferFromCluster}
+                                    className="text-[10px] sm:text-xs flex items-center bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200 transition-colors font-medium border border-blue-200"
+                                >
+                                    <Copy className="w-3 h-3 mr-1" /> ดึงข้อมูลจากระดับกลุ่มฯ
+                                </button>
+                            )}
+                            {team.lastEditedBy && !isEditing && (
+                                <div className="flex items-center text-[10px] text-gray-400 font-normal">
+                                    <History className="w-3 h-3 mr-1" />
+                                    แก้ไขล่าสุด: {formatDeadline(team.lastEditedAt || '')} โดย {team.lastEditedBy}
+                                </div>
+                            )}
+                        </div>
                     </h4>
 
                     {/* Teachers */}
