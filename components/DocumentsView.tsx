@@ -247,7 +247,7 @@ const ExpandedIdCard = ({
                             </div>
                         </div>
                         <div className="bg-white p-1 rounded-lg border border-gray-100">
-                            {/* QR Code here points to the verify link or app deep link */}
+                            {/* QR Code here points to the ID Card view directly */}
                             <img src={getQrCodeUrl(`${window.location.origin}${window.location.pathname}#/idcards?id=${team.teamId}`, 120)} alt="QR" className="w-24 h-24 mix-blend-multiply" />
                         </div>
                     </div>
@@ -973,7 +973,7 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
           for (let i = 0; i < allMembers.length; i += 4) {
               pages.push(allMembers.slice(i, i + 4));
           }
-          // IMPORTANT UPDATE: Generate Full URL for scanning into App
+          // IMPORTANT UPDATE: Generate Full URL for scanning into App with specific ID Cards path
           const appUrl = `${window.location.origin}${window.location.pathname}#/idcards?id=${team.teamId}`;
           const qrUrl = getQrCodeUrl(appUrl, 150);
           
