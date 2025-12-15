@@ -80,7 +80,8 @@ export const registerUser = async (user: Partial<User>): Promise<User | null> =>
     try {
         const response = await fetch(`${API_URL}?action=registerUser`, {
             method: 'POST',
-            mode: 'cors', // changed to cors to read response
+            mode: 'cors',
+            headers: { 'Content-Type': 'text/plain' }, // Force simple request
             body: JSON.stringify(user)
         });
         
@@ -100,7 +101,8 @@ export const updateUser = async (user: Partial<User>): Promise<boolean> => {
     try {
         const response = await fetch(`${API_URL}?action=updateUser`, {
             method: 'POST',
-            mode: 'cors', // changed to cors to read response
+            mode: 'cors',
+            headers: { 'Content-Type': 'text/plain' },
             body: JSON.stringify(user)
         });
         
@@ -135,6 +137,7 @@ export const updateTeamStatus = async (teamId: string, status: string, reason: s
         const response = await fetch(`${API_URL}?action=updateTeamStatus`, {
             method: 'POST',
             mode: 'cors',
+            headers: { 'Content-Type': 'text/plain' }, // Avoid CORS Preflight
             body: JSON.stringify({ teamId, status, reason, deadline })
         });
         
@@ -163,11 +166,12 @@ export const deleteTeam = async (teamId: string): Promise<boolean> => {
     }
 }
 
-export const updateTeamDetails = async (team: Partial<Team>): Promise<boolean> => {
+export const updateTeamDetails = async (team: any): Promise<boolean> => {
     try {
         const response = await fetch(`${API_URL}?action=updateTeamDetails`, {
             method: 'POST',
             mode: 'cors',
+            headers: { 'Content-Type': 'text/plain' },
             body: JSON.stringify(team)
         });
         
@@ -185,6 +189,7 @@ export const uploadImage = async (base64Image: string, filename: string = 'uploa
         const response = await fetch(`${API_URL}?action=uploadImage`, {
             method: 'POST',
             mode: 'cors',
+            headers: { 'Content-Type': 'text/plain' },
             body: JSON.stringify({ image: base64Image, filename })
         });
         
