@@ -11,6 +11,7 @@ interface TeamDetailModalProps {
   onClose: () => void;
   canEdit?: boolean;
   onSaveSuccess?: () => void;
+  viewLevel?: 'cluster' | 'area';
 }
 
 // Internal Toast Component for Modal
@@ -76,7 +77,7 @@ const PrefixInput = ({ value, onChange, placeholder }: { value: string, onChange
     );
 };
 
-const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, canEdit = false, onSaveSuccess }) => {
+const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, canEdit = false, onSaveSuccess, viewLevel = 'cluster' }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [uploadingState, setUploadingState] = useState<{ id: string, loading: boolean }>({ id: '', loading: false });
@@ -96,16 +97,18 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
 
   const getPhotoUrl = (driveId: string) => `https://drive.google.com/thumbnail?id=${driveId}`;
 
-  // Check if this is an Area Level Team
-  const isAreaLevel = team.stageStatus === 'Area' || team.flag === 'TRUE';
+  // Use viewLevel to determine if we should load/edit Area data.
+  // We prioritize viewLevel 'area'. If user is in Area view, they likely want to edit Area info.
+  // Fallback check: if team is officially flagged as Area, we also treat it as Area context if needed, but viewLevel is explicit.
+  const isAreaContext = viewLevel === 'area';
 
   useEffect(() => {
-      // Logic: If Area Level, load data from 'stageInfo'. If not, use standard columns.
+      // Logic: If Area Context, load data from 'stageInfo'. If not, use standard columns.
       let nameToUse = team.teamName;
       let contactToUse = team.contact;
       let membersToUse = team.members;
 
-      if (isAreaLevel && team.stageInfo) {
+      if (isAreaContext && team.stageInfo) {
           try {
               const areaData = JSON.parse(team.stageInfo);
               // Use Area data if available, otherwise fallback to team data (might be first time entering area stage)
@@ -145,7 +148,7 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
             }
         }
       } catch { setEditTeachers([]); setEditStudents([]); }
-  }, [team, isAreaLevel]);
+  }, [team, isAreaContext]);
 
   const activity = data.activities.find(a => a.id === team.activityId);
   const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
@@ -300,7 +303,7 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
               teachers: editTeachers.map(prepareForSave), 
               students: editStudents.map(prepareForSave) 
           }),
-          isArea: isAreaLevel // Flag to tell backend to update area columns
+          isArea: isAreaContext // Flag to tell backend to update area columns based on view context
       };
 
       const success = await updateTeamDetails(payload);
@@ -384,19 +387,19 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
             <div className="min-w-0 flex-1">
                 {isEditing ? (
                     <div className="flex flex-col">
-                        {isAreaLevel && <span className="text-[10px] text-purple-600 font-bold mb-1">แก้ไขชื่อทีม (ระดับเขตพื้นที่)</span>}
+                        {isAreaContext && <span className="text-[10px] text-purple-600 font-bold mb-1 bg-purple-50 px-2 py-0.5 rounded self-start border border-purple-100 flex items-center"><Trophy className="w-3 h-3 mr-1"/> กำลังแก้ไขข้อมูลระดับเขตพื้นที่</span>}
                         <input 
                             type="text" 
                             className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-lg font-bold text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none" 
                             value={editTeamName}
                             onChange={(e) => { setHasUnsavedChanges(true); setEditTeamName(e.target.value); }}
-                            placeholder="ชื่อทีม..."
+                            placeholder={isAreaContext ? "ชื่อทีม (ระดับเขต)..." : "ชื่อทีม..."}
                         />
                     </div>
                 ) : (
                     <h3 className="text-xl font-bold text-gray-900 truncate">
                         {/* Display correct name context */}
-                        {isAreaLevel && areaInfo?.name ? areaInfo.name : team.teamName}
+                        {isAreaContext && areaInfo?.name ? areaInfo.name : team.teamName}
                     </h3>
                 )}
                 
@@ -407,7 +410,7 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
                         {displayStatus === 'Pending' && <Clock className="w-3 h-3 mr-1"/>}
                         {displayStatus}
                     </span>
-                    {isAreaLevel && (
+                    {(team.stageStatus === 'Area' || team.flag === 'TRUE') && (
                         <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 shrink-0">
                             <Flag className="w-3 h-3 mr-1" /> ตัวแทนเขต
                         </span>
@@ -454,7 +457,7 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
         <div className="overflow-y-auto p-6 space-y-6 bg-gray-50/50">
             
              {/* Scores Section */}
-             {(team.score > 0 || isAreaLevel) && !isEditing && (
+             {(team.score > 0 || (team.stageStatus === 'Area' || team.flag === 'TRUE')) && !isEditing && (
                 <div className="mb-6">
                     <h4 className="font-semibold text-gray-800 flex items-center mb-3 text-sm uppercase tracking-wide">
                         <Medal className="w-4 h-4 mr-2 text-amber-500" />
@@ -463,7 +466,7 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
                     
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         {/* Area Round (Priority Display) */}
-                        {isAreaLevel && (
+                        {(team.stageStatus === 'Area' || team.flag === 'TRUE') && (
                              <div className="p-4 bg-gradient-to-br from-purple-600 to-indigo-700 text-white shadow-lg rounded-xl relative overflow-hidden ring-1 ring-white/20">
                                 <div className="absolute top-0 right-0 p-4 opacity-10">
                                     <Trophy className="w-24 h-24" />
@@ -548,7 +551,7 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
             <div>
                 <h4 className="font-bold text-gray-800 mb-4 flex items-center pb-2 border-b border-gray-200">
                     <Users className="w-5 h-5 mr-2 text-gray-600" />
-                    สมาชิกในทีม {isAreaLevel && <span className="text-purple-600 text-xs ml-2 font-normal">(ระดับเขตพื้นที่)</span>}
+                    สมาชิกในทีม {isAreaContext && <span className="text-purple-600 text-xs ml-2 font-normal">(ระดับเขตพื้นที่)</span>}
                     <span className="ml-2 text-xs font-normal text-gray-500 bg-gray-200 px-2 py-0.5 rounded-full">
                         {editTeachers.length + editStudents.length} คน
                     </span>
