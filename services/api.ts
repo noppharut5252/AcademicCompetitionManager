@@ -1,7 +1,5 @@
 
-
-
-import { AppData, User, Team } from '../types';
+import { AppData, User, Team, CertificateTemplate } from '../types';
 import { getMockData } from './mockData';
 
 const API_URL = "https://script.google.com/macros/s/AKfycbyYcf6m-3ypN3aX8F6prN0BLQcz0JyW0gj3Tq8dJyMs54gaTXSv_1uytthNu9H4CmMy/exec";
@@ -201,6 +199,39 @@ export const uploadImage = async (base64Image: string, filename: string = 'uploa
         return { status: 'error', message: e.toString() };
     }
 }
+
+// --- Certificate Config API ---
+
+export const getCertificateConfig = async (): Promise<Record<string, CertificateTemplate>> => {
+    try {
+        const response = await fetch(`${API_URL}?action=getCertConfig`, {
+            method: 'GET',
+            mode: 'cors'
+        });
+        if (!response.ok) return {};
+        return await response.json();
+    } catch (e) {
+        console.error("Failed to get Cert Config", e);
+        return {};
+    }
+};
+
+export const saveCertificateConfig = async (id: string, config: CertificateTemplate): Promise<boolean> => {
+    try {
+        const response = await fetch(`${API_URL}?action=saveCertConfig`, {
+            method: 'POST',
+            mode: 'cors',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify({ id, config })
+        });
+        if (!response.ok) return false;
+        const result = await response.json();
+        return result.status === 'success';
+    } catch (e) {
+        console.error("Failed to save Cert Config", e);
+        return false;
+    }
+};
 
 export const getTeamCountByStatus = (data: AppData) => {
   const counts: Record<string, number> = {};
