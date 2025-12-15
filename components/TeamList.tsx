@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { AppData, Team, TeamStatus, User, AreaStageInfo } from '../types';
-import { Search, Filter, CheckCircle, XCircle, Clock, ChevronLeft, ChevronRight, Eye, Trophy, Medal, Hash, LayoutGrid, Users, Award, School, Printer, FileText, Star, Crown, Zap, Edit, Trash2, Plus, Square, CheckSquare, Loader2, AlertTriangle, Info, X, Calendar } from 'lucide-react';
+import { AppData, Team, TeamStatus, User, AreaStageInfo, Activity } from '../types';
+import { Search, Filter, CheckCircle, XCircle, Clock, ChevronLeft, ChevronRight, Eye, Trophy, Medal, Hash, LayoutGrid, Users, Award, School, Printer, FileText, Star, Crown, Zap, Edit, Trash2, Plus, Square, CheckSquare, Loader2, AlertTriangle, Info, X, Calendar, AlertCircle, History } from 'lucide-react';
 import TeamDetailModal from './TeamDetailModal';
 import { updateTeamStatus, deleteTeam } from '../services/api';
 import { formatDeadline } from '../services/utils';
@@ -154,6 +154,41 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
     if (status === '0') return TeamStatus.PENDING;
     if (status === '2' || status === '-1') return TeamStatus.REJECTED;
     return status;
+  };
+
+  // Helper: Check Data Completeness
+  const getValidationWarnings = (team: Team, activity?: Activity) => {
+    // Only check validation for Pending or Approved teams, ignore Rejected
+    if (!activity || normalizeStatus(team.status) === TeamStatus.REJECTED) return [];
+    
+    let teacherCount = 0;
+    let studentCount = 0;
+
+    try {
+        const parsed = typeof team.members === 'string' ? JSON.parse(team.members) : team.members;
+        if (Array.isArray(parsed)) {
+            studentCount = parsed.length; // Legacy: array of students
+        } else if (parsed && typeof parsed === 'object') {
+            teacherCount = Array.isArray(parsed.teachers) ? parsed.teachers.length : 0;
+            studentCount = Array.isArray(parsed.students) ? parsed.students.length : 0;
+        }
+    } catch { return []; }
+
+    const warnings: string[] = [];
+    
+    // Check Teachers (Only if reqTeachers > 0)
+    if (activity.reqTeachers > 0 && teacherCount < activity.reqTeachers) {
+         const missing = activity.reqTeachers - teacherCount;
+         warnings.push(`ขาดครู ${missing} คน`);
+    }
+
+    // Check Students
+    if (activity.reqStudents > 0 && studentCount < activity.reqStudents) {
+        const missing = activity.reqStudents - studentCount;
+        warnings.push(`ขาด นร. ${missing} คน`);
+    }
+
+    return warnings;
   };
 
   const getAreaInfo = (stageInfo: string): AreaStageInfo | null => {
@@ -523,61 +558,66 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
             <title>Summary Report</title>
             <style>
                 body { font-family: 'Sarabun', 'Kanit', sans-serif; padding: 20px; }
-                h1, h2 { text-align: center; margin-bottom: 10px; }
-                .meta { text-align: center; color: #666; margin-bottom: 30px; font-size: 14px; }
-                table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 12px; }
-                th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                h1, h2 { text-align: center; margin-bottom: 5px; }
+                h3 { margin-bottom: 10px; margin-top: 0; }
+                .meta { text-align: center; color: #666; margin-bottom: 20px; font-size: 14px; }
+                table { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 12px; }
+                th, td { border: 1px solid #ddd; padding: 6px; text-align: left; }
                 th { background-color: #f2f2f2; font-weight: bold; }
-                .activity-header { background-color: #e6f3ff; font-weight: bold; font-size: 14px; }
                 .status-approved { color: green; }
                 .status-pending { color: orange; }
+                .page-break { page-break-after: always; display: block; }
+                .activity-section { margin-bottom: 30px; }
                 @media print {
                     .no-print { display: none; }
                     body { -webkit-print-color-adjust: exact; }
+                    .page-break { page-break-after: always; }
                 }
             </style>
             <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600&family=Sarabun:wght@400;600&display=swap" rel="stylesheet">
         </head>
         <body>
-            <h1>รายงานสรุปข้อมูลการแข่งขัน</h1>
-            <h2>${scopeTitle} (${roundTitle})</h2>
-            <div class="meta">ข้อมูล ณ วันที่ ${date} | จำนวนทีมทั้งหมด: ${filteredTeams.length} ทีม</div>
-
-            <table>
-                <thead>
-                    <tr>
-                        <th style="width: 5%">#</th>
-                        <th style="width: 30%">ชื่อทีม</th>
-                        <th style="width: 25%">โรงเรียน</th>
-                        <th style="width: 15%">สถานะ</th>
-                        <th style="width: 15%">ผลการแข่งขัน</th>
-                        <th style="width: 10%">หมายเหตุ</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${Object.entries(teamsByActivity).map(([actName, teams]) => `
-                        <tr class="activity-header"><td colspan="6">${actName} (${teams.length} ทีม)</td></tr>
-                        ${teams.map((t, idx) => {
-                             const school = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
-                             const rawScore = viewRound === 'cluster' ? t.score : getAreaInfo(t.stageInfo)?.score;
-                             const displayScore = (typeof rawScore === 'number' && rawScore > 0) ? rawScore : '-';
-                             return `
-                                <tr>
-                                    <td>${idx + 1}</td>
-                                    <td>${t.teamName}</td>
-                                    <td>${school?.SchoolName || t.schoolId}</td>
-                                    <td class="${t.status === 'Approved' ? 'status-approved' : 'status-pending'}">${normalizeStatus(t.status)}</td>
-                                    <td>${displayScore}</td>
-                                    <td>${t.flag === 'TRUE' ? 'ตัวแทนเขต' : ''}</td>
-                                </tr>
-                             `;
-                        }).join('')}
-                    `).join('')}
-                </tbody>
-            </table>
-            <div style="margin-top: 30px; text-align: right; font-size: 12px;">
-                ผู้พิมพ์รายงาน: ${user?.name || user?.username || 'Guest'}
-            </div>
+            ${Object.entries(teamsByActivity).map(([actName, teams]) => `
+                <div class="activity-section page-break">
+                    <h1>รายงานสรุปข้อมูลการแข่งขัน</h1>
+                    <h2>${scopeTitle} (${roundTitle})</h2>
+                    <div class="meta">ข้อมูล ณ วันที่ ${date}</div>
+                    
+                    <h3>รายการ: ${actName} (จำนวน ${teams.length} ทีม)</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 5%">#</th>
+                                <th style="width: 30%">ชื่อทีม</th>
+                                <th style="width: 25%">โรงเรียน</th>
+                                <th style="width: 15%">สถานะ</th>
+                                <th style="width: 15%">ผลการแข่งขัน</th>
+                                <th style="width: 10%">หมายเหตุ</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${teams.map((t, idx) => {
+                                 const school = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
+                                 const rawScore = viewRound === 'cluster' ? t.score : getAreaInfo(t.stageInfo)?.score;
+                                 const displayScore = (typeof rawScore === 'number' && rawScore > 0) ? rawScore : '-';
+                                 return `
+                                    <tr>
+                                        <td>${idx + 1}</td>
+                                        <td>${t.teamName}</td>
+                                        <td>${school?.SchoolName || t.schoolId}</td>
+                                        <td class="${t.status === 'Approved' ? 'status-approved' : 'status-pending'}">${normalizeStatus(t.status)}</td>
+                                        <td>${displayScore}</td>
+                                        <td>${t.flag === 'TRUE' ? 'ตัวแทนเขต' : ''}</td>
+                                    </tr>
+                                 `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                    <div style="margin-top: 10px; text-align: right; font-size: 11px;">
+                        ผู้พิมพ์รายงาน: ${user?.name || user?.username || 'Guest'}
+                    </div>
+                </div>
+            `).join('')}
             <script>
                 window.onload = function() { window.print(); }
             </script>
@@ -665,7 +705,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
                 className="flex items-center px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium"
             >
                 <Printer className="w-4 h-4 mr-2" />
-                <span className="hidden sm:inline">พิมพ์สรุป</span>
+                <span className="hidden sm:inline">พิมพ์สรุป (แยกหน้า)</span>
             </button>
         </div>
       </div>
@@ -916,6 +956,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
             const showScore = viewRound === 'cluster' ? team.score : areaInfo?.score;
             const showRank = viewRound === 'cluster' ? team.rank : (areaInfo?.rank || areaInfo?.medal);
             const canEdit = canEditTeam(team);
+            const warnings = getValidationWarnings(team, activity);
 
             return (
                 <div 
@@ -933,11 +974,25 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
                             </h3>
                             {getStatusBadge(team)}
                         </div>
+                        {warnings.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1 mb-1">
+                                {warnings.map((w, idx) => (
+                                    <span key={idx} className="bg-red-50 text-red-700 font-bold text-[10px] px-1.5 py-0.5 rounded-md flex items-center border border-red-200">
+                                        <AlertCircle className="w-3 h-3 mr-1" />{w}
+                                    </span>
+                                ))}
+                            </div>
+                        )}
                         <p className="text-xs text-gray-500 mt-1 truncate">{school?.SchoolName}</p>
                          <p className="text-[10px] text-gray-400 mt-0.5 truncate flex items-center">
                             <LayoutGrid className="w-3 h-3 mr-1"/> {cluster?.ClusterName}
                         </p>
-                        <p className="text-xs text-gray-400 mt-0.5 truncate">{activity?.name}</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                            {activity?.name} 
+                            <span className="ml-2 text-[10px] text-gray-400 border border-gray-200 rounded px-1">
+                                เกณฑ์: ครู {activity?.reqTeachers}, นร. {activity?.reqStudents}
+                            </span>
+                        </p>
                         
                         <div className="mt-3 flex items-center justify-between border-t border-gray-50 pt-2">
                             <div className="flex items-center space-x-2">
@@ -961,6 +1016,11 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
                                 </span>
                             </div>
                         </div>
+                        {team.lastEditedBy && (
+                            <div className="mt-2 pt-1 border-t border-dashed border-gray-100 text-[9px] text-gray-400 flex items-center">
+                                <History className="w-3 h-3 mr-1" /> แก้ไขล่าสุด {formatDeadline(team.lastEditedAt!)} โดย {team.lastEditedBy}
+                            </div>
+                        )}
                     </div>
                 </div>
             );
@@ -1009,6 +1069,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
                   const showRank = viewRound === 'cluster' ? team.rank : (areaInfo?.rank || areaInfo?.medal);
                   const canEdit = canEditTeam(team);
                   const isSelected = selectedTeamIds.has(team.teamId);
+                  const warnings = getValidationWarnings(team, activity);
 
                   return (
                     <tr 
@@ -1038,6 +1099,11 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
                             <div className="text-sm font-medium text-gray-900 group-hover:text-blue-600 transition-colors flex items-center">
                                 {viewRound === 'area' && areaInfo?.name ? areaInfo.name : team.teamName}
                                 {canEdit && <span className="ml-2 text-[10px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded font-bold">EDIT</span>}
+                                {warnings.length > 0 && (
+                                    <span className="ml-2 text-red-500" title={`ข้อมูลไม่ครบ: ${warnings.join(', ')}`}>
+                                        <AlertTriangle className="w-4 h-4" />
+                                    </span>
+                                )}
                             </div>
                             <div className="text-xs text-gray-500">ID: {team.teamId}</div>
                           </div>
@@ -1052,6 +1118,9 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
                             )}
                             <div className="text-sm text-gray-900 max-w-[180px] truncate" title={activity?.name}>{activity?.name || team.activityId}</div>
                             <div className="text-xs text-gray-500">{team.level}</div>
+                            <div className="text-[10px] text-gray-400 mt-0.5">
+                                เกณฑ์: ครู {activity?.reqTeachers}, นร. {activity?.reqStudents}
+                            </div>
                          </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -1067,6 +1136,11 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
                              <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
                                 ระดับเขตพื้นที่
                              </span>
+                        )}
+                        {team.lastEditedBy && (
+                            <div className="text-[9px] text-gray-400 mt-1 flex items-center" title={`แก้ไขล่าสุดเมื่อ ${formatDeadline(team.lastEditedAt!)}`}>
+                                <Edit className="w-3 h-3 mr-1"/> {team.lastEditedBy}
+                            </div>
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
@@ -1284,6 +1358,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
             onClose={() => setSelectedTeam(null)} 
             canEdit={canEditTeam(selectedTeam)}
             onSaveSuccess={onDataUpdate}
+            currentUser={user} // Pass the current user for logging history
           />
       )}
     </div>
