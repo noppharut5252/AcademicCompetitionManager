@@ -155,6 +155,7 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
   const [toast, setToast] = useState<{ msg: string, type: 'success' | 'error', show: boolean }>({ msg: '', type: 'success', show: false });
   const [confirmDelete, setConfirmDelete] = useState<{ show: boolean, type: 'teacher' | 'student', index: number }>({ show: false, type: 'teacher', index: -1 });
   const [transferConfirm, setTransferConfirm] = useState<{ show: boolean, previewData: any }>({ show: false, previewData: null });
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
 
   // Form States
   const [editTeamName, setEditTeamName] = useState(team.teamName);
@@ -270,10 +271,14 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
 
   const handleClose = () => {
       if (hasUnsavedChanges) {
-          if (!window.confirm('คุณมีข้อมูลที่ยังไม่ได้บันทึก ต้องการปิดหน้าต่างหรือไม่?')) {
-              return;
-          }
+          setShowCloseConfirm(true);
+      } else {
+          onClose();
       }
+  };
+
+  const confirmClose = () => {
+      setShowCloseConfirm(false);
       onClose();
   };
 
@@ -565,6 +570,17 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
                 </div>
             )}
         </ConfirmationModal>
+
+        {/* Unsaved Changes Confirmation Modal */}
+        <ConfirmationModal
+            isOpen={showCloseConfirm}
+            title="มีข้อมูลที่ยังไม่ได้บันทึก"
+            description="คุณมีการแก้ไขข้อมูลที่ยังไม่ได้บันทึก หากปิดหน้าต่างนี้ข้อมูลจะสูญหาย ต้องการปิดหรือไม่?"
+            confirmLabel="ปิดหน้าต่าง (ไม่บันทึก)"
+            confirmColor="red"
+            onConfirm={confirmClose}
+            onCancel={() => setShowCloseConfirm(false)}
+        />
 
         <div 
             className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
