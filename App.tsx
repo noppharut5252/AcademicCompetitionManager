@@ -352,7 +352,8 @@ const App: React.FC = () => {
                 data ? <VerifyCertificate data={data} /> : <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-blue-600" /></div>
             } />
             <Route path="*" element={
-                <Layout userProfile={currentUser}>
+                // Pass data to Layout for global access (e.g., Scanner Modal)
+                <Layout userProfile={currentUser} data={data || undefined}>
                     {renderLoadingOrError() || (data && (
                         <Routes>
                             <Route path="/" element={<Navigate to="/dashboard" replace />} />
