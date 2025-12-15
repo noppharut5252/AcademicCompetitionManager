@@ -247,7 +247,7 @@ const ExpandedIdCard = ({
                             </div>
                         </div>
                         <div className="bg-white p-1 rounded-lg border border-gray-100">
-                            {/* QR Code here points to the ID Card view directly */}
+                            {/* QR Code here points to the ID Card view directly with correct Hash routing */}
                             <img src={getQrCodeUrl(`${window.location.origin}${window.location.pathname}#/idcards?id=${team.teamId}`, 120)} alt="QR" className="w-24 h-24 mix-blend-multiply" />
                         </div>
                     </div>
