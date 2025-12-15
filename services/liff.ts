@@ -80,18 +80,19 @@ export const shareIdCard = async (
     role: string,
     teamId: string,
     imageUrl: string,
-    levelText: string
+    levelText: string,
+    viewLevel: string = 'cluster'
 ): Promise<{ success: boolean; method: 'line' | 'share' | 'copy' | 'error' }> => {
     
     await ensureLiffInitialized();
 
-    const appUrl = `${window.location.origin}${window.location.pathname}#/idcards?id=${teamId}`;
+    const appUrl = `${window.location.origin}${window.location.pathname}#/idcards?id=${teamId}&level=${viewLevel}`;
     const roleText = role === 'Teacher' ? 'ครูผู้ฝึกสอน (Trainer)' : 'ผู้เข้าแข่งขัน (Competitor)';
     const headerColor = role === 'Teacher' ? '#4F46E5' : '#10B981'; // Indigo for Teacher, Green for Student
 
-    // 1. Try LINE Flex Message
+    // 1. Try LINE Flex Message (Only works if opened inside LINE)
     // @ts-ignore
-    if (typeof liff !== 'undefined' && liff.isLoggedIn() && liff.isApiAvailable('shareTargetPicker')) {
+    if (typeof liff !== 'undefined' && liff.isLoggedIn() && liff.isInClient() && liff.isApiAvailable('shareTargetPicker')) {
         
         const flexMessage = {
             type: "flex",
@@ -263,10 +264,11 @@ export const shareIdCard = async (
             return { success: true, method: 'line' };
         } catch (error) {
             console.error("LINE Share ID failed", error);
+            // Continue to fallback
         }
     }
 
-    // Fallback: Web Share
+    // Fallback: Web Share (Native Mobile Share Sheet)
     if (navigator.share) {
         try {
             await navigator.share({
@@ -309,7 +311,7 @@ export const shareScoreResult = async (
 
     // 1. Try LINE Flex Message
     // @ts-ignore
-    if (typeof liff !== 'undefined' && liff.isLoggedIn() && liff.isApiAvailable('shareTargetPicker')) {
+    if (typeof liff !== 'undefined' && liff.isLoggedIn() && liff.isInClient() && liff.isApiAvailable('shareTargetPicker')) {
         const medalColor = (medal === 'Gold') ? '#E6B800' : (medal === 'Silver') ? '#A0A0A0' : (medal === 'Bronze') ? '#CD7F32' : '#333333';
         
         const flexMessage = {
@@ -430,7 +432,7 @@ export const shareTop3Result = async (
     });
 
     // @ts-ignore
-    if (typeof liff !== 'undefined' && liff.isLoggedIn() && liff.isApiAvailable('shareTargetPicker')) {
+    if (typeof liff !== 'undefined' && liff.isLoggedIn() && liff.isInClient() && liff.isApiAvailable('shareTargetPicker')) {
         
         const createRankRow = (winner: any) => {
              const color = winner.rank === 1 ? '#E6B800' : winner.rank === 2 ? '#A0A0A0' : '#CD7F32';
