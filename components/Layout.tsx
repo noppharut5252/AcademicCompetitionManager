@@ -1,22 +1,71 @@
 
-import React, { useState, useEffect, useRef } from 'react';
-import { LayoutDashboard, Users, Trophy, School, Settings, LogOut, Award, FileBadge, IdCard, LogIn, UserCircle, Edit3, ScanLine, X, Camera, Search, ChevronRight } from 'lucide-react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { LayoutDashboard, Users, Trophy, School, Settings, LogOut, Award, FileBadge, IdCard, LogIn, UserCircle, Edit3, ScanLine, X, Camera, Search, ChevronRight, LayoutGrid } from 'lucide-react';
 import { logoutLiff } from '../services/liff';
-import { User } from '../types';
+import { User, AppData } from '../types';
 import { useNavigate, useLocation } from 'react-router-dom';
+import SearchableSelect from './SearchableSelect';
 
 interface LayoutProps {
   children: React.ReactNode;
   userProfile?: User | any; // Supports both our User type and LIFF profile
+  data?: AppData;
 }
 
 // --- Scanner Modal Component ---
-const ScannerModal = ({ isOpen, onClose, onSearch }: { isOpen: boolean; onClose: () => void; onSearch: (id: string) => void }) => {
+const ScannerModal = ({ 
+    isOpen, 
+    onClose, 
+    onSearch, 
+    data, 
+    user 
+}: { 
+    isOpen: boolean; 
+    onClose: () => void; 
+    onSearch: (id: string) => void; 
+    data?: AppData;
+    user?: User | any;
+}) => {
     const videoRef = useRef<HTMLVideoElement>(null);
     const [mode, setMode] = useState<'scan' | 'manual'>('scan');
-    const [manualId, setManualId] = useState('');
+    const [manualId, setManualId] = useState(''); // Stores Team ID
+    const [viewLevel, setViewLevel] = useState<'cluster' | 'area'>('cluster');
     const [cameraError, setCameraError] = useState(false);
     const streamRef = useRef<MediaStream | null>(null);
+
+    // Compute teams list for the Select2 dropdown
+    const myTeams = useMemo(() => {
+        if (!data || !user) return [];
+        let teams = data.teams;
+
+        // 1. Filter by School (if User is school-level)
+        if (user.level === 'school_admin' || user.level === 'user') {
+             const userSchool = data.schools.find(s => s.SchoolID === user.SchoolID);
+             if (user.SchoolID) {
+                 teams = teams.filter(t => t.schoolId === user.SchoolID || t.schoolId === userSchool?.SchoolName);
+             } else {
+                 // Fallback if no SchoolID but user exists
+                 teams = teams.filter(t => t.createdBy === user.userid);
+             }
+        }
+        // Note: Admin/Area/GroupAdmin see all relevant to their scope, or we could strict filter to "own school" if they have one. 
+        // For now, if admin/area, we show all, assuming they might need to help anyone.
+
+        // 2. Filter by Level
+        if (viewLevel === 'area') {
+            // Show only teams qualified for Area or marked as Area Stage
+            teams = teams.filter(t => t.stageStatus === 'Area' || String(t.flag).toUpperCase() === 'TRUE');
+        }
+
+        // Map to options for SearchableSelect
+        return teams.map(t => {
+            const activityName = data.activities.find(a => a.id === t.activityId)?.name || t.activityId;
+            return {
+                label: `${t.teamName} (${activityName})`,
+                value: t.teamId
+            };
+        });
+    }, [data, user, viewLevel]);
 
     useEffect(() => {
         if (isOpen && mode === 'scan') {
@@ -88,7 +137,7 @@ const ScannerModal = ({ isOpen, onClose, onSearch }: { isOpen: boolean; onClose:
             <div className="flex justify-between items-center p-4 bg-black/50 text-white absolute top-0 w-full z-10">
                 <h3 className="font-bold text-lg flex items-center">
                     {mode === 'scan' ? <ScanLine className="w-5 h-5 mr-2" /> : <IdCard className="w-5 h-5 mr-2" />}
-                    {mode === 'scan' ? 'สแกน QR Code' : 'กรอกรหัสบัตร'}
+                    {mode === 'scan' ? 'สแกน QR Code' : 'เลือกบัตรประจำตัว'}
                 </h3>
                 <button onClick={onClose} className="p-2 bg-white/20 rounded-full hover:bg-white/30 transition-colors">
                     <X className="w-6 h-6" />
@@ -124,40 +173,64 @@ const ScannerModal = ({ isOpen, onClose, onSearch }: { isOpen: boolean; onClose:
                             <div className="text-center text-white p-6">
                                 <Camera className="w-16 h-16 mx-auto mb-4 text-gray-500" />
                                 <p className="text-lg font-bold mb-2">ไม่สามารถเปิดกล้องได้</p>
-                                <p className="text-sm text-gray-400 mb-6">กรุณาอนุญาตให้เข้าถึงกล้อง หรือใช้การกรอกรหัสแทน</p>
+                                <p className="text-sm text-gray-400 mb-6">กรุณาอนุญาตให้เข้าถึงกล้อง หรือใช้การค้นหาทีมแทน</p>
                                 <button 
                                     onClick={() => setMode('manual')}
                                     className="px-6 py-2 bg-blue-600 text-white rounded-full font-medium hover:bg-blue-700"
                                 >
-                                    กรอกรหัส ID
+                                    ค้นหาทีม
                                 </button>
                             </div>
                         )}
                     </>
                 ) : (
                     <div className="w-full max-w-sm px-6">
-                        <div className="bg-white rounded-2xl p-6 shadow-xl">
-                            <h4 className="text-gray-800 font-bold text-lg mb-4 text-center">ค้นหา Digital ID Card</h4>
+                        <div className="bg-white rounded-2xl p-6 shadow-xl space-y-5">
+                            <div className="text-center">
+                                <h4 className="text-gray-800 font-bold text-lg">ค้นหา Digital ID Card</h4>
+                                <p className="text-xs text-gray-500 mt-1">เลือกรายการและทีมของท่าน</p>
+                            </div>
+
+                            {/* Level Switcher */}
+                            <div className="flex bg-gray-100 p-1 rounded-lg">
+                                <button
+                                    onClick={() => setViewLevel('cluster')}
+                                    className={`flex-1 py-2 text-sm font-medium rounded-md transition-all flex items-center justify-center ${viewLevel === 'cluster' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                                >
+                                    <LayoutGrid className="w-4 h-4 mr-1.5" />
+                                    ระดับกลุ่มฯ
+                                </button>
+                                <button
+                                    onClick={() => setViewLevel('area')}
+                                    className={`flex-1 py-2 text-sm font-medium rounded-md transition-all flex items-center justify-center ${viewLevel === 'area' ? 'bg-white text-purple-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                                >
+                                    <Trophy className="w-4 h-4 mr-1.5" />
+                                    ระดับเขตฯ
+                                </button>
+                            </div>
+
                             <form onSubmit={handleManualSubmit} className="space-y-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-600 mb-1">Team ID / Student ID</label>
-                                    <div className="relative">
-                                        <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
-                                        <input 
-                                            type="text" 
-                                            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-center font-mono text-lg uppercase"
-                                            placeholder="T001"
-                                            value={manualId}
-                                            onChange={(e) => setManualId(e.target.value)}
-                                            autoFocus
-                                        />
-                                    </div>
+                                    <label className="block text-sm font-medium text-gray-600 mb-1">เลือกทีม (จากโรงเรียนของท่าน)</label>
+                                    <SearchableSelect 
+                                        options={myTeams}
+                                        value={manualId}
+                                        onChange={setManualId}
+                                        placeholder="-- ค้นหาชื่อทีม / รายการ --"
+                                        icon={<Search className="h-4 w-4" />}
+                                    />
+                                    {myTeams.length === 0 && (
+                                        <p className="text-xs text-red-500 mt-1 text-center">
+                                            ไม่พบทีมในระดับ{viewLevel === 'cluster' ? 'กลุ่มฯ' : 'เขตฯ'}
+                                        </p>
+                                    )}
                                 </div>
                                 <button 
                                     type="submit"
-                                    className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-bold hover:shadow-lg transition-all flex items-center justify-center"
+                                    disabled={!manualId}
+                                    className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-bold hover:shadow-lg transition-all flex items-center justify-center disabled:opacity-50 disabled:shadow-none"
                                 >
-                                    ค้นหา <ChevronRight className="w-5 h-5 ml-1" />
+                                    เปิดบัตรประจำตัว <ChevronRight className="w-5 h-5 ml-1" />
                                 </button>
                             </form>
                         </div>
@@ -186,7 +259,7 @@ const ScannerModal = ({ isOpen, onClose, onSearch }: { isOpen: boolean; onClose:
 
 // --- Main Layout ---
 
-const Layout: React.FC<LayoutProps> = ({ children, userProfile }) => {
+const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
   const isGuest = !userProfile || userProfile.isGuest;
   const navigate = useNavigate();
   const location = useLocation();
@@ -238,11 +311,20 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile }) => {
       <ScannerModal 
         isOpen={showScanner} 
         onClose={() => setShowScanner(false)} 
+        data={data}
+        user={userProfile}
         onSearch={(id) => {
-            // Navigate to ID Cards with search param (Assuming DocumentsView handles filtering, or just go there)
-            // Ideally we pass search state, but for now redirecting to the route
-            navigate('/idcards');
-            // Note: In a real implementation with global state, we would set the search term here.
+            // Close scanner first
+            setShowScanner(false);
+            // Navigate to ID Cards with search param (Ideally pass state, but standard nav works)
+            // We use a small timeout to allow modal animation to clear if needed
+            setTimeout(() => {
+                navigate('/idcards'); 
+                // Note: In a full implementation, we'd pass the 'id' to the DocumentsView to auto-open the modal.
+                // Since DocumentsView uses local state for 'selectedTeamForDigital', we can't easily trigger it from URL without adding route params.
+                // For now, this takes the user to the list where they can see their teams. 
+                // A better approach would be to add ?teamId=... to the URL and handle it in DocumentsView.
+            }, 100);
         }}
       />
 
