@@ -388,15 +388,34 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
   const filteredTeams = useMemo(() => {
     return data.teams.filter(team => {
         
-        // 1. School Filter (Strict if School Admin or User)
-        if (user && (user.level === 'school_admin' || user.level === 'user')) {
-             if (user.SchoolID) {
-                const teamSchool = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
-                const userSchool = data.schools.find(s => s.SchoolID === user.SchoolID);
-                // Allow match by ID or Name (for legacy/mixed data)
-                const isMySchool = team.schoolId === user.SchoolID || (userSchool && team.schoolId === userSchool.SchoolName);
-                if (!isMySchool) return false;
-             }
+        // 1. School & Permission Gatekeeper (Strict Logic)
+        if (user) {
+            const role = user.level?.toLowerCase();
+            
+            if (role === 'school_admin' || role === 'user') {
+                 const userSchoolInfo = data.schools.find(s => s.SchoolID === user.SchoolID);
+                 let hasAccess = false;
+
+                 if (user.SchoolID) {
+                    // Match by School ID
+                    if (team.schoolId === user.SchoolID) {
+                        hasAccess = true;
+                    } 
+                    // Match by Mapped School Name (since Teams sheet stores Name)
+                    else if (userSchoolInfo && team.schoolId === userSchoolInfo.SchoolName) {
+                        hasAccess = true;
+                    }
+                 }
+
+                 // Fallback: If not matched by school (or no school ID), check if created by user
+                 if (!hasAccess && team.createdBy === user.userid) {
+                     hasAccess = true;
+                 }
+
+                 // STRICT DENY: If not authorized by any means, exclude this team immediately
+                 if (!hasAccess) return false;
+            }
+            // Note: Admin, Area, Group Admin pass through to next checks
         }
 
         // 2. Area Level Restriction (Must be Representative AND Rank 1)
