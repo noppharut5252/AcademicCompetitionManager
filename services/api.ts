@@ -1,5 +1,5 @@
 
-import { AppData, User, Team, CertificateTemplate } from '../types';
+import { AppData, User, Team, CertificateTemplate, Venue } from '../types';
 import { getMockData } from './mockData';
 
 const API_URL = "https://script.google.com/macros/s/AKfycbyYcf6m-3ypN3aX8F6prN0BLQcz0JyW0gj3Tq8dJyMs54gaTXSv_1uytthNu9H4CmMy/exec";
@@ -229,6 +229,40 @@ export const saveCertificateConfig = async (id: string, config: CertificateTempl
         return result.status === 'success';
     } catch (e) {
         console.error("Failed to save Cert Config", e);
+        return false;
+    }
+};
+
+// --- Venues API ---
+
+export const saveVenue = async (venue: Venue): Promise<boolean> => {
+    try {
+        const response = await fetch(`${API_URL}?action=saveVenue`, {
+            method: 'POST',
+            mode: 'cors',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify(venue)
+        });
+        if (!response.ok) return false;
+        const result = await response.json();
+        return result.status === 'success';
+    } catch (e) {
+        console.error("Failed to save Venue", e);
+        return false;
+    }
+};
+
+export const deleteVenue = async (venueId: string): Promise<boolean> => {
+    try {
+        const response = await fetch(`${API_URL}?action=deleteVenue&id=${encodeURIComponent(venueId)}`, {
+            method: 'GET',
+            mode: 'cors'
+        });
+        if (!response.ok) return false;
+        const result = await response.json();
+        return result.status === 'success';
+    } catch (e) {
+        console.error("Failed to delete Venue", e);
         return false;
     }
 };
