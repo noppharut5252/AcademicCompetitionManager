@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { LayoutDashboard, Users, Trophy, School, Settings, LogOut, Award, FileBadge, IdCard, LogIn, UserCircle, Edit3, ScanLine, X, Camera, Search, ChevronRight, LayoutGrid } from 'lucide-react';
+import { LayoutDashboard, Users, Trophy, School, Settings, LogOut, Award, FileBadge, IdCard, LogIn, UserCircle, Edit3, ScanLine, X, Camera, Search, ChevronRight, LayoutGrid, RotateCcw } from 'lucide-react';
 import { logoutLiff } from '../services/liff';
 import { User, AppData } from '../types';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -31,6 +31,7 @@ const ScannerModal = ({
     const [manualId, setManualId] = useState(''); // Stores Team ID
     const [viewLevel, setViewLevel] = useState<'cluster' | 'area'>('cluster');
     const [cameraError, setCameraError] = useState(false);
+    const [errorMessage, setErrorMessage] = useState('');
     const streamRef = useRef<MediaStream | null>(null);
 
     // Compute teams list for the Select2 dropdown
@@ -69,7 +70,9 @@ const ScannerModal = ({
 
     useEffect(() => {
         if (isOpen && mode === 'scan') {
-            startCamera();
+            // Small timeout to allow UI transition to finish before requesting hardware
+            const timer = setTimeout(() => startCamera(), 300);
+            return () => clearTimeout(timer);
         } else {
             stopCamera();
         }
@@ -77,11 +80,14 @@ const ScannerModal = ({
     }, [isOpen, mode]);
 
     const startCamera = async () => {
+        stopCamera(); // Ensure cleanup of any previous streams
         setCameraError(false);
+        setErrorMessage('');
         
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
             console.error("MediaDevices API not available");
             setCameraError(true);
+            setErrorMessage("Browser does not support camera access or context is insecure (http).");
             return;
         }
 
@@ -91,7 +97,7 @@ const ScannerModal = ({
                 video: { facingMode: 'environment' } 
             });
             handleStream(stream);
-        } catch (err) {
+        } catch (err: any) {
             console.warn("Back camera access failed, trying fallback...", err);
             try {
                 // Attempt 2: Fallback to any available video source
@@ -99,9 +105,10 @@ const ScannerModal = ({
                     video: true 
                 });
                 handleStream(stream);
-            } catch (fallbackErr) {
+            } catch (fallbackErr: any) {
                 console.error("Camera access denied or not available", fallbackErr);
                 setCameraError(true);
+                setErrorMessage(fallbackErr.message || "Could not start video source.");
             }
         }
     };
@@ -110,14 +117,26 @@ const ScannerModal = ({
         streamRef.current = stream;
         if (videoRef.current) {
             videoRef.current.srcObject = stream;
-            videoRef.current.play().catch(e => console.error("Error playing video:", e));
+            // IMPORTANT: Wait for metadata to load before playing to avoid "The play() request was interrupted" errors
+            videoRef.current.onloadedmetadata = () => {
+                videoRef.current?.play().catch(e => console.error("Error playing video:", e));
+            };
         }
     };
 
     const stopCamera = () => {
         if (streamRef.current) {
-            streamRef.current.getTracks().forEach(track => track.stop());
+            streamRef.current.getTracks().forEach(track => {
+                try {
+                    track.stop();
+                } catch(e) {
+                    console.warn("Error stopping track", e);
+                }
+            });
             streamRef.current = null;
+        }
+        if (videoRef.current) {
+            videoRef.current.srcObject = null;
         }
     };
 
@@ -134,7 +153,7 @@ const ScannerModal = ({
     return (
         <div className="fixed inset-0 z-[100] bg-black flex flex-col animate-in fade-in duration-300">
             {/* Header */}
-            <div className="flex justify-between items-center p-4 bg-black/50 text-white absolute top-0 w-full z-10">
+            <div className="flex justify-between items-center p-4 bg-black/50 text-white absolute top-0 w-full z-10 backdrop-blur-sm">
                 <h3 className="font-bold text-lg flex items-center">
                     {mode === 'scan' ? <ScanLine className="w-5 h-5 mr-2" /> : <IdCard className="w-5 h-5 mr-2" />}
                     {mode === 'scan' ? 'สแกน QR Code' : 'เลือกบัตรประจำตัว'}
@@ -170,16 +189,25 @@ const ScannerModal = ({
                                 <p className="absolute bottom-20 w-full text-center text-white/80 text-sm">วาง QR Code ให้อยู่ในกรอบ</p>
                             </div>
                         ) : (
-                            <div className="text-center text-white p-6">
+                            <div className="text-center text-white p-6 max-w-sm">
                                 <Camera className="w-16 h-16 mx-auto mb-4 text-gray-500" />
                                 <p className="text-lg font-bold mb-2">ไม่สามารถเปิดกล้องได้</p>
-                                <p className="text-sm text-gray-400 mb-6">กรุณาอนุญาตให้เข้าถึงกล้อง หรือใช้การค้นหาทีมแทน</p>
-                                <button 
-                                    onClick={() => setMode('manual')}
-                                    className="px-6 py-2 bg-blue-600 text-white rounded-full font-medium hover:bg-blue-700"
-                                >
-                                    ค้นหาทีม
-                                </button>
+                                <p className="text-sm text-gray-400 mb-2">กรุณาตรวจสอบการอนุญาตเข้าถึงกล้องในเบราว์เซอร์</p>
+                                {errorMessage && <p className="text-xs text-red-400 mb-6 bg-red-900/30 p-2 rounded">{errorMessage}</p>}
+                                <div className="flex flex-col gap-3">
+                                    <button 
+                                        onClick={() => startCamera()}
+                                        className="px-6 py-2 bg-white/10 text-white rounded-full font-medium hover:bg-white/20 border border-white/20 flex items-center justify-center"
+                                    >
+                                        <RotateCcw className="w-4 h-4 mr-2" /> ลองใหม่อีกครั้ง
+                                    </button>
+                                    <button 
+                                        onClick={() => setMode('manual')}
+                                        className="px-6 py-2 bg-blue-600 text-white rounded-full font-medium hover:bg-blue-700"
+                                    >
+                                        ใช้การค้นหาทีมแทน
+                                    </button>
+                                </div>
                             </div>
                         )}
                     </>
