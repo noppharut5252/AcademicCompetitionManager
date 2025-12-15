@@ -9,6 +9,7 @@ import DocumentsView from './components/DocumentsView';
 import ProfileView from './components/ProfileView'; // Import ProfileView
 import ScoreEntry from './components/ScoreEntry'; // Import ScoreEntry
 import VerifyCertificate from './components/VerifyCertificate'; // Import VerifyCertificate
+import VenuesView from './components/VenuesView'; // Import VenuesView
 import { AppData, User } from './types';
 import { fetchData, loginStandardUser, checkUserPermission } from './services/api';
 import { initLiff, loginLiff, LiffProfile } from './services/liff';
@@ -359,6 +360,7 @@ const App: React.FC = () => {
                             <Route path="/" element={<Navigate to="/dashboard" replace />} />
                             <Route path="/dashboard" element={<Dashboard data={data} user={currentUser} />} />
                             <Route path="/teams" element={<TeamList data={data} user={currentUser} onDataUpdate={() => fetchAppData(true)} />} />
+                            <Route path="/venues" element={<VenuesView data={data} user={currentUser} />} />
                             <Route path="/activities" element={<ActivityList data={data} />} />
                             <Route path="/score" element={<ScoreEntry data={data} user={currentUser} onDataUpdate={() => fetchAppData(true)} />} />
                             <Route path="/results" element={<ResultsView data={data} />} />
@@ -386,4 +388,3 @@ const TrophyIcon = ({ className }: { className?: string }) => (
 );
 
 export default App;
-

@@ -63,4 +63,3 @@ export const formatDeadline = (isoString: string) => {
         minute: '2-digit'
     });
 };
-

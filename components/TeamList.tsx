@@ -1262,4 +1262,3 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
 };
 
 export default TeamList;
-

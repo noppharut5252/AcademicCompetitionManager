@@ -1057,4 +1057,3 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
 };
 
 export default ScoreEntry;
-

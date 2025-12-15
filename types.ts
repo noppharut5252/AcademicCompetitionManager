@@ -179,4 +179,3 @@ export interface AppData {
   announcements: Announcement[];
   venues: Venue[]; // Added Venues
 }
-

@@ -596,4 +596,3 @@ const CertificateConfigModal: React.FC<CertificateConfigModalProps> = ({ isOpen,
 };
 
 export default CertificateConfigModal;
-

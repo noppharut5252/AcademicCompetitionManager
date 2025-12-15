@@ -1471,4 +1471,3 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
 };
 
 export default DocumentsView;
-

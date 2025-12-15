@@ -270,4 +270,3 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user, data, onUpdateUser, isR
 };
 
 export default ProfileView;
-

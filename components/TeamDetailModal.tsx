@@ -1036,4 +1036,3 @@ const AwardIcon = ({ className }: { className?: string }) => (
 );
 
 export default TeamDetailModal;
-

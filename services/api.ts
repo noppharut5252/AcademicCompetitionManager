@@ -287,4 +287,3 @@ export const getTeamsByActivity = (data: AppData) => {
   });
   return Object.keys(counts).map(key => ({ name: key, value: counts[key] }));
 };
-

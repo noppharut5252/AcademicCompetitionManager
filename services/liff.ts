@@ -533,4 +533,3 @@ export const shareTop3Result = async (
         return { success: false, method: 'error' };
     }
 }
-

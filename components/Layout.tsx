@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { LayoutDashboard, Users, Trophy, School, Settings, LogOut, Award, FileBadge, IdCard, LogIn, UserCircle, Edit3, ScanLine, X, Camera, Search, ChevronRight, LayoutGrid, RotateCcw, Loader2, Zap } from 'lucide-react';
+import { LayoutDashboard, Users, Trophy, School, Settings, LogOut, Award, FileBadge, IdCard, LogIn, UserCircle, Edit3, ScanLine, X, Camera, Search, ChevronRight, LayoutGrid, RotateCcw, Loader2, Zap, MapPin } from 'lucide-react';
 import { logoutLiff } from '../services/liff';
 import { User, AppData } from '../types';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -426,6 +426,7 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
   const menuItems = [
     { id: 'dashboard', label: 'หน้าหลัก', icon: LayoutDashboard },
     { id: 'teams', label: 'ทีม', icon: Users },
+    { id: 'venues', label: 'สนาม/วันแข่ง', icon: MapPin }, // Added Venue Menu
     { id: 'activities', label: 'รายการ', icon: Trophy },
     ...(canScore ? [{ id: 'score', label: 'บันทึกคะแนน', icon: Edit3 }] : []),
     { id: 'results', label: 'ผลรางวัล', icon: Award },
@@ -648,11 +649,11 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
                     <span className="text-[10px] font-medium">ผลรางวัล</span>
                 </button>
                 <button
-                    onClick={() => handleNav('settings')} // Or a dedicated menu route
-                    className={`flex flex-col items-center justify-center w-full space-y-1 ${['settings','certificates','idcards','profile','score'].includes(activeTab) ? 'text-blue-600' : 'text-gray-400'}`}
+                    onClick={() => handleNav('venues')} 
+                    className={`flex flex-col items-center justify-center w-full space-y-1 ${['venues', 'settings','certificates','idcards','profile','score'].includes(activeTab) ? 'text-blue-600' : 'text-gray-400'}`}
                 >
-                    <Settings className="w-6 h-6" />
-                    <span className="text-[10px] font-medium">เมนู</span>
+                    <MapPin className="w-6 h-6" />
+                    <span className="text-[10px] font-medium">สนาม/วัน</span>
                 </button>
             </div>
         </div>
@@ -662,4 +663,3 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
 };
 
 export default Layout;
-
