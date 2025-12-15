@@ -42,6 +42,16 @@ export const resizeImage = (file: File, maxWidth: number = 400, maxHeight: numbe
     });
 };
 
+// New: Convert file to Base64 directly without resizing (for high quality bg)
+export const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = (error) => reject(error);
+    });
+};
+
 export const formatDeadline = (isoString: string) => {
     if (!isoString) return '';
     const date = new Date(isoString);
@@ -53,3 +63,4 @@ export const formatDeadline = (isoString: string) => {
         minute: '2-digit'
     });
 };
+
