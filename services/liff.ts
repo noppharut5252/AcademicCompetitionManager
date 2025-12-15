@@ -73,6 +73,220 @@ export const logoutLiff = async () => {
   window.location.reload();
 };
 
+export const shareIdCard = async (
+    teamName: string,
+    schoolName: string,
+    memberName: string,
+    role: string,
+    teamId: string,
+    imageUrl: string,
+    levelText: string
+): Promise<{ success: boolean; method: 'line' | 'share' | 'copy' | 'error' }> => {
+    
+    await ensureLiffInitialized();
+
+    const appUrl = `${window.location.origin}${window.location.pathname}#/idcards?id=${teamId}`;
+    const roleText = role === 'Teacher' ? 'ครูผู้ฝึกสอน (Trainer)' : 'ผู้เข้าแข่งขัน (Competitor)';
+    const headerColor = role === 'Teacher' ? '#4F46E5' : '#10B981'; // Indigo for Teacher, Green for Student
+
+    // 1. Try LINE Flex Message
+    // @ts-ignore
+    if (typeof liff !== 'undefined' && liff.isLoggedIn() && liff.isApiAvailable('shareTargetPicker')) {
+        
+        const flexMessage = {
+            type: "flex",
+            altText: `Digital ID: ${memberName}`,
+            contents: {
+                "type": "bubble",
+                "size": "mega",
+                "header": {
+                  "type": "box",
+                  "layout": "vertical",
+                  "contents": [
+                    {
+                      "type": "text",
+                      "text": "DIGITAL ID CARD",
+                      "color": "#ffffff",
+                      "align": "start",
+                      "size": "xs",
+                      "gravity": "center",
+                      "weight": "bold",
+                      "letterSpacing": "2px"
+                    },
+                    {
+                      "type": "text",
+                      "text": levelText,
+                      "color": "#ffffff",
+                      "align": "start",
+                      "size": "xxs",
+                      "gravity": "center",
+                      "alpha": 0.8
+                    }
+                  ],
+                  "backgroundColor": headerColor,
+                  "paddingTop": "15px",
+                  "paddingAll": "15px",
+                  "paddingBottom": "35px"
+                },
+                "body": {
+                  "type": "box",
+                  "layout": "vertical",
+                  "contents": [
+                    {
+                      "type": "box",
+                      "layout": "horizontal",
+                      "contents": [
+                        {
+                          "type": "box",
+                          "layout": "vertical",
+                          "contents": [
+                            {
+                              "type": "image",
+                              "url": imageUrl,
+                              "aspectMode": "cover",
+                              "size": "full"
+                            }
+                          ],
+                          "cornerRadius": "100px",
+                          "width": "80px",
+                          "height": "80px",
+                          "borderWidth": "3px",
+                          "borderColor": "#ffffff"
+                        }
+                      ],
+                      "justifyContent": "center",
+                      "offsetTop": "-60px"
+                    },
+                    {
+                      "type": "box",
+                      "layout": "vertical",
+                      "contents": [
+                        {
+                          "type": "text",
+                          "text": memberName,
+                          "align": "center",
+                          "weight": "bold",
+                          "size": "xl",
+                          "color": "#111111",
+                          "wrap": true
+                        },
+                        {
+                          "type": "text",
+                          "text": roleText,
+                          "align": "center",
+                          "size": "xs",
+                          "color": "#999999",
+                          "margin": "xs"
+                        }
+                      ],
+                      "offsetTop": "-45px"
+                    },
+                    {
+                      "type": "box",
+                      "layout": "vertical",
+                      "contents": [
+                        {
+                          "type": "box",
+                          "layout": "vertical",
+                          "contents": [
+                            {
+                              "type": "text",
+                              "text": "โรงเรียน / School",
+                              "size": "xxs",
+                              "color": "#aaaaaa"
+                            },
+                            {
+                              "type": "text",
+                              "text": schoolName,
+                              "size": "sm",
+                              "color": "#333333",
+                              "wrap": true,
+                              "weight": "bold"
+                            }
+                          ],
+                          "margin": "md"
+                        },
+                        {
+                          "type": "box",
+                          "layout": "vertical",
+                          "contents": [
+                            {
+                              "type": "text",
+                              "text": "ทีม / Team",
+                              "size": "xxs",
+                              "color": "#aaaaaa"
+                            },
+                            {
+                              "type": "text",
+                              "text": teamName,
+                              "size": "sm",
+                              "color": "#333333",
+                              "wrap": true,
+                              "weight": "bold"
+                            }
+                          ],
+                          "margin": "md"
+                        }
+                      ],
+                      "paddingAll": "15px",
+                      "backgroundColor": "#f7f9fc",
+                      "cornerRadius": "10px",
+                      "offsetTop": "-20px"
+                    }
+                  ],
+                  "paddingAll": "0px"
+                },
+                "footer": {
+                  "type": "box",
+                  "layout": "vertical",
+                  "contents": [
+                    {
+                      "type": "button",
+                      "action": {
+                        "type": "uri",
+                        "label": "เปิดบัตรประจำตัว",
+                        "uri": appUrl
+                      },
+                      "style": "primary",
+                      "color": headerColor,
+                      "height": "sm"
+                    }
+                  ],
+                  "paddingAll": "15px"
+                }
+              }
+        };
+
+        try {
+            // @ts-ignore
+            await liff.shareTargetPicker([flexMessage]);
+            return { success: true, method: 'line' };
+        } catch (error) {
+            console.error("LINE Share ID failed", error);
+        }
+    }
+
+    // Fallback: Web Share
+    if (navigator.share) {
+        try {
+            await navigator.share({
+                title: 'Digital ID Card',
+                text: `${memberName} - ${teamName}`,
+                url: appUrl,
+            });
+            return { success: true, method: 'share' };
+        } catch (error) { console.log("Web Share cancelled"); }
+    }
+
+    // Fallback: Copy Link
+    try {
+        await navigator.clipboard.writeText(appUrl);
+        return { success: true, method: 'copy' };
+    } catch (err) {
+        return { success: false, method: 'error' };
+    }
+}
+
 export const shareScoreResult = async (
   teamName: string, 
   schoolName: string, 
