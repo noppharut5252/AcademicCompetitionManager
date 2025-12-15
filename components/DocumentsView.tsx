@@ -1,7 +1,7 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { AppData, Team, TeamStatus, User } from '../types';
-import { Search, Printer, IdCard, Smartphone, CheckCircle, X, ChevronLeft, ChevronRight, User as UserIcon, GraduationCap, School, MapPin, LayoutGrid, Trophy, Lock, QrCode } from 'lucide-react';
+import { Search, Printer, IdCard, Smartphone, CheckCircle, X, ChevronLeft, ChevronRight, User as UserIcon, GraduationCap, School, MapPin, LayoutGrid, Trophy, Lock, QrCode, Maximize2, Minimize2, Share2, Download } from 'lucide-react';
 
 interface DocumentsViewProps {
   data: AppData;
@@ -11,11 +11,14 @@ interface DocumentsViewProps {
 
 // --- Helper for QR Code URL ---
 const getQrCodeUrl = (text: string, size: number = 150) => {
-    return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(text)}`;
+    return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(text)}&margin=10`;
 };
 
-// --- Digital ID Card Component ---
-const DigitalIdCard = ({ member, role, team, activity, schoolName, viewLevel }: { member: any, role: string, team: Team, activity: string, schoolName: string, viewLevel: 'cluster' | 'area' }) => {
+// --- Single Expanded Digital ID Card (Full Screen Mode) ---
+const ExpandedIdCard = ({ member, role, team, activity, schoolName, viewLevel, onClose }: { member: any, role: string, team: Team, activity: string, schoolName: string, viewLevel: 'cluster' | 'area', onClose: () => void }) => {
+    const cardRef = useRef<HTMLDivElement>(null);
+    const [isFullscreen, setIsFullscreen] = useState(false);
+
     const getPhotoUrl = (urlOrId: string) => {
         if (!urlOrId) return "https://cdn-icons-png.flaticon.com/512/3135/3135768.png";
         if (urlOrId.startsWith('http')) return urlOrId;
@@ -27,96 +30,138 @@ const DigitalIdCard = ({ member, role, team, activity, schoolName, viewLevel }: 
     const name = member.name || `${member.firstname || ''} ${member.lastname || ''}`;
     const fullName = `${prefix}${name}`.trim();
     
-    // Style adjustments based on level
     const isArea = viewLevel === 'area';
-    const bgGradient = isArea ? 'bg-gradient-to-br from-indigo-900 via-purple-900 to-indigo-900' : 'bg-gradient-to-br from-blue-900 via-blue-800 to-blue-900';
+    // Use darker/richer gradients for full screen appeal
+    const bgGradient = isArea 
+        ? 'bg-gradient-to-br from-indigo-900 via-purple-900 to-slate-900' 
+        : 'bg-gradient-to-br from-blue-900 via-blue-800 to-slate-900';
     const accentColor = isArea ? 'text-purple-400' : 'text-blue-400';
     const levelText = isArea ? 'DISTRICT LEVEL' : 'CLUSTER LEVEL';
-    const levelThai = isArea ? 'ระดับเขตพื้นที่การศึกษา' : 'ระดับกลุ่มเครือข่าย';
+
+    const toggleFullscreen = () => {
+        if (!document.fullscreenElement) {
+            cardRef.current?.requestFullscreen().catch(err => {
+                console.log(`Error attempting to enable full-screen mode: ${err.message}`);
+            });
+            setIsFullscreen(true);
+        } else {
+            document.exitFullscreen();
+            setIsFullscreen(false);
+        }
+    };
+
+    const handleShare = async () => {
+        if (navigator.share) {
+            try {
+                await navigator.share({
+                    title: 'Digital ID Card',
+                    text: `Digital ID: ${fullName} - ${team.teamName}`,
+                    url: window.location.href
+                });
+            } catch (error) { console.log('Error sharing', error); }
+        } else {
+            alert("Capture this screen to save your ID Card");
+        }
+    };
 
     return (
-        <div className="relative w-full max-w-[340px] bg-white rounded-3xl shadow-2xl overflow-hidden border border-gray-200 mx-auto flex flex-col h-auto min-h-[550px]">
-            
-            {/* Header Background */}
-            <div className={`absolute top-0 left-0 right-0 h-40 ${bgGradient} rounded-b-[3rem] z-0`}>
-                 <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)', backgroundSize: '20px 20px' }}></div>
-            </div>
-            
-            {/* Content Container */}
-            <div className="relative z-10 flex flex-col items-center pt-8 px-6 pb-8 h-full">
-                
-                {/* Event Title */}
-                <div className="text-center mb-6">
-                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/20 mb-2">
-                        <Trophy className="w-3 h-3 text-yellow-400" />
-                        <span className="text-[10px] font-bold text-white tracking-wider uppercase">{levelText}</span>
-                    </div>
-                    <h2 className="text-white font-bold text-xl drop-shadow-md font-kanit">Academic Competition</h2>
-                    <p className="text-white/80 text-xs font-light">{levelThai}</p>
-                </div>
-
-                {/* Photo & Badge */}
-                <div className="relative mb-5 group">
-                    <div className="absolute -inset-1 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full blur opacity-75 group-hover:opacity-100 transition duration-1000 group-hover:duration-200"></div>
-                    <img 
-                        src={imageUrl} 
-                        alt={fullName}
-                        className="relative w-36 h-36 rounded-full object-cover border-4 border-white shadow-xl bg-gray-100"
-                        onError={(e) => { (e.target as HTMLImageElement).src = "https://cdn-icons-png.flaticon.com/512/3135/3135768.png"; }}
-                    />
-                    <div className={`absolute bottom-1 right-1 px-3 py-1 rounded-full text-xs font-bold text-white shadow-lg border-2 border-white flex items-center gap-1 uppercase tracking-wide ${role === 'Teacher' ? 'bg-indigo-600' : 'bg-emerald-600'}`}>
-                        {role === 'Teacher' ? <UserIcon className="w-3 h-3" /> : <GraduationCap className="w-3 h-3" />}
-                        {role === 'Teacher' ? 'Staff' : 'Student'}
+        <div className="fixed inset-0 z-[150] bg-black flex flex-col items-center justify-center animate-in fade-in zoom-in duration-300">
+            {/* Toolbar */}
+            {!isFullscreen && (
+                <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-center z-50 bg-gradient-to-b from-black/80 to-transparent">
+                    <button onClick={onClose} className="p-2 bg-white/10 rounded-full text-white backdrop-blur-md hover:bg-white/20 transition-colors">
+                        <X className="w-6 h-6" />
+                    </button>
+                    <div className="flex gap-3">
+                        <button onClick={handleShare} className="p-2 bg-white/10 rounded-full text-white backdrop-blur-md hover:bg-white/20 transition-colors">
+                            <Share2 className="w-6 h-6" />
+                        </button>
+                        <button onClick={toggleFullscreen} className="p-2 bg-white/10 rounded-full text-white backdrop-blur-md hover:bg-white/20 transition-colors">
+                            <Maximize2 className="w-6 h-6" />
+                        </button>
                     </div>
                 </div>
+            )}
 
-                {/* Name */}
-                <div className="text-center mb-6 w-full">
-                    <h2 className="text-gray-900 font-bold text-xl sm:text-2xl leading-tight mb-1 font-kanit break-words">{fullName}</h2>
-                    <p className="text-gray-500 text-sm font-medium">{role === 'Teacher' ? 'ครูผู้ฝึกสอน' : 'ผู้เข้าแข่งขัน'}</p>
+            {/* Main Card Container */}
+            <div 
+                ref={cardRef} 
+                className={`relative w-full h-full max-w-md bg-white flex flex-col overflow-hidden shadow-2xl ${isFullscreen ? '' : 'rounded-none sm:rounded-3xl sm:h-auto sm:aspect-[9/16] sm:max-h-[85vh]'}`}
+            >
+                {/* Header Background */}
+                <div className={`absolute top-0 left-0 right-0 h-1/3 ${bgGradient} rounded-b-[40%] z-0`}>
+                     <div className="absolute inset-0 opacity-30" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)', backgroundSize: '30px 30px' }}></div>
+                     {/* Decorative Circles */}
+                     <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-2xl"></div>
+                     <div className="absolute top-20 -left-10 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
                 </div>
 
-                {/* Info Grid */}
-                <div className="w-full bg-gray-50 rounded-2xl p-4 border border-gray-100 space-y-3 mb-6">
-                    <div className="flex items-start gap-3">
-                        <div className={`p-2 rounded-lg bg-white shadow-sm shrink-0 ${accentColor}`}>
-                            <School className="w-4 h-4" />
-                        </div>
-                        <div className="min-w-0">
-                            <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">School</p>
-                            <p className="text-sm font-semibold text-gray-800 leading-snug break-words">{schoolName}</p>
-                        </div>
-                    </div>
+                {/* Content */}
+                <div className="relative z-10 flex flex-col items-center h-full px-6 pt-12 pb-8 justify-between">
                     
-                    <div className="flex items-start gap-3">
-                        <div className={`p-2 rounded-lg bg-white shadow-sm shrink-0 ${accentColor}`}>
-                            <Trophy className="w-4 h-4" />
+                    {/* Top Section: Photo & Identity */}
+                    <div className="flex flex-col items-center w-full">
+                        <div className="mb-4">
+                            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 shadow-lg">
+                                <Trophy className="w-4 h-4 text-yellow-400" />
+                                <span className="text-xs font-bold text-white tracking-widest uppercase">{levelText}</span>
+                            </div>
                         </div>
-                        <div className="min-w-0">
-                            <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Activity</p>
-                            <p className="text-sm font-semibold text-gray-800 leading-snug break-words">{activity}</p>
+
+                        <div className="relative mb-6">
+                            <div className="absolute -inset-1.5 bg-gradient-to-tr from-yellow-400 via-orange-500 to-purple-600 rounded-full blur opacity-75 animate-pulse"></div>
+                            <img 
+                                src={imageUrl} 
+                                alt={fullName}
+                                className="relative w-40 h-40 rounded-full object-cover border-4 border-white shadow-2xl bg-gray-100"
+                                onError={(e) => { (e.target as HTMLImageElement).src = "https://cdn-icons-png.flaticon.com/512/3135/3135768.png"; }}
+                            />
+                            <div className={`absolute bottom-2 right-2 px-3 py-1 rounded-full text-xs font-bold text-white shadow-lg border-2 border-white flex items-center gap-1 uppercase tracking-wide ${role === 'Teacher' ? 'bg-indigo-600' : 'bg-emerald-600'}`}>
+                                {role === 'Teacher' ? <UserIcon className="w-3 h-3" /> : <GraduationCap className="w-3 h-3" />}
+                                {role === 'Teacher' ? 'Staff' : 'Student'}
+                            </div>
+                        </div>
+
+                        <h2 className="text-gray-900 font-bold text-2xl sm:text-3xl leading-tight text-center font-kanit mb-1">{fullName}</h2>
+                        <p className="text-gray-500 font-medium">{schoolName}</p>
+                    </div>
+
+                    {/* Middle Section: Details */}
+                    <div className="w-full space-y-4 my-4">
+                        <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100 shadow-inner">
+                            <div className="flex items-start gap-3 mb-3">
+                                <div className={`p-2 rounded-lg bg-white shadow-sm shrink-0 ${accentColor}`}>
+                                    <Trophy className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <p className="text-[10px] text-gray-400 uppercase font-bold">Activity</p>
+                                    <p className="text-sm font-semibold text-gray-800 leading-snug">{activity}</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <div className={`p-2 rounded-lg bg-white shadow-sm shrink-0 ${accentColor}`}>
+                                    <MapPin className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <p className="text-[10px] text-gray-400 uppercase font-bold">Team ID</p>
+                                    <p className="text-base font-mono font-bold text-gray-900 tracking-wider">{team.teamId}</p>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
-                    <div className="flex items-start gap-3">
-                         <div className={`p-2 rounded-lg bg-white shadow-sm shrink-0 ${accentColor}`}>
-                            <MapPin className="w-4 h-4" />
+                    {/* Bottom Section: QR Code for Scanning */}
+                    <div className="w-full bg-white rounded-2xl p-4 shadow-xl border border-gray-200 flex items-center justify-between">
+                        <div className="text-left">
+                            <p className="text-xs font-bold text-gray-900 uppercase">Scan for Check-in</p>
+                            <p className="text-[10px] text-gray-500 mt-1">Show this QR code to staff</p>
+                            <div className="mt-2 flex items-center gap-1 text-[10px] text-green-600 font-medium bg-green-50 px-2 py-1 rounded w-fit">
+                                <CheckCircle className="w-3 h-3" /> Active Status
+                            </div>
                         </div>
-                        <div className="min-w-0">
-                            <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Team ID</p>
-                            <p className="text-sm font-mono font-bold text-gray-800 bg-gray-200 px-2 rounded inline-block">{team.teamId}</p>
+                        <div className="bg-white p-1 rounded-lg border border-gray-100">
+                            <img src={getQrCodeUrl(team.teamId, 120)} alt="QR" className="w-24 h-24 mix-blend-multiply" />
                         </div>
-                    </div>
-                </div>
-
-                {/* QR Code Footer */}
-                <div className="mt-auto w-full pt-4 border-t border-dashed border-gray-200 flex items-center justify-between">
-                    <div className="text-left">
-                        <p className="text-[10px] text-gray-400 font-medium">SCAN FOR VERIFICATION</p>
-                        <p className="text-[10px] text-gray-300">ID: {team.teamId}</p>
-                    </div>
-                    <div className="bg-white p-1 rounded border border-gray-100 shadow-sm">
-                        <img src={getQrCodeUrl(team.teamId, 60)} alt="QR" className="w-12 h-12 opacity-90" />
                     </div>
                 </div>
             </div>
@@ -124,8 +169,78 @@ const DigitalIdCard = ({ member, role, team, activity, schoolName, viewLevel }: 
     );
 };
 
+// --- Digital ID Card Thumbnail (In Grid) ---
+const DigitalIdCard = ({ member, role, team, activity, schoolName, viewLevel, onClick }: { member: any, role: string, team: Team, activity: string, schoolName: string, viewLevel: 'cluster' | 'area', onClick: () => void }) => {
+    const getPhotoUrl = (urlOrId: string) => {
+        if (!urlOrId) return "https://cdn-icons-png.flaticon.com/512/3135/3135768.png";
+        if (urlOrId.startsWith('http')) return urlOrId;
+        return `https://drive.google.com/thumbnail?id=${urlOrId}`;
+    };
+
+    const imageUrl = member.image || (member.photoDriveId ? getPhotoUrl(member.photoDriveId) : getPhotoUrl(''));
+    const prefix = member.prefix || '';
+    const name = member.name || `${member.firstname || ''} ${member.lastname || ''}`;
+    const fullName = `${prefix}${name}`.trim();
+    
+    const isArea = viewLevel === 'area';
+    const bgGradient = isArea ? 'bg-gradient-to-br from-indigo-900 via-purple-900 to-indigo-900' : 'bg-gradient-to-br from-blue-900 via-blue-800 to-blue-900';
+    const levelText = isArea ? 'DISTRICT' : 'CLUSTER';
+
+    return (
+        <div 
+            onClick={onClick}
+            className="group relative w-full aspect-[3/4.5] bg-white rounded-2xl shadow-md hover:shadow-xl overflow-hidden border border-gray-200 cursor-pointer transform transition-all duration-300 hover:-translate-y-1"
+        >
+            {/* Header Background */}
+            <div className={`absolute top-0 left-0 right-0 h-1/3 ${bgGradient} z-0`}></div>
+            
+            {/* Content */}
+            <div className="relative z-10 flex flex-col items-center pt-6 px-4 h-full pb-4">
+                
+                <span className="text-[10px] font-bold text-white/90 tracking-widest uppercase mb-4 border border-white/20 px-2 py-0.5 rounded-full">{levelText}</span>
+
+                {/* Photo */}
+                <div className="relative w-24 h-24 mb-3">
+                    <img 
+                        src={imageUrl} 
+                        alt={fullName}
+                        className="w-24 h-24 rounded-full object-cover border-4 border-white shadow-lg bg-gray-100 group-hover:scale-105 transition-transform duration-500"
+                        onError={(e) => { (e.target as HTMLImageElement).src = "https://cdn-icons-png.flaticon.com/512/3135/3135768.png"; }}
+                    />
+                    <div className={`absolute bottom-0 right-0 w-7 h-7 rounded-full border-2 border-white flex items-center justify-center shadow-sm text-white ${role === 'Teacher' ? 'bg-indigo-500' : 'bg-green-500'}`}>
+                        {role === 'Teacher' ? <UserIcon className="w-3 h-3" /> : <GraduationCap className="w-3 h-3" />}
+                    </div>
+                </div>
+
+                {/* Name */}
+                <div className="text-center mb-auto w-full px-2">
+                    <h3 className="text-gray-900 font-bold text-lg leading-tight mb-1 line-clamp-2">{fullName}</h3>
+                    <p className="text-xs text-gray-500">{role === 'Teacher' ? 'ครูผู้ฝึกสอน' : 'ผู้เข้าแข่งขัน'}</p>
+                </div>
+
+                {/* Bottom Info */}
+                <div className="w-full text-center mt-4 pt-3 border-t border-dashed border-gray-200">
+                    <div className="flex items-center justify-center text-xs text-gray-400 mb-2">
+                        <QrCode className="w-3 h-3 mr-1" />
+                        <span>Tap to Expand</span>
+                    </div>
+                    <p className="text-[10px] text-gray-400 font-mono">ID: {team.teamId}</p>
+                </div>
+            </div>
+            
+            {/* Hover Overlay Hint */}
+            <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                <Maximize2 className="w-8 h-8 text-white drop-shadow-md opacity-80" />
+            </div>
+        </div>
+    );
+};
+
 // --- Digital ID Modal ---
 const DigitalIdModal = ({ team, data, onClose, viewLevel }: { team: Team, data: AppData, onClose: () => void, viewLevel: 'cluster' | 'area' }) => {
+    const [expandedMember, setExpandedMember] = useState<any | null>(null);
+    const [expandedRole, setExpandedRole] = useState('');
+
     const activity = data.activities.find(a => a.id === team.activityId)?.name || team.activityId;
     const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId)?.SchoolName || team.schoolId;
 
@@ -155,7 +270,21 @@ const DigitalIdModal = ({ team, data, onClose, viewLevel }: { team: Team, data: 
 
     return (
         <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-            <div className="bg-gray-100 w-full max-w-6xl h-[95vh] rounded-2xl overflow-hidden flex flex-col shadow-2xl relative">
+            
+            {/* Full Screen Member View */}
+            {expandedMember && (
+                <ExpandedIdCard 
+                    member={expandedMember} 
+                    role={expandedRole} 
+                    team={team} 
+                    activity={activity} 
+                    schoolName={school} 
+                    viewLevel={viewLevel} 
+                    onClose={() => setExpandedMember(null)} 
+                />
+            )}
+
+            <div className="bg-gray-100 w-full max-w-5xl h-[90vh] rounded-2xl overflow-hidden flex flex-col shadow-2xl relative">
                 
                 <div className="bg-white px-6 py-4 border-b border-gray-200 flex justify-between items-center z-10 shrink-0">
                     <div>
@@ -163,7 +292,11 @@ const DigitalIdModal = ({ team, data, onClose, viewLevel }: { team: Team, data: 
                             <Smartphone className="w-5 h-5 mr-2 text-blue-600" />
                             บัตรประจำตัวดิจิทัล ({viewLevel === 'area' ? 'ระดับเขตพื้นที่' : 'ระดับกลุ่มเครือข่าย'})
                         </h3>
-                        <p className="text-sm text-gray-500">{team.teamName} - {school}</p>
+                        <p className="text-sm text-gray-500 flex items-center gap-2">
+                            <span className="font-medium">{team.teamName}</span>
+                            <span className="text-gray-300">|</span>
+                            <span>{school}</span>
+                        </p>
                     </div>
                     <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
                         <X className="w-6 h-6 text-gray-500" />
@@ -171,12 +304,30 @@ const DigitalIdModal = ({ team, data, onClose, viewLevel }: { team: Team, data: 
                 </div>
 
                 <div className="overflow-y-auto p-6 flex-1 bg-gray-50">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 pb-10">
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 pb-10">
                         {teachers.map((m, idx) => (
-                            <DigitalIdCard key={`t-${idx}`} member={m} role="Teacher" team={team} activity={activity} schoolName={school} viewLevel={viewLevel} />
+                            <DigitalIdCard 
+                                key={`t-${idx}`} 
+                                member={m} 
+                                role="Teacher" 
+                                team={team} 
+                                activity={activity} 
+                                schoolName={school} 
+                                viewLevel={viewLevel} 
+                                onClick={() => { setExpandedMember(m); setExpandedRole('Teacher'); }}
+                            />
                         ))}
                         {students.map((m, idx) => (
-                            <DigitalIdCard key={`s-${idx}`} member={m} role="Student" team={team} activity={activity} schoolName={school} viewLevel={viewLevel} />
+                            <DigitalIdCard 
+                                key={`s-${idx}`} 
+                                member={m} 
+                                role="Student" 
+                                team={team} 
+                                activity={activity} 
+                                schoolName={school} 
+                                viewLevel={viewLevel} 
+                                onClick={() => { setExpandedMember(m); setExpandedRole('Student'); }}
+                            />
                         ))}
                         {(teachers.length === 0 && students.length === 0) && (
                             <div className="col-span-full text-center py-20 text-gray-400">
@@ -184,6 +335,10 @@ const DigitalIdModal = ({ team, data, onClose, viewLevel }: { team: Team, data: 
                             </div>
                         )}
                     </div>
+                </div>
+                
+                <div className="bg-white border-t border-gray-200 p-3 text-center text-xs text-gray-400">
+                    <p>คลิกที่บัตรเพื่อดูแบบเต็มจอและ QR Code สำหรับสแกน</p>
                 </div>
             </div>
         </div>
@@ -310,7 +465,7 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
           pages.push(allMembers.slice(i, i + 4));
       }
 
-      const qrUrl = getQrCodeUrl(team.teamId, 100);
+      const qrUrl = getQrCodeUrl(team.teamId, 150); // Bigger QR for print
 
       const htmlContent = `
         <html>
@@ -349,7 +504,6 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
                 flex-direction: column;
                 background: white;
                 box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-                /* Pattern Background */
                 background-image: radial-gradient(#e5e7eb 1px, transparent 1px);
                 background-size: 20px 20px;
               }
@@ -435,7 +589,7 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
                 border-top: 1px solid #eee;
               }
               .footer-text { text-align: left; }
-              .qr-code { width: 40px; height: 40px; }
+              .qr-code { width: 60px; height: 60px; display: block; }
               
               @media print {
                 body { background: white; }
@@ -485,7 +639,7 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
                         <div class="footer">
                             <div class="footer-text">
                                 <div style="font-size: 8pt; font-weight: bold; color: #555;">ID: ${team.teamId}</div>
-                                <div style="font-size: 7pt; color: #888;">Academic Competition</div>
+                                <div style="font-size: 8pt; color: #888;">Scan for Check-in</div>
                             </div>
                             <img src="${qrUrl}" class="qr-code" />
                         </div>
