@@ -1,4 +1,5 @@
 
+
 import { AppData, User, Team } from '../types';
 import { getMockData } from './mockData';
 
@@ -131,9 +132,10 @@ export const updateTeamResult = async (teamId: string, score: number, rank: stri
 
 export const updateTeamStatus = async (teamId: string, status: string, reason: string = '', deadline: string = ''): Promise<boolean> => {
     try {
-        const response = await fetch(`${API_URL}?action=updateTeamStatus&teamId=${encodeURIComponent(teamId)}&status=${encodeURIComponent(status)}&reason=${encodeURIComponent(reason)}&deadline=${encodeURIComponent(deadline)}`, {
-            method: 'GET',
-            mode: 'cors'
+        const response = await fetch(`${API_URL}?action=updateTeamStatus`, {
+            method: 'POST',
+            mode: 'cors',
+            body: JSON.stringify({ teamId, status, reason, deadline })
         });
         
         if (!response.ok) return false;
