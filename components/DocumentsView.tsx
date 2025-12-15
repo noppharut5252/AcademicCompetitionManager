@@ -511,13 +511,42 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
                   logoRightUrl: '',
                   signatories: [{ name: '.......................................', position: 'ผู้อำนวยการ', signatureUrl: '' }],
                   dateText: `ให้ไว้ ณ วันที่ ${new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}`,
-                  showRank: true
+                  showRank: true,
+                  serialFormat: 'REF-{year}-{run:4}',
+                  serialStart: 1
               } as CertificateTemplate;
           }
 
           // Build Verification URL (To the app itself with hash router)
           const verifyUrl = `${window.location.origin}${window.location.pathname}#/verify?id=${team.teamId}`;
           const qrUrl = getQrCodeUrl(verifyUrl, 100);
+
+          // Serial Generation Function (Running Number)
+          const generateSerial = (index: number) => {
+              const fmt = template.serialFormat || 'REF-{year}-{run:4}';
+              const start = template.serialStart || 1;
+              const year = new Date().getFullYear();
+              const thYear = year + 543;
+              // Ensure running number is sequential based on current print batch order + start
+              const runNum = start + index;
+              
+              let serial = fmt
+                .replace('{year}', String(year))
+                .replace('{th_year}', String(thYear))
+                .replace('{id}', team.teamId);
+
+              // Handle padding {run:X}
+              if (serial.includes('{run:')) {
+                  const match = serial.match(/{run:(\d+)}/);
+                  if (match) {
+                      const digits = parseInt(match[1]);
+                      serial = serial.replace(match[0], String(runNum).padStart(digits, '0'));
+                  }
+              } else {
+                  serial = serial.replace('{run}', String(runNum));
+              }
+              return serial;
+          };
 
           // Build HTML for Certificates
           const htmlContent = `
@@ -536,31 +565,16 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
                         page-break-after: always;
                         background-color: white;
                     }
-                    /* Fallback Frame if no background */
+                    /* Fallback Frame: Single Faint Gold Line */
                     .frame-default {
                         position: absolute;
-                        top: 15mm; left: 15mm; right: 15mm; bottom: 15mm;
-                        border: 3px solid #1e3a8a; /* Dark Blue */
-                        outline: 1px solid #D4AF37; /* Gold */
-                        outline-offset: -8px;
+                        top: 12mm; left: 12mm; right: 12mm; bottom: 12mm;
+                        border: 2px solid #D4AF37; /* Elegant Gold */
+                        opacity: 0.4; /* Faint/Subtle */
                         box-sizing: border-box;
                         z-index: 1;
                         pointer-events: none;
-                    }
-                    .frame-default::after {
-                        content: '';
-                        position: absolute;
-                        top: -5px; left: -5px; right: -5px; bottom: -5px;
-                        border: 1px solid #D4AF37;
-                        border-radius: 4px;
-                    }
-                    .frame-default-inner {
-                        position: absolute;
-                        top: 0; left: 0; right: 0; bottom: 0;
-                        border: 10px solid transparent;
-                        border-image: linear-gradient(to right, #D4AF37 0%, #FEE140 100%);
-                        border-image-slice: 1;
-                        opacity: 0.3;
+                        border-radius: 8px;
                     }
 
                     .bg-img {
@@ -569,6 +583,13 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
                         object-fit: cover;
                         z-index: 0;
                     }
+                    @media print {
+                        .bg-img {
+                            -webkit-print-color-adjust: exact;
+                            print-color-adjust: exact;
+                        }
+                    }
+
                     .content {
                         position: relative;
                         z-index: 10;
@@ -603,6 +624,7 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
                         gap: 15mm;
                         margin-bottom: 15mm;
                         width: 90%;
+                        align-items: flex-end;
                     }
                     .sig-block {
                         display: flex;
@@ -614,7 +636,7 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
                     /* Transparent signatures */
                     .sig-img { height: 20mm; object-fit: contain; margin-bottom: -5mm; z-index: 1; background-color: transparent; }
                     .sig-name { font-size: 12pt; font-weight: bold; border-top: 1px solid #000; padding-top: 2px; width: 100%; margin-top: 5mm;}
-                    .sig-pos { font-size: 10pt; }
+                    .sig-pos { font-size: 10pt; white-space: pre-line; line-height: 1.3; margin-top: 2px; }
                     .logos.single { justify-content: center; }
 
                     /* QR Code Positioning */
@@ -628,14 +650,26 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
                     }
                     .qr-img { width: 22mm; height: 22mm; }
                     .qr-text { font-size: 8pt; margin-top: 2px; color: #666; font-weight: bold; text-transform: uppercase; }
+
+                    /* Serial Number */
+                    .serial-no {
+                        position: absolute;
+                        top: 10mm;
+                        right: 10mm;
+                        font-size: 10pt;
+                        font-family: 'Courier New', monospace;
+                        color: #555;
+                        font-weight: bold;
+                    }
                 </style>
             </head>
             <body>
-                ${allMembers.map(member => {
+                ${allMembers.map((member, idx) => {
                     const prefix = member.prefix || '';
                     const name = member.name || `${member.firstname || ''} ${member.lastname || ''}`;
                     const fullName = `${prefix}${name}`.trim();
                     const roleText = member.role === 'Teacher' ? 'ครูผู้ฝึกสอน' : 'นักเรียน';
+                    const serialNo = generateSerial(idx);
 
                     let awardText = "เข้าร่วมการแข่งขัน";
                     if (template.showRank) {
@@ -658,10 +692,9 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
                     return `
                     <div class="page">
                         ${template.backgroundUrl ? `<img src="${template.backgroundUrl}" class="bg-img" />` : `
-                            <div class="frame-default">
-                                <div class="frame-default-inner"></div>
-                            </div>
+                            <div class="frame-default"></div>
                         `}
+                        <div class="serial-no">No. ${serialNo}</div>
                         <div class="content">
                             <div class="logos ${!template.logoRightUrl ? 'single' : ''}">
                                 ${template.logoLeftUrl ? `<img src="${template.logoLeftUrl}" class="logo-img" />` : '<div></div>'}
