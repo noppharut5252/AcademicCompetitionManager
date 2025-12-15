@@ -239,7 +239,7 @@ const DigitalIdCard = ({ member, role, team, activity, schoolName, viewLevel, on
     );
 };
 
-// --- Digital ID Modal ---
+// --- DigitalIdModal ---
 const DigitalIdModal = ({ team, data, onClose, viewLevel }: { team: Team, data: AppData, onClose: () => void, viewLevel: 'cluster' | 'area' }) => {
     const [expandedMember, setExpandedMember] = useState<any | null>(null);
     const [expandedRole, setExpandedRole] = useState('');
@@ -465,6 +465,7 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
       const schoolObj = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
       const schoolName = schoolObj?.SchoolName || team.schoolId;
       const clusterID = schoolObj?.SchoolCluster;
+      const clusterName = clusterID ? data.clusters.find(c => c.ClusterID === clusterID)?.ClusterName : '';
 
       const levelTitle = viewLevel === 'area' ? 'ระดับเขตพื้นที่การศึกษา' : 'ระดับกลุ่มเครือข่าย';
       
@@ -507,9 +508,11 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
                   backgroundUrl: '',
                   headerText: 'สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน',
                   subHeaderText: 'เกียรติบัตรฉบับนี้ให้ไว้เพื่อแสดงว่า',
+                  eventName: '',
                   logoLeftUrl: 'https://cdn-icons-png.flaticon.com/512/3135/3135768.png',
                   logoRightUrl: '',
                   signatories: [{ name: '.......................................', position: 'ผู้อำนวยการ', signatureUrl: '' }],
+                  showSignatureLine: true,
                   dateText: `ให้ไว้ ณ วันที่ ${new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}`,
                   showRank: true,
                   serialFormat: 'REF-{year}-{run:4}',
@@ -520,6 +523,14 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
           // Build Verification URL (To the app itself with hash router)
           const verifyUrl = `${window.location.origin}${window.location.pathname}#/verify?id=${team.teamId}`;
           const qrUrl = getQrCodeUrl(verifyUrl, 100);
+
+          // Resolve Event Name
+          let eventNameDisplay = template.eventName;
+          if (!eventNameDisplay) {
+              eventNameDisplay = viewLevel === 'area' 
+                ? 'งานศิลปหัตถกรรมนักเรียน ระดับเขตพื้นที่การศึกษา' 
+                : `งานศิลปหัตถกรรมนักเรียน ${clusterName}`;
+          }
 
           // Serial Generation Function (Running Number)
           const generateSerial = (index: number) => {
@@ -568,7 +579,7 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
                     /* Fallback Frame: Single Faint Gold Line */
                     .frame-default {
                         position: absolute;
-                        top: 12mm; left: 12mm; right: 12mm; bottom: 12mm;
+                        top: 6mm; left: 6mm; right: 6mm; bottom: 6mm;
                         border: 2px solid #D4AF37; /* Elegant Gold */
                         opacity: 0.4; /* Faint/Subtle */
                         box-sizing: border-box;
@@ -635,7 +646,12 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
                     }
                     /* Transparent signatures */
                     .sig-img { height: 20mm; object-fit: contain; margin-bottom: -5mm; z-index: 1; background-color: transparent; }
-                    .sig-name { font-size: 12pt; font-weight: bold; border-top: 1px solid #000; padding-top: 2px; width: 100%; margin-top: 5mm;}
+                    .sig-line { 
+                        width: 100%; 
+                        border-bottom: 1px dotted #000; 
+                        margin-bottom: 2px;
+                    }
+                    .sig-name { font-size: 12pt; font-weight: bold; padding-top: 2px; width: 100%; margin-top: 3mm;}
                     .sig-pos { font-size: 10pt; white-space: pre-line; line-height: 1.3; margin-top: 2px; }
                     .logos.single { justify-content: center; }
 
@@ -707,13 +723,14 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
                                 ${roleText}โรงเรียน <span class="highlight">${schoolName}</span><br/>
                                 ได้รับ <span class="highlight">${awardText}</span><br/>
                                 กิจกรรม ${activity}<br/>
-                                ${viewLevel === 'area' ? 'งานศิลปหัตถกรรมนักเรียน ระดับเขตพื้นที่การศึกษา' : `งานศิลปหัตถกรรมนักเรียน ${clusterID ? data.clusters.find(c=>c.ClusterID===clusterID)?.ClusterName : ''}`}
+                                ${eventNameDisplay}
                             </div>
                             <div class="date">${template.dateText}</div>
                             <div class="signatures">
                                 ${template.signatories.map(sig => `
                                     <div class="sig-block">
                                         ${sig.signatureUrl ? `<img src="${sig.signatureUrl}" class="sig-img" />` : '<div style="height:20mm;"></div>'}
+                                        ${template.showSignatureLine !== false ? '<div class="sig-line"></div>' : ''}
                                         <div class="sig-name">(${sig.name})</div>
                                         <div class="sig-pos">${sig.position}</div>
                                     </div>
