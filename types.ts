@@ -127,6 +127,7 @@ export interface CertificateTemplate {
   headerText: string;
   subHeaderText: string;
   eventName?: string; // New: Custom Event Name
+  frameStyle?: 'simple-gold' | 'infinite-wave' | 'ornamental-corners' | 'none'; // New: Frame Style
   logoLeftUrl: string;
   logoRightUrl: string;
   signatories: CertificateSignatory[];
@@ -137,6 +138,11 @@ export interface CertificateTemplate {
   // New Serial Number Config
   serialFormat?: string; // e.g., "SKP-2024-{run:4}" or "{year}-{id}"
   serialStart?: number; // Starting number for {run}
+
+  // Layout Config (mm)
+  contentTop?: number; 
+  footerBottom?: number;
+  logoHeight?: number;
 }
 
 export interface AppData {
