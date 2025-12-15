@@ -4,6 +4,7 @@ import { AppData, Team, TeamStatus, User, CertificateTemplate } from '../types';
 import { Search, Printer, IdCard, Smartphone, CheckCircle, X, ChevronLeft, ChevronRight, User as UserIcon, GraduationCap, School, MapPin, LayoutGrid, Trophy, Lock, QrCode, Maximize2, Minimize2, Share2, Download, Settings, FileBadge, Loader2 } from 'lucide-react';
 import CertificateConfigModal from './CertificateConfigModal';
 import { getCertificateConfig } from '../services/api';
+import { useSearchParams } from 'react-router-dom';
 
 interface DocumentsViewProps {
   data: AppData;
@@ -246,7 +247,8 @@ const ExpandedIdCard = ({
                             </div>
                         </div>
                         <div className="bg-white p-1 rounded-lg border border-gray-100">
-                            <img src={getQrCodeUrl(team.teamId, 120)} alt="QR" className="w-24 h-24 mix-blend-multiply" />
+                            {/* QR Code here points to the verify link or app deep link */}
+                            <img src={getQrCodeUrl(`${window.location.origin}${window.location.pathname}#/idcards?id=${team.teamId}`, 120)} alt="QR" className="w-24 h-24 mix-blend-multiply" />
                         </div>
                     </div>
                     
@@ -449,6 +451,22 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
   // Certificate Configuration State
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [certificateTemplates, setCertificateTemplates] = useState<Record<string, CertificateTemplate>>({});
+
+  // URL Params for Auto-Opening ID Card
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  useEffect(() => {
+      // Check for 'id' parameter in URL to auto-open Digital ID
+      const teamIdParam = searchParams.get('id');
+      if (teamIdParam && type === 'idcard' && data.teams.length > 0) {
+          const foundTeam = data.teams.find(t => t.teamId === teamIdParam);
+          if (foundTeam) {
+              setSelectedTeamForDigital(foundTeam);
+              // Clean up the URL parameter to prevent reopening on refresh if desired, 
+              // or keep it to allow sharing. Keeping it for now.
+          }
+      }
+  }, [searchParams, data.teams, type]);
 
   useEffect(() => {
       // Fetch templates from API on load
@@ -951,12 +969,14 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
       } else {
           // ... (ID Card Logic - Just trigger print)
           setIsGenerating(false); 
-          // ... (Existing ID Card Logic Remains Same) ...
           const pages = [];
           for (let i = 0; i < allMembers.length; i += 4) {
               pages.push(allMembers.slice(i, i + 4));
           }
-          const qrUrl = getQrCodeUrl(team.teamId, 150);
+          // IMPORTANT UPDATE: Generate Full URL for scanning into App
+          const appUrl = `${window.location.origin}${window.location.pathname}#/idcards?id=${team.teamId}`;
+          const qrUrl = getQrCodeUrl(appUrl, 150);
+          
           const headerColor = viewLevel === 'area' ? 'linear-gradient(135deg, #6b21a8 0%, #a855f7 100%)' : 'linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)'; 
           const htmlContent = `
             <html>
@@ -1043,7 +1063,7 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
       )}
 
       {selectedTeamForDigital && (
-          <DigitalIdModal team={selectedTeamForDigital} data={data} onClose={() => setSelectedTeamForDigital(null)} viewLevel={viewLevel} />
+          <DigitalIdModal team={selectedTeamForDigital} data={data} onClose={() => { setSelectedTeamForDigital(null); setSearchParams({}); }} viewLevel={viewLevel} />
       )}
       {showConfigModal && (
           <CertificateConfigModal 
