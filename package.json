@@ -1,3 +1,4 @@
+
 {
   "name": "academic-competition-manager",
   "private": true,
@@ -15,7 +16,8 @@
     "recharts": "^3.5.1",
     "react-router-dom": "^7.10.1",
     "vite": "^7.2.7",
-    "@vitejs/plugin-react": "^5.1.2"
+    "@vitejs/plugin-react": "^5.1.2",
+    "jsqr": "^1.4.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
