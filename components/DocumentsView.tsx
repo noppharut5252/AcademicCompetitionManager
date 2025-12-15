@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { AppData, Team, TeamStatus, User, CertificateTemplate } from '../types';
-import { Search, Printer, IdCard, Smartphone, CheckCircle, X, ChevronLeft, ChevronRight, User as UserIcon, GraduationCap, School, MapPin, LayoutGrid, Trophy, Lock, QrCode, Maximize2, Minimize2, Share2, Download, Settings, FileBadge, Loader2 } from 'lucide-react';
+import { Search, Printer, IdCard, Smartphone, CheckCircle, X, ChevronLeft, ChevronRight, User as UserIcon, GraduationCap, School, MapPin, LayoutGrid, Trophy, Lock, QrCode, Maximize2, Minimize2, Share2, Download, Settings, FileBadge, Loader2, Calendar, Clock } from 'lucide-react';
 import CertificateConfigModal from './CertificateConfigModal';
 import { getCertificateConfig } from '../services/api';
 import { useSearchParams } from 'react-router-dom';
@@ -61,12 +61,16 @@ const ExpandedIdCard = ({
     const fullName = `${prefix}${name}`.trim();
     
     const isArea = viewLevel === 'area';
-    // Use darker/richer gradients for full screen appeal
     const bgGradient = isArea 
         ? 'bg-gradient-to-br from-indigo-900 via-purple-900 to-slate-900' 
         : 'bg-gradient-to-br from-blue-900 via-blue-800 to-slate-900';
-    const accentColor = isArea ? 'text-purple-400' : 'text-blue-400';
+    const accentColor = isArea ? 'text-purple-600' : 'text-blue-600';
     const levelText = isArea ? 'DISTRICT LEVEL' : 'CLUSTER LEVEL';
+
+    // Mock Date/Time for status (Use current time for demo as "Verification Time")
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' });
+    const timeStr = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
 
     const toggleFullscreen = () => {
         if (!document.fullscreenElement) {
@@ -148,119 +152,127 @@ const ExpandedIdCard = ({
                 </div>
             )}
 
-            {/* Navigation Arrows (Desktop/Visual Hint) */}
-            <button 
-                onClick={handlePrev} 
-                className={`absolute left-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md z-50 transition-all ${currentIndex === 0 ? 'opacity-20 cursor-not-allowed' : 'opacity-100'}`}
-                disabled={currentIndex === 0}
-            >
-                <ChevronLeft className="w-8 h-8" />
-            </button>
+            {/* Navigation Arrows (Visual Hint) */}
+            {currentIndex > 0 && (
+                <button 
+                    onClick={handlePrev} 
+                    className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md z-50 transition-all active:scale-95"
+                >
+                    <ChevronLeft className="w-8 h-8" />
+                </button>
+            )}
 
-            <button 
-                onClick={handleNext} 
-                className={`absolute right-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md z-50 transition-all ${currentIndex === members.length - 1 ? 'opacity-20 cursor-not-allowed' : 'opacity-100'}`}
-                disabled={currentIndex === members.length - 1}
-            >
-                <ChevronRight className="w-8 h-8" />
-            </button>
+            {currentIndex < members.length - 1 && (
+                <button 
+                    onClick={handleNext} 
+                    className="absolute right-2 md:right-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md z-50 transition-all active:scale-95"
+                >
+                    <ChevronRight className="w-8 h-8" />
+                </button>
+            )}
 
             {/* Main Card Container */}
             <div 
                 ref={cardRef} 
-                className={`relative w-full h-full max-w-md bg-white flex flex-col overflow-hidden shadow-2xl transition-all duration-300 ${isFullscreen ? '' : 'rounded-none sm:rounded-3xl sm:h-auto sm:aspect-[9/16] sm:max-h-[85vh]'}`}
+                className={`relative w-full h-full max-w-md bg-white flex flex-col overflow-hidden shadow-2xl transition-all duration-300 ${isFullscreen ? '' : 'rounded-none sm:rounded-3xl sm:h-auto sm:aspect-[9/16] sm:max-h-[90vh]'}`}
                 onTouchStart={onTouchStart}
                 onTouchMove={onTouchMove}
                 onTouchEnd={onTouchEnd}
             >
-                {/* Header Background */}
-                <div className={`absolute top-0 left-0 right-0 h-1/3 ${bgGradient} rounded-b-[40%] z-0 transition-colors duration-500`}>
-                     <div className="absolute inset-0 opacity-30" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)', backgroundSize: '30px 30px' }}></div>
-                     {/* Decorative Circles */}
-                     <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-2xl"></div>
-                     <div className="absolute top-20 -left-10 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
+                {/* 1. Header Section */}
+                <div className={`relative h-[35%] ${bgGradient} rounded-b-[30px] shadow-lg shrink-0`}>
+                     <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
+                     <div className="absolute top-12 left-0 right-0 text-center">
+                         <span className="inline-block px-3 py-1 bg-white/20 backdrop-blur-sm rounded-full text-xs font-bold text-white tracking-widest uppercase border border-white/30">
+                             {levelText}
+                         </span>
+                     </div>
+                     
+                     {/* Photo */}
+                     <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/3">
+                        <div className="relative">
+                            <div className="w-32 h-32 rounded-full border-4 border-white shadow-xl overflow-hidden bg-gray-200">
+                                <img 
+                                    src={imageUrl} 
+                                    alt={fullName}
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => { (e.target as HTMLImageElement).src = "https://cdn-icons-png.flaticon.com/512/3135/3135768.png"; }}
+                                />
+                            </div>
+                            <div className={`absolute bottom-1 right-1 w-8 h-8 rounded-full border-2 border-white flex items-center justify-center shadow-md text-white ${role === 'Teacher' ? 'bg-indigo-600' : 'bg-emerald-500'}`}>
+                                {role === 'Teacher' ? <UserIcon className="w-4 h-4" /> : <GraduationCap className="w-4 h-4" />}
+                            </div>
+                        </div>
+                     </div>
                 </div>
 
-                {/* Content */}
-                <div className="relative z-10 flex flex-col items-center h-full px-6 pt-12 pb-8 justify-between">
-                    
-                    {/* Top Section: Photo & Identity */}
-                    <div className="flex flex-col items-center w-full">
-                        <div className="mb-4">
-                            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 shadow-lg">
-                                <Trophy className="w-4 h-4 text-yellow-400" />
-                                <span className="text-xs font-bold text-white tracking-widest uppercase">{levelText}</span>
-                            </div>
-                        </div>
+                {/* 2. Identity Section */}
+                <div className="pt-14 px-6 text-center shrink-0">
+                    <h2 className="text-2xl font-bold text-gray-900 leading-tight mb-1">{fullName}</h2>
+                    <p className="text-sm text-gray-500 font-medium mb-1">{role === 'Teacher' ? 'Teacher / Trainer' : 'Student / Competitor'}</p>
+                    <p className="text-sm text-gray-600 line-clamp-1">{schoolName}</p>
+                </div>
 
-                        <div className="relative mb-6">
-                            <div className="absolute -inset-1.5 bg-gradient-to-tr from-yellow-400 via-orange-500 to-purple-600 rounded-full blur opacity-75 animate-pulse"></div>
-                            <img 
-                                src={imageUrl} 
-                                alt={fullName}
-                                className="relative w-40 h-40 rounded-full object-cover border-4 border-white shadow-2xl bg-gray-100"
-                                onError={(e) => { (e.target as HTMLImageElement).src = "https://cdn-icons-png.flaticon.com/512/3135/3135768.png"; }}
-                            />
-                            <div className={`absolute bottom-2 right-2 px-3 py-1 rounded-full text-xs font-bold text-white shadow-lg border-2 border-white flex items-center gap-1 uppercase tracking-wide ${role === 'Teacher' ? 'bg-indigo-600' : 'bg-emerald-600'}`}>
-                                {role === 'Teacher' ? <UserIcon className="w-3 h-3" /> : <GraduationCap className="w-3 h-3" />}
-                                {role === 'Teacher' ? 'Staff' : 'Student'}
-                            </div>
-                        </div>
-
-                        <div className="text-center w-full animate-in fade-in duration-300" key={currentIndex}>
-                            <h2 className="text-gray-900 font-bold text-2xl sm:text-3xl leading-tight text-center font-kanit mb-1">{fullName}</h2>
-                            <p className="text-gray-500 font-medium">{schoolName}</p>
-                        </div>
-                    </div>
-
-                    {/* Middle Section: Details */}
-                    <div className="w-full space-y-4 my-4">
-                        <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100 shadow-inner">
-                            <div className="flex items-start gap-3 mb-3">
-                                <div className={`p-2 rounded-lg bg-white shadow-sm shrink-0 ${accentColor}`}>
-                                    <Trophy className="w-5 h-5" />
+                {/* 3. Status & Info Grid */}
+                <div className="px-6 py-4 shrink-0">
+                    <div className="bg-gray-50 rounded-xl p-3 border border-gray-100 grid grid-cols-2 gap-3">
+                        <div className="col-span-2 flex items-center justify-between bg-white p-2 rounded-lg shadow-sm border border-gray-100">
+                            <div className="flex items-center gap-2">
+                                <div className={`p-1.5 rounded-full ${isArea ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>
+                                    <CheckCircle className="w-4 h-4" /> 
                                 </div>
-                                <div>
-                                    <p className="text-[10px] text-gray-400 uppercase font-bold">Activity</p>
-                                    <p className="text-sm font-semibold text-gray-800 leading-snug">{activity}</p>
+                                <div className="text-left">
+                                    <p className="text-[10px] text-gray-400 font-bold uppercase">Status</p>
+                                    <p className="text-xs font-bold text-green-600">Active / Checked In</p>
                                 </div>
                             </div>
-                            <div className="flex items-center gap-3">
-                                <div className={`p-2 rounded-lg bg-white shadow-sm shrink-0 ${accentColor}`}>
-                                    <MapPin className="w-5 h-5" />
-                                </div>
-                                <div>
-                                    <p className="text-[10px] text-gray-400 uppercase font-bold">Team ID</p>
-                                    <p className="text-base font-mono font-bold text-gray-900 tracking-wider">{team.teamId}</p>
-                                </div>
+                            <div className="text-right">
+                                <p className="text-[10px] text-gray-400 font-bold uppercase">Time</p>
+                                <p className="text-xs font-bold text-gray-700">{timeStr}</p>
                             </div>
                         </div>
+                        <div className="bg-white p-2 rounded-lg shadow-sm border border-gray-100">
+                            <p className="text-[10px] text-gray-400 font-bold uppercase mb-1">Venue</p>
+                            <p className="text-xs font-medium text-gray-800 line-clamp-1">Stadium A (TBD)</p>
+                        </div>
+                        <div className="bg-white p-2 rounded-lg shadow-sm border border-gray-100">
+                            <p className="text-[10px] text-gray-400 font-bold uppercase mb-1">Date</p>
+                            <p className="text-xs font-medium text-gray-800">{dateStr}</p>
+                        </div>
                     </div>
+                </div>
 
-                    {/* Bottom Section: QR Code for Scanning */}
-                    <div className="w-full bg-white rounded-2xl p-4 shadow-xl border border-gray-200 flex items-center justify-between">
-                        <div className="text-left">
-                            <p className="text-xs font-bold text-gray-900 uppercase">Scan for Check-in</p>
-                            <p className="text-[10px] text-gray-500 mt-1">Show this QR code to staff</p>
-                            <div className="mt-2 flex items-center gap-1 text-[10px] text-green-600 font-medium bg-green-50 px-2 py-1 rounded w-fit">
-                                <CheckCircle className="w-3 h-3" /> Active Status
-                            </div>
-                        </div>
-                        <div className="bg-white p-1 rounded-lg border border-gray-100">
-                            {/* QR Code here points to the ID Card view directly with correct Hash routing */}
-                            <img src={getQrCodeUrl(`${window.location.origin}${window.location.pathname}#/idcards?id=${team.teamId}`, 120)} alt="QR" className="w-24 h-24 mix-blend-multiply" />
-                        </div>
+                {/* 4. Large QR Code Area */}
+                <div className="flex-1 flex flex-col items-center justify-center px-6 min-h-0">
+                    <div className="bg-white p-2 rounded-2xl shadow-lg border-2 border-dashed border-gray-200 w-full max-w-[240px] aspect-square flex items-center justify-center">
+                        <img 
+                            src={getQrCodeUrl(`${window.location.origin}${window.location.pathname}#/idcards?id=${team.teamId}`, 300)} 
+                            alt="QR" 
+                            className="w-full h-full object-contain mix-blend-multiply" 
+                        />
                     </div>
-                    
-                    {/* Pagination Dots */}
-                    <div className="flex justify-center gap-1.5 mt-2 absolute bottom-2">
-                        {members.map((_, idx) => (
-                            <div 
-                                key={idx} 
-                                className={`w-1.5 h-1.5 rounded-full transition-colors ${idx === currentIndex ? 'bg-gray-800' : 'bg-gray-300'}`}
-                            />
-                        ))}
+                    <p className="text-[10px] text-gray-400 mt-2 font-mono">ID: {team.teamId}</p>
+                </div>
+
+                {/* 5. Footer / Pagination */}
+                <div className="p-4 bg-gray-50 border-t border-gray-100 shrink-0">
+                    <div className="flex items-center justify-center gap-4">
+                        <span className="text-xs font-bold text-gray-400 w-12 text-right">
+                            {currentIndex + 1}
+                        </span>
+                        <div className="flex gap-1.5">
+                            {members.map((_, idx) => (
+                                <div 
+                                    key={idx} 
+                                    className={`h-1.5 rounded-full transition-all duration-300 ${idx === currentIndex ? `w-6 ${isArea ? 'bg-purple-600' : 'bg-blue-600'}` : 'w-1.5 bg-gray-300'}`}
+                                />
+                            ))}
+                        </div>
+                        <span className="text-xs font-bold text-gray-400 w-12 text-left">
+                            / {members.length}
+                        </span>
                     </div>
+                    <p className="text-center text-[10px] text-gray-400 mt-2">Swipe to view next member</p>
                 </div>
             </div>
         </div>
