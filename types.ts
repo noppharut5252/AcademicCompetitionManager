@@ -113,6 +113,32 @@ export interface Announcement {
   author?: string;
 }
 
+// New Interface for Certificate Templates
+export interface CertificateSignatory {
+  name: string;
+  position: string;
+  signatureUrl: string;
+}
+
+export interface CertificateTemplate {
+  id: string; // 'area' or ClusterID
+  name: string; // Display name (e.g., "ระดับเขตพื้นที่", "กลุ่มเครือข่าย A")
+  backgroundUrl: string; // Full background image
+  headerText: string;
+  subHeaderText: string;
+  eventName?: string; // New: Custom Event Name
+  logoLeftUrl: string;
+  logoRightUrl: string;
+  signatories: CertificateSignatory[];
+  showSignatureLine?: boolean; // New: Toggle dotted line
+  dateText: string;
+  showRank: boolean;
+  
+  // New Serial Number Config
+  serialFormat?: string; // e.g., "SKP-2024-{run:4}" or "{year}-{id}"
+  serialStart?: number; // Starting number for {run}
+}
+
 export interface AppData {
   activities: Activity[];
   teams: Team[];
