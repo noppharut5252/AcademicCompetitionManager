@@ -142,7 +142,9 @@ const ScannerModal = ({
         streamRef.current = stream;
         if (videoRef.current) {
             videoRef.current.srcObject = stream;
-            // IMPORTANT: Wait for metadata to load before playing to avoid "The play() request was interrupted" errors
+            videoRef.current.setAttribute("playsinline", "true"); // required to tell iOS safari we don't want fullscreen
+            
+            // IMPORTANT: Wait for metadata to load before playing
             videoRef.current.onloadedmetadata = () => {
                 videoRef.current?.play().catch(e => console.error("Error playing video:", e));
                 // Start scanning loop
