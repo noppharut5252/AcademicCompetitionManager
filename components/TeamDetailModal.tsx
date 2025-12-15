@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Team, AppData, AreaStageInfo } from '../types';
-import { X, User, Phone, School, FileText, Medal, Flag, LayoutGrid, Users, Hash, Trophy, Edit3, Save, Loader2, Camera, Upload, Clock, CheckCircle, AlertCircle, Info, ChevronDown } from 'lucide-react';
+import { Team, AppData, AreaStageInfo, User } from '../types';
+import { X, User as UserIcon, Phone, School, FileText, Medal, Flag, LayoutGrid, Users, Hash, Trophy, Edit3, Save, Loader2, Camera, Upload, Clock, CheckCircle, AlertCircle, Info, ChevronDown, Plus, Trash2, History } from 'lucide-react';
 import { updateTeamDetails, uploadImage } from '../services/api';
 import { resizeImage, formatDeadline } from '../services/utils';
 
@@ -12,7 +12,16 @@ interface TeamDetailModalProps {
   canEdit?: boolean;
   onSaveSuccess?: () => void;
   viewLevel?: 'cluster' | 'area';
+  currentUser?: User | null;
 }
+
+const CLASS_OPTIONS = [
+  "อนุบาล 1", "อนุบาล 2", "อนุบาล 3",
+  "ป.1", "ป.2", "ป.3", "ป.4", "ป.5", "ป.6",
+  "ม.1", "ม.2", "ม.3", "ม.4", "ม.5", "ม.6",
+  "ปวช.1", "ปวช.2", "ปวช.3",
+  "ปวส.1", "ปวส.2"
+];
 
 // Internal Toast Component for Modal
 const ModalToast = ({ message, type, isVisible }: { message: string, type: 'success' | 'error', isVisible: boolean }) => {
@@ -77,7 +86,7 @@ const PrefixInput = ({ value, onChange, placeholder }: { value: string, onChange
     );
 };
 
-const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, canEdit = false, onSaveSuccess, viewLevel = 'cluster' }) => {
+const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, canEdit = false, onSaveSuccess, viewLevel = 'cluster', currentUser }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [uploadingState, setUploadingState] = useState<{ id: string, loading: boolean }>({ id: '', loading: false });
@@ -88,6 +97,7 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
 
   // Form States
   const [editTeamName, setEditTeamName] = useState(team.teamName);
+  const [displayTeamName, setDisplayTeamName] = useState(''); // New state for instant update
   const [editContact, setEditContact] = useState<any>({});
   const [editTeachers, setEditTeachers] = useState<any[]>([]);
   const [editStudents, setEditStudents] = useState<any[]>([]);
@@ -119,6 +129,7 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
       }
 
       setEditTeamName(nameToUse);
+      setDisplayTeamName(nameToUse); // Initialize display name
       
       // Parse Contact
       try {
@@ -218,6 +229,32 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
       setEditStudents(newStudents);
   };
 
+  const handleAddTeacher = () => {
+      setHasUnsavedChanges(true);
+      setEditTeachers([...editTeachers, { name: '', phone: '', prefix: '' }]);
+  };
+
+  const handleRemoveTeacher = (index: number) => {
+      if(!window.confirm('ต้องการลบรายชื่อครูท่านนี้ใช่หรือไม่?')) return;
+      setHasUnsavedChanges(true);
+      const newTeachers = [...editTeachers];
+      newTeachers.splice(index, 1);
+      setEditTeachers(newTeachers);
+  };
+
+  const handleAddStudent = () => {
+      setHasUnsavedChanges(true);
+      setEditStudents([...editStudents, { name: '', class: '', prefix: '' }]);
+  };
+
+  const handleRemoveStudent = (index: number) => {
+      if(!window.confirm('ต้องการลบรายชื่อนักเรียนคนนี้ใช่หรือไม่?')) return;
+      setHasUnsavedChanges(true);
+      const newStudents = [...editStudents];
+      newStudents.splice(index, 1);
+      setEditStudents(newStudents);
+  };
+
   const handleImageUpload = async (index: number, type: 'teacher' | 'student', e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
@@ -303,7 +340,9 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
               teachers: editTeachers.map(prepareForSave), 
               students: editStudents.map(prepareForSave) 
           }),
-          isArea: isAreaContext // Flag to tell backend to update area columns based on view context
+          isArea: isAreaContext, // Flag to tell backend to update area columns based on view context
+          lastEditedBy: currentUser?.name || currentUser?.username || 'Unknown User',
+          lastEditedAt: new Date().toISOString()
       };
 
       const success = await updateTeamDetails(payload);
@@ -311,6 +350,7 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
       
       if (success) {
           showNotification('บันทึกข้อมูลเรียบร้อยแล้ว', 'success');
+          setDisplayTeamName(editTeamName); // Instant update UI
           setHasUnsavedChanges(false);
           setIsEditing(false);
           if (onSaveSuccess) onSaveSuccess();
@@ -366,6 +406,9 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
       );
   };
 
+  const reqTeachers = activity?.reqTeachers || 0;
+  const reqStudents = activity?.reqStudents || 0;
+
   return (
     <div 
         className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
@@ -398,8 +441,8 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
                     </div>
                 ) : (
                     <h3 className="text-xl font-bold text-gray-900 truncate">
-                        {/* Display correct name context */}
-                        {isAreaContext && areaInfo?.name ? areaInfo.name : team.teamName}
+                        {/* Use local state for instant updates */}
+                        {displayTeamName}
                     </h3>
                 )}
                 
@@ -549,21 +592,41 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
 
             {/* Members Section */}
             <div>
-                <h4 className="font-bold text-gray-800 mb-4 flex items-center pb-2 border-b border-gray-200">
-                    <Users className="w-5 h-5 mr-2 text-gray-600" />
-                    สมาชิกในทีม {isAreaContext && <span className="text-purple-600 text-xs ml-2 font-normal">(ระดับเขตพื้นที่)</span>}
-                    <span className="ml-2 text-xs font-normal text-gray-500 bg-gray-200 px-2 py-0.5 rounded-full">
-                        {editTeachers.length + editStudents.length} คน
-                    </span>
+                <h4 className="font-bold text-gray-800 mb-4 flex items-center pb-2 border-b border-gray-200 justify-between">
+                    <div className="flex items-center">
+                        <Users className="w-5 h-5 mr-2 text-gray-600" />
+                        สมาชิกในทีม {isAreaContext && <span className="text-purple-600 text-xs ml-2 font-normal">(ระดับเขตพื้นที่)</span>}
+                        <span className="ml-2 text-xs font-normal text-gray-500 bg-gray-200 px-2 py-0.5 rounded-full">
+                            {editTeachers.length + editStudents.length} คน
+                        </span>
+                    </div>
+                    {team.lastEditedBy && !isEditing && (
+                        <div className="flex items-center text-[10px] text-gray-400 font-normal">
+                             <History className="w-3 h-3 mr-1" />
+                             แก้ไขล่าสุด: {formatDeadline(team.lastEditedAt || '')} โดย {team.lastEditedBy}
+                        </div>
+                    )}
                 </h4>
 
                 {/* Teachers */}
-                {editTeachers.length > 0 && (
-                    <div className="mb-4">
-                        <h5 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 pl-1">ครูผู้ฝึกสอน ({editTeachers.length})</h5>
+                <div className="mb-6">
+                    <div className="flex justify-between items-center mb-3">
+                        <h5 className="text-xs font-bold text-gray-500 uppercase tracking-wider pl-1">
+                            ครูผู้ฝึกสอน ({editTeachers.length}/{reqTeachers})
+                        </h5>
+                        {isEditing && editTeachers.length < reqTeachers && (
+                            <button 
+                                onClick={handleAddTeacher}
+                                className="text-xs flex items-center text-blue-600 bg-blue-50 px-2 py-1 rounded-lg border border-blue-200 hover:bg-blue-100 transition-colors"
+                            >
+                                <Plus className="w-3 h-3 mr-1" /> เพิ่มครู
+                            </button>
+                        )}
+                    </div>
+                    {editTeachers.length > 0 ? (
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             {editTeachers.map((m: any, idx: number) => (
-                                <div key={`t-${idx}`} className="flex items-center p-3 bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-shadow">
+                                <div key={`t-${idx}`} className="flex items-center p-3 bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-shadow relative group">
                                     <MemberAvatar member={m} index={idx} type="teacher" />
                                     
                                     <div className="ml-3 min-w-0 flex-1">
@@ -597,19 +660,44 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
                                             </>
                                         )}
                                     </div>
+                                    {isEditing && (
+                                        <button 
+                                            onClick={() => handleRemoveTeacher(idx)}
+                                            className="absolute -top-2 -right-2 bg-red-100 text-red-500 rounded-full p-1 shadow-sm border border-red-200 hover:bg-red-200 z-10"
+                                            title="ลบรายชื่อ"
+                                        >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                    )}
                                 </div>
                             ))}
                         </div>
-                    </div>
-                )}
+                    ) : (
+                        <div className="p-4 text-center border-2 border-dashed border-gray-200 rounded-xl text-gray-400 text-sm">
+                            ยังไม่มีข้อมูลครูผู้ฝึกสอน
+                        </div>
+                    )}
+                </div>
 
                 {/* Students */}
-                {editStudents.length > 0 && (
-                     <div>
-                        <h5 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 pl-1">นักเรียน ({editStudents.length})</h5>
+                <div>
+                    <div className="flex justify-between items-center mb-3">
+                        <h5 className="text-xs font-bold text-gray-500 uppercase tracking-wider pl-1">
+                            นักเรียน ({editStudents.length}/{reqStudents})
+                        </h5>
+                        {isEditing && editStudents.length < reqStudents && (
+                            <button 
+                                onClick={handleAddStudent}
+                                className="text-xs flex items-center text-green-600 bg-green-50 px-2 py-1 rounded-lg border border-green-200 hover:bg-green-100 transition-colors"
+                            >
+                                <Plus className="w-3 h-3 mr-1" /> เพิ่มนักเรียน
+                            </button>
+                        )}
+                    </div>
+                    {editStudents.length > 0 ? (
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             {editStudents.map((m: any, idx: number) => (
-                                <div key={`s-${idx}`} className="flex items-center p-3 bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-shadow">
+                                <div key={`s-${idx}`} className="flex items-center p-3 bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-shadow relative group">
                                     <MemberAvatar member={m} index={idx} type="student" />
                                     
                                     <div className="ml-3 min-w-0 flex-1">
@@ -627,12 +715,16 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
                                                         onChange={(e) => handleStudentChange(idx, 'name', e.target.value)}
                                                     />
                                                 </div>
-                                                <input 
+                                                <select 
                                                     className="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-blue-500 outline-none" 
-                                                    placeholder="ระดับชั้น"
-                                                    value={m.class} 
+                                                    value={m.class || ''} 
                                                     onChange={(e) => handleStudentChange(idx, 'class', e.target.value)}
-                                                />
+                                                >
+                                                    <option value="">-- เลือกระดับชั้น --</option>
+                                                    {CLASS_OPTIONS.map(opt => (
+                                                        <option key={opt} value={opt}>{opt}</option>
+                                                    ))}
+                                                </select>
                                             </div>
                                         ) : (
                                             <>
@@ -643,11 +735,24 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
                                             </>
                                         )}
                                     </div>
+                                    {isEditing && (
+                                        <button 
+                                            onClick={() => handleRemoveStudent(idx)}
+                                            className="absolute -top-2 -right-2 bg-red-100 text-red-500 rounded-full p-1 shadow-sm border border-red-200 hover:bg-red-200 z-10"
+                                            title="ลบรายชื่อ"
+                                        >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                    )}
                                 </div>
                             ))}
                         </div>
-                    </div>
-                )}
+                    ) : (
+                        <div className="p-4 text-center border-2 border-dashed border-gray-200 rounded-xl text-gray-400 text-sm">
+                            ยังไม่มีข้อมูลนักเรียน
+                        </div>
+                    )}
+                </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-gray-200">
