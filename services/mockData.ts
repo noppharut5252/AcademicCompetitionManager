@@ -1,4 +1,5 @@
-import { Activity, AppData, FileLog, School, SchoolCluster, Team, TeamStatus, RegistrationMode, Announcement } from '../types';
+
+import { Activity, AppData, FileLog, School, SchoolCluster, Team, TeamStatus, RegistrationMode, Announcement, Venue } from '../types';
 
 export const mockClusters: SchoolCluster[] = [
   { ClusterID: 'C01', ClusterName: 'North Zone' },
@@ -125,6 +126,61 @@ export const mockAnnouncements: Announcement[] = [
     }
 ];
 
+export const mockVenues: Venue[] = [
+    {
+        id: 'V001',
+        name: 'อาคารเฉลิมพระเกียรติ (Main Hall)',
+        description: 'ศูนย์กลางการจัดการแข่งขันและพิธีเปิด-ปิด รองรับผู้เข้าร่วมได้ 500 คน มีที่จอดรถกว้างขวาง',
+        locationUrl: 'https://maps.google.com/?q=Grand+Palace+Bangkok',
+        facilities: ['ห้องแอร์', 'ที่จอดรถ', 'ห้องน้ำสะอาด', 'จุดปฐมพยาบาล'],
+        imageUrl: 'https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=800&q=80',
+        contactInfo: 'ครูสมชาย 081-111-2222',
+        scheduledActivities: [
+            {
+                activityId: 'ACT001',
+                activityName: 'Science Project Competition',
+                building: 'อาคาร 1',
+                floor: 'ชั้น 2',
+                room: 'ห้องประชุมใหญ่',
+                date: '2024-12-25',
+                timeRange: '09:00 - 12:00',
+                note: 'ลงทะเบียนหน้างานก่อน 08:30'
+            },
+            {
+                activityId: 'ACT002',
+                activityName: 'Math Olympiad',
+                building: 'อาคาร 1',
+                floor: 'ชั้น 3',
+                room: 'ห้อง 301-305',
+                date: '2024-12-25',
+                timeRange: '13:00 - 16:00',
+                note: 'ห้ามนำเครื่องคิดเลขเข้าห้องสอบ'
+            }
+        ]
+    },
+    {
+        id: 'V002',
+        name: 'โรงยิมเนเซียม A (Gym A)',
+        description: 'สนามแข่งขันหุ่นยนต์และเครื่องบินพลังยาง พื้นที่กว้างขวาง เพดานสูง',
+        locationUrl: 'https://maps.google.com/?q=Lumphini+Park',
+        facilities: ['โรงอาหารใกล้เคียง', 'อัฒจันทร์', 'พัดลมไอเย็น'],
+        imageUrl: 'https://images.unsplash.com/photo-1541252260732-48719595c771?auto=format&fit=crop&w=800&q=80',
+        contactInfo: 'ครูวิชัย 089-999-8888',
+        scheduledActivities: [
+            {
+                activityId: 'ACT003',
+                activityName: 'Line Following Robot',
+                building: 'โรงยิม',
+                floor: 'ชั้น 1',
+                room: 'สนามกลาง',
+                date: '2024-12-26',
+                timeRange: '09:00 - 16:00',
+                note: 'เตรียมปลั๊กพ่วงมาเอง'
+            }
+        ]
+    }
+];
+
 export const getMockData = (): AppData => {
   return {
     activities: mockActivities,
@@ -132,6 +188,7 @@ export const getMockData = (): AppData => {
     schools: mockSchools,
     clusters: mockClusters,
     files: mockFiles,
-    announcements: mockAnnouncements
+    announcements: mockAnnouncements,
+    venues: mockVenues
   };
 };
