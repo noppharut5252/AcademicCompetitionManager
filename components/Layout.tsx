@@ -220,7 +220,8 @@ const ScannerModal = ({
     const handleManualSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (manualId.trim()) {
-            onSearch(manualId);
+            // Construct a query string format that Layout.tsx's onSearch can parse to include level
+            onSearch(`?id=${manualId}&level=${viewLevel}`);
             onClose();
         }
     };
@@ -449,25 +450,33 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
             
             // Determine if it's a URL or a raw ID
             let teamId = scannedValue;
+            let levelParam = '';
+
             try {
-                // If scanned full URL e.g. "https://domain.com/#/idcards?id=T001" or "/idcards?id=T001"
+                // If scanned full URL OR query string containing 'id='
                 if (scannedValue.includes('id=')) {
-                    // We need to parse search params from a potential full URL or just query string
-                    const urlStr = scannedValue.startsWith('http') || scannedValue.startsWith('/') 
+                    // Normalize to a URL object for parsing
+                    const urlStr = scannedValue.startsWith('http') || scannedValue.startsWith('/') || scannedValue.startsWith('?') 
                         ? scannedValue 
                         : `http://dummy.com/${scannedValue}`;
                     
-                    const url = new URL(urlStr);
+                    // If it starts with ?, append to dummy base so URL constructor works
+                    const finalUrlStr = scannedValue.startsWith('?') ? `http://dummy.com/${scannedValue}` : urlStr;
+
+                    const url = new URL(finalUrlStr);
                     // Search in hash if using hash router (#/...) or search if normal
                     let idParam = url.searchParams.get('id');
+                    let lvl = url.searchParams.get('level');
                     
                     if (!idParam && url.hash.includes('?')) {
                         const hashQuery = url.hash.split('?')[1];
                         const hashParams = new URLSearchParams(hashQuery);
                         idParam = hashParams.get('id');
+                        lvl = hashParams.get('level');
                     }
                     
                     if (idParam) teamId = idParam;
+                    if (lvl) levelParam = lvl;
                 }
             } catch (e) {
                 // If invalid URL, assume it's just the ID string
@@ -476,7 +485,7 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
 
             // Navigate to ID Cards with search param (Ideally pass state, but standard nav works)
             setTimeout(() => {
-                navigate(`/idcards?id=${teamId}`); 
+                navigate(`/idcards?id=${teamId}${levelParam ? `&level=${levelParam}` : ''}`); 
             }, 100);
         }}
       />
