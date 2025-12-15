@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { AppData, Venue, VenueSchedule } from '../types';
-import { MapPin, Calendar, Plus, Edit2, Trash2, Navigation, Info, ExternalLink, X, Save, CheckCircle, Utensils, Wifi, Car, Wind, Clock, Building, Layers, Map, AlertCircle, Search } from 'lucide-react';
+import { MapPin, Calendar, Plus, Edit2, Trash2, Navigation, Info, ExternalLink, X, Save, CheckCircle, Utensils, Wifi, Car, Wind, Clock, Building, Layers, Map, AlertCircle, Search, LayoutGrid } from 'lucide-react';
 import SearchableSelect from './SearchableSelect';
 import { saveVenue, deleteVenue } from '../services/api';
 
@@ -48,9 +48,9 @@ const VenueCard = ({ venue, isAdmin, onEdit }: { venue: Venue, isAdmin: boolean,
 
             {/* Content Section */}
             <div className="p-5 flex-1 flex flex-col">
-                <div className="flex items-start text-sm text-gray-600 mb-4 h-10 overflow-hidden">
+                <div className="flex items-start text-sm text-gray-600 mb-4 overflow-hidden">
                     <Info className="w-4 h-4 mr-2 mt-0.5 shrink-0 text-blue-500" />
-                    <p className="line-clamp-2">{venue.description}</p>
+                    <p className="line-clamp-2">{venue.description || 'ไม่มีรายละเอียด'}</p>
                 </div>
 
                 {/* Facilities */}
@@ -66,25 +66,36 @@ const VenueCard = ({ venue, isAdmin, onEdit }: { venue: Venue, isAdmin: boolean,
                 )}
 
                 {/* Schedule List */}
-                <div className="flex-1 min-h-0 mb-4">
-                    <div className="text-xs font-bold text-gray-400 uppercase mb-2 flex items-center">
+                <div className="flex-1 min-h-0 mb-4 bg-gray-50 rounded-xl p-3 border border-gray-100">
+                    <div className="text-xs font-bold text-gray-500 uppercase mb-2 flex items-center">
                         <Calendar className="w-3 h-3 mr-1" /> รายการที่แข่งขันที่นี่
                     </div>
                     {venue.scheduledActivities && venue.scheduledActivities.length > 0 ? (
-                        <div className="space-y-2 max-h-40 overflow-y-auto pr-1 custom-scrollbar">
+                        <div className="space-y-2 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
                             {venue.scheduledActivities.map((sch, idx) => (
-                                <div key={idx} className="bg-gray-50 p-2 rounded border border-gray-100 text-xs">
-                                    <div className="font-bold text-gray-800 line-clamp-1 mb-1">{sch.activityName}</div>
-                                    <div className="flex items-center text-gray-500 flex-wrap gap-x-3 gap-y-1">
-                                        <span className="flex items-center"><Calendar className="w-3 h-3 mr-1"/> {sch.date}</span>
-                                        <span className="flex items-center"><Clock className="w-3 h-3 mr-1"/> {sch.timeRange}</span>
-                                        <span className="flex items-center text-blue-600"><Building className="w-3 h-3 mr-1"/> {sch.building} {sch.room ? `(${sch.room})` : ''}</span>
+                                <div key={idx} className="bg-white p-2.5 rounded border border-gray-200 text-xs shadow-sm">
+                                    <div className="font-bold text-blue-800 mb-1.5">{sch.activityName}</div>
+                                    <div className="grid grid-cols-1 gap-1 text-gray-600">
+                                        <div className="flex items-center">
+                                            <Calendar className="w-3 h-3 mr-1.5 text-gray-400"/> 
+                                            {sch.date} {sch.timeRange && <span>({sch.timeRange})</span>}
+                                        </div>
+                                        <div className="flex items-center">
+                                            <Building className="w-3 h-3 mr-1.5 text-gray-400"/> 
+                                            <span className="font-medium text-gray-800">{sch.building} {sch.floor} {sch.room ? `(${sch.room})` : ''}</span>
+                                        </div>
+                                        {sch.note && (
+                                            <div className="flex items-start mt-1">
+                                                <AlertCircle className="w-3 h-3 mr-1.5 text-orange-400 mt-0.5 shrink-0"/>
+                                                <span className="text-orange-600">{sch.note}</span>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             ))}
                         </div>
                     ) : (
-                        <div className="text-xs text-gray-400 italic py-2 text-center border border-dashed border-gray-200 rounded">
+                        <div className="text-xs text-gray-400 italic py-4 text-center">
                             ยังไม่มีรายการแข่งขัน
                         </div>
                     )}
@@ -101,9 +112,9 @@ const VenueCard = ({ venue, isAdmin, onEdit }: { venue: Venue, isAdmin: boolean,
                         <Navigation className="w-4 h-4 mr-2" /> นำทาง (GPS)
                     </a>
                     {venue.contactInfo && (
-                        <div className="px-3 py-2 border border-gray-200 rounded-lg text-xs text-gray-500 flex flex-col justify-center items-center text-center bg-gray-50">
-                            <span className="font-bold truncate w-20">ติดต่อ</span>
-                            <span className="truncate w-20" title={venue.contactInfo}>{venue.contactInfo}</span>
+                        <div className="px-3 py-2 border border-gray-200 rounded-lg text-xs text-gray-500 flex flex-col justify-center items-center text-center bg-gray-50 max-w-[40%]">
+                            <span className="font-bold">ติดต่อ</span>
+                            <span className="truncate w-full" title={venue.contactInfo}>{venue.contactInfo}</span>
                         </div>
                     )}
                 </div>
@@ -150,8 +161,17 @@ const VenueModal = ({ venue, isOpen, onClose, onSave, onDelete, activities }: { 
         const entry = { ...newSchedule, activityName };
         const updatedList = [...(formData.scheduledActivities || []), entry];
         handleChange('scheduledActivities', updatedList);
-        // Reset form
-        setNewSchedule({ activityId: '', activityName: '', building: '', floor: '', room: '', date: '', timeRange: '', note: '' });
+        // Reset form but keep building/date for convenience if adding multiple
+        setNewSchedule({ 
+            activityId: '', 
+            activityName: '', 
+            building: newSchedule.building, 
+            floor: newSchedule.floor, 
+            room: '', 
+            date: newSchedule.date, 
+            timeRange: '', 
+            note: '' 
+        });
     };
 
     const removeSchedule = (index: number) => {
@@ -164,7 +184,7 @@ const VenueModal = ({ venue, isOpen, onClose, onSave, onDelete, activities }: { 
 
     return (
         <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-            <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="bg-white rounded-2xl w-full max-w-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
                 <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
                     <h3 className="font-bold text-lg text-gray-800">{venue ? 'แก้ไขสนามแข่งขัน' : 'เพิ่มสนามแข่งขัน'}</h3>
                     <button onClick={onClose} className="p-2 hover:bg-gray-200 rounded-full"><X className="w-5 h-5"/></button>
@@ -215,12 +235,14 @@ const VenueModal = ({ venue, isOpen, onClose, onSave, onDelete, activities }: { 
                     {/* Activity Schedule Mapping */}
                     <div className="border-t border-gray-200 pt-4">
                         <h4 className="font-bold text-gray-800 mb-3 flex items-center">
-                            <Calendar className="w-5 h-5 mr-2 text-blue-600" /> ตารางการใช้สนาม (Schedule Mapping)
+                            <Calendar className="w-5 h-5 mr-2 text-blue-600" /> ตารางการใช้สนามและห้องแข่งขัน
                         </h4>
+                        <p className="text-xs text-gray-500 mb-4">กำหนดรายการแข่งขันที่ใช้สนามนี้ พร้อมระบุอาคาร ชั้น และห้อง</p>
                         
                         {/* Add Form */}
                         <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 space-y-3 mb-4">
-                            <label className="text-xs font-bold text-blue-800 uppercase">เพิ่มกิจกรรม</label>
+                            <label className="text-xs font-bold text-blue-800 uppercase">เพิ่มข้อมูลการใช้สนาม</label>
+                            
                             <SearchableSelect 
                                 options={activities.map(a => ({ label: a.name, value: a.id }))}
                                 value={newSchedule.activityId}
@@ -228,37 +250,45 @@ const VenueModal = ({ venue, isOpen, onClose, onSave, onDelete, activities }: { 
                                 placeholder="-- ค้นหาและเลือกรายการแข่งขัน --"
                                 icon={<Search className="w-4 h-4"/>}
                             />
+                            
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                                <input className="border rounded px-2 py-1.5 text-xs" placeholder="ตึก/อาคาร (เช่น อาคาร 1)" value={newSchedule.building} onChange={e => setNewSchedule(prev => ({...prev, building: e.target.value}))} />
-                                <input className="border rounded px-2 py-1.5 text-xs" placeholder="ชั้น (เช่น ชั้น 2)" value={newSchedule.floor} onChange={e => setNewSchedule(prev => ({...prev, floor: e.target.value}))} />
-                                <input className="border rounded px-2 py-1.5 text-xs" placeholder="ห้อง (เช่น ห้อง 202)" value={newSchedule.room} onChange={e => setNewSchedule(prev => ({...prev, room: e.target.value}))} />
-                                <input className="border rounded px-2 py-1.5 text-xs" type="date" value={newSchedule.date} onChange={e => setNewSchedule(prev => ({...prev, date: e.target.value}))} />
+                                <input className="border rounded px-2 py-1.5 text-sm" placeholder="ตึก/อาคาร" value={newSchedule.building} onChange={e => setNewSchedule(prev => ({...prev, building: e.target.value}))} />
+                                <input className="border rounded px-2 py-1.5 text-sm" placeholder="ชั้น" value={newSchedule.floor} onChange={e => setNewSchedule(prev => ({...prev, floor: e.target.value}))} />
+                                <input className="border rounded px-2 py-1.5 text-sm" placeholder="ห้อง" value={newSchedule.room} onChange={e => setNewSchedule(prev => ({...prev, room: e.target.value}))} />
+                                <input className="border rounded px-2 py-1.5 text-sm" type="date" value={newSchedule.date} onChange={e => setNewSchedule(prev => ({...prev, date: e.target.value}))} />
                             </div>
+                            
                             <div className="flex gap-2">
-                                <input className="flex-1 border rounded px-2 py-1.5 text-xs" placeholder="เวลา (เช่น 09:00 - 12:00)" value={newSchedule.timeRange} onChange={e => setNewSchedule(prev => ({...prev, timeRange: e.target.value}))} />
-                                <input className="flex-[2] border rounded px-2 py-1.5 text-xs" placeholder="หมายเหตุ (ถ้ามี)" value={newSchedule.note} onChange={e => setNewSchedule(prev => ({...prev, note: e.target.value}))} />
-                                <button onClick={addSchedule} className="px-4 py-1.5 bg-blue-600 text-white rounded text-xs font-bold hover:bg-blue-700">เพิ่ม</button>
+                                <input className="flex-1 border rounded px-2 py-1.5 text-sm" placeholder="เวลา (เช่น 09:00 - 12:00)" value={newSchedule.timeRange} onChange={e => setNewSchedule(prev => ({...prev, timeRange: e.target.value}))} />
+                                <input className="flex-[2] border rounded px-2 py-1.5 text-sm" placeholder="หมายเหตุ (เช่น เตรียมปลั๊กไฟมาเอง)" value={newSchedule.note} onChange={e => setNewSchedule(prev => ({...prev, note: e.target.value}))} />
+                                <button onClick={addSchedule} className="px-4 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 flex items-center shrink-0">
+                                    <Plus className="w-4 h-4 mr-1"/> เพิ่ม
+                                </button>
                             </div>
                         </div>
 
                         {/* List */}
                         <div className="space-y-2">
                             {formData.scheduledActivities?.map((item, idx) => (
-                                <div key={idx} className="flex items-start justify-between p-3 bg-white border border-gray-200 rounded-lg hover:border-blue-300 transition-colors shadow-sm">
-                                    <div>
-                                        <div className="font-bold text-sm text-gray-800">{item.activityName}</div>
-                                        <div className="text-xs text-gray-500 mt-1 flex flex-wrap gap-2">
-                                            <span className="flex items-center"><MapPin className="w-3 h-3 mr-1"/> {item.building} {item.floor} {item.room}</span>
+                                <div key={idx} className="flex items-start justify-between p-3 bg-white border border-gray-200 rounded-lg hover:border-blue-300 transition-colors shadow-sm group">
+                                    <div className="flex-1">
+                                        <div className="font-bold text-sm text-gray-900">{item.activityName}</div>
+                                        <div className="text-xs text-gray-500 mt-1 flex flex-wrap gap-x-4 gap-y-1">
+                                            <span className="flex items-center text-blue-600 font-medium"><MapPin className="w-3 h-3 mr-1"/> {item.building} {item.floor} {item.room}</span>
                                             <span className="flex items-center"><Calendar className="w-3 h-3 mr-1"/> {item.date}</span>
                                             <span className="flex items-center"><Clock className="w-3 h-3 mr-1"/> {item.timeRange}</span>
                                         </div>
-                                        {item.note && <div className="text-xs text-orange-600 mt-1 bg-orange-50 inline-block px-1 rounded">{item.note}</div>}
+                                        {item.note && <div className="text-xs text-orange-600 mt-1 bg-orange-50 inline-block px-2 py-0.5 rounded border border-orange-100">{item.note}</div>}
                                     </div>
-                                    <button onClick={() => removeSchedule(idx)} className="text-red-400 hover:text-red-600 p-1"><Trash2 className="w-4 h-4"/></button>
+                                    <button onClick={() => removeSchedule(idx)} className="text-gray-400 hover:text-red-600 p-2 rounded-full hover:bg-red-50 transition-colors">
+                                        <Trash2 className="w-4 h-4"/>
+                                    </button>
                                 </div>
                             ))}
                             {(!formData.scheduledActivities || formData.scheduledActivities.length === 0) && (
-                                <div className="text-center py-4 text-gray-400 text-xs italic">ยังไม่มีกิจกรรมที่กำหนด</div>
+                                <div className="text-center py-6 text-gray-400 text-sm border-2 border-dashed border-gray-100 rounded-xl">
+                                    ยังไม่มีกิจกรรมที่กำหนด
+                                </div>
                             )}
                         </div>
                     </div>
@@ -267,7 +297,7 @@ const VenueModal = ({ venue, isOpen, onClose, onSave, onDelete, activities }: { 
                 <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-between items-center">
                     {venue ? (
                         <button onClick={() => onDelete(venue.id)} className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium flex items-center">
-                            <Trash2 className="w-4 h-4 mr-2"/> ลบสนาม
+                            <Trash2 className="w-4 h-4 mr-2"/> ลบสนามนี้
                         </button>
                     ) : <div></div>}
                     <div className="flex gap-2">
@@ -286,10 +316,11 @@ const VenuesView: React.FC<VenuesViewProps> = ({ data, user }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingVenue, setEditingVenue] = useState<Venue | null>(null);
   
-  // Local state for optimistic updates
+  // Ensure we fallback to empty array if data.venues is undefined (legacy data)
   const [localVenues, setLocalVenues] = useState<Venue[]>(data.venues || []);
 
-  const isAdmin = user?.level === 'admin' || user?.level === 'area';
+  // Allow admin, area, and group_admin to manage venues (broaden access for usability)
+  const canManage = ['admin', 'area', 'group_admin'].includes(user?.level?.toLowerCase());
 
   const handleEdit = (v: Venue) => {
       setEditingVenue(v);
@@ -317,7 +348,6 @@ const VenuesView: React.FC<VenuesViewProps> = ({ data, user }) => {
       const success = await saveVenue(venueData);
       if (!success) {
           alert('บันทึกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
-          // Revert would happen here in a real app or just refresh data
       }
   };
 
@@ -331,7 +361,7 @@ const VenuesView: React.FC<VenuesViewProps> = ({ data, user }) => {
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="space-y-6 animate-in fade-in duration-500 pb-20">
         
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
@@ -342,7 +372,7 @@ const VenuesView: React.FC<VenuesViewProps> = ({ data, user }) => {
                 </h2>
                 <p className="text-gray-500 text-sm mt-1">ข้อมูลสถานที่ อาคาร ห้องสอบ และเวลาแข่งขัน</p>
             </div>
-            {isAdmin && (
+            {canManage && (
                 <button 
                     onClick={handleAdd}
                     className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm font-medium text-sm"
@@ -359,7 +389,7 @@ const VenuesView: React.FC<VenuesViewProps> = ({ data, user }) => {
                     <VenueCard 
                         key={venue.id} 
                         venue={venue} 
-                        isAdmin={isAdmin} 
+                        isAdmin={canManage} 
                         onEdit={handleEdit} 
                     />
                 ))
@@ -369,22 +399,35 @@ const VenuesView: React.FC<VenuesViewProps> = ({ data, user }) => {
                         <MapPin className="w-8 h-8" />
                     </div>
                     <h3 className="text-lg font-medium text-gray-900">ยังไม่มีข้อมูลสนามแข่งขัน</h3>
-                    <p className="text-gray-500 text-sm mt-1">ผู้ดูแลระบบสามารถเพิ่มข้อมูลได้ที่ปุ่มด้านบน</p>
+                    <p className="text-gray-500 text-sm mt-1">
+                        {canManage ? 'กดปุ่ม "เพิ่มสนามแข่ง" เพื่อเริ่มต้นใช้งาน' : 'ผู้ดูแลระบบยังไม่ได้เพิ่มข้อมูล'}
+                    </p>
+                    {canManage && (
+                        <button 
+                            onClick={handleAdd}
+                            className="mt-4 px-6 py-2 bg-blue-50 text-blue-600 font-medium rounded-lg hover:bg-blue-100 transition-colors"
+                        >
+                            เพิ่มสนามแข่งแรก
+                        </button>
+                    )}
                 </div>
             )}
         </div>
 
         {/* Edit Modal */}
-        <VenueModal 
-            isOpen={isModalOpen} 
-            venue={editingVenue} 
-            activities={data.activities}
-            onClose={() => setIsModalOpen(false)} 
-            onSave={handleSave} 
-            onDelete={handleDelete}
-        />
+        {isModalOpen && (
+            <VenueModal 
+                isOpen={isModalOpen} 
+                venue={editingVenue} 
+                activities={data.activities}
+                onClose={() => setIsModalOpen(false)} 
+                onSave={handleSave} 
+                onDelete={handleDelete}
+            />
+        )}
     </div>
   );
 };
 
 export default VenuesView;
+
