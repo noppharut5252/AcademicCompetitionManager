@@ -316,7 +316,7 @@ const ExpandedIdCard = ({
                 <div className="flex-1 flex flex-col items-center justify-center px-6 min-h-0">
                     <div className="bg-white p-2 rounded-2xl shadow-lg border-2 border-dashed border-gray-200 w-full max-w-[240px] aspect-square flex items-center justify-center">
                         <img 
-                            src={getQrCodeUrl(`${window.location.origin}${window.location.pathname}#/idcards?id=${team.teamId}`, 300)} 
+                            src={getQrCodeUrl(`${window.location.origin}${window.location.pathname}#/idcards?id=${team.teamId}&level=${viewLevel}`, 300)} 
                             alt="QR" 
                             className="w-full h-full object-contain mix-blend-multiply" 
                         />
@@ -548,9 +548,14 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
   useEffect(() => {
       // Check for 'id' parameter in URL to auto-open Digital ID
       const teamIdParam = searchParams.get('id');
+      const levelParam = searchParams.get('level');
+
       if (teamIdParam && type === 'idcard' && data.teams.length > 0) {
           const foundTeam = data.teams.find(t => t.teamId === teamIdParam);
           if (foundTeam) {
+              if (levelParam === 'area' || levelParam === 'cluster') {
+                  setViewLevel(levelParam as 'cluster' | 'area');
+              }
               setSelectedTeamForDigital(foundTeam);
               // Clean up the URL parameter to prevent reopening on refresh if desired, 
               // or keep it to allow sharing. Keeping it for now.
@@ -1063,8 +1068,8 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
           for (let i = 0; i < allMembers.length; i += 4) {
               pages.push(allMembers.slice(i, i + 4));
           }
-          // IMPORTANT UPDATE: Generate Full URL for scanning into App with specific ID Cards path
-          const appUrl = `${window.location.origin}${window.location.pathname}#/idcards?id=${team.teamId}`;
+          // IMPORTANT UPDATE: Generate Full URL for scanning into App with specific ID Cards path including LEVEL
+          const appUrl = `${window.location.origin}${window.location.pathname}#/idcards?id=${team.teamId}&level=${viewLevel}`;
           const qrUrl = getQrCodeUrl(appUrl, 300); // Generate a larger QR source for better quality
           
           const headerColor = viewLevel === 'area' ? 'linear-gradient(135deg, #6b21a8 0%, #a855f7 100%)' : 'linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)'; 
