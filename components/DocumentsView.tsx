@@ -5,6 +5,7 @@ import { Search, Printer, IdCard, Smartphone, CheckCircle, X, ChevronLeft, Chevr
 import CertificateConfigModal from './CertificateConfigModal';
 import { getCertificateConfig } from '../services/api';
 import { useSearchParams } from 'react-router-dom';
+import { shareIdCard } from '../services/liff';
 
 interface DocumentsViewProps {
   data: AppData;
@@ -39,12 +40,14 @@ const ExpandedIdCard = ({
     const [currentIndex, setCurrentIndex] = useState(initialIndex);
     const [isFullscreen, setIsFullscreen] = useState(false);
 
-    // Touch handling state
+    // Touch & Swipe Logic
     const [touchStart, setTouchStart] = useState<number | null>(null);
-    const [touchEnd, setTouchEnd] = useState<number | null>(null);
+    const [touchCurrent, setTouchCurrent] = useState<number | null>(null);
+    const [translateX, setTranslateX] = useState(0);
+    const [isAnimating, setIsAnimating] = useState(false);
 
     // Minimum swipe distance (in px) 
-    const minSwipeDistance = 50; 
+    const minSwipeDistance = 80; 
 
     const currentMember = members[currentIndex];
     const role = currentMember.role;
@@ -85,52 +88,115 @@ const ExpandedIdCard = ({
     };
 
     const handleShare = async () => {
-        if (navigator.share) {
-            try {
-                await navigator.share({
-                    title: 'Digital ID Card',
-                    text: `Digital ID: ${fullName} - ${team.teamName}`,
-                    url: window.location.href
-                });
-            } catch (error) { console.log('Error sharing', error); }
-        } else {
-            alert("Capture this screen to save your ID Card");
+        const result = await shareIdCard(
+            team.teamName,
+            schoolName,
+            fullName,
+            role,
+            team.teamId,
+            imageUrl,
+            levelText
+        );
+
+        if (result.success) {
+            if (result.method === 'copy') {
+                alert('Copied ID Card Link to Clipboard!');
+            }
         }
     };
 
     const handlePrev = (e?: React.MouseEvent) => {
         e?.stopPropagation();
-        if (currentIndex > 0) setCurrentIndex(prev => prev - 1);
+        if (currentIndex > 0) {
+            setIsAnimating(true);
+            setTranslateX(100); // Move out to right
+            setTimeout(() => {
+                setCurrentIndex(prev => prev - 1);
+                setTranslateX(-100); // Reset position from left
+                requestAnimationFrame(() => {
+                    setTranslateX(0); // Animate in
+                    setTimeout(() => setIsAnimating(false), 300);
+                });
+            }, 300);
+        }
     };
 
     const handleNext = (e?: React.MouseEvent) => {
         e?.stopPropagation();
-        if (currentIndex < members.length - 1) setCurrentIndex(prev => prev + 1);
+        if (currentIndex < members.length - 1) {
+            setIsAnimating(true);
+            setTranslateX(-100); // Move out to left
+            setTimeout(() => {
+                setCurrentIndex(prev => prev + 1);
+                setTranslateX(100); // Reset position from right
+                requestAnimationFrame(() => {
+                    setTranslateX(0); // Animate in
+                    setTimeout(() => setIsAnimating(false), 300);
+                });
+            }, 300);
+        }
     };
 
-    // Swipe Handlers
+    // --- Enhanced Swipe Handlers ---
     const onTouchStart = (e: React.TouchEvent) => {
-        setTouchEnd(null); // Reset
         setTouchStart(e.targetTouches[0].clientX);
+        setTouchCurrent(e.targetTouches[0].clientX);
+        setIsAnimating(false); // Disable transition during drag for 1:1 feel
     };
 
     const onTouchMove = (e: React.TouchEvent) => {
-        setTouchEnd(e.targetTouches[0].clientX);
+        if (!touchStart) return;
+        const currentX = e.targetTouches[0].clientX;
+        setTouchCurrent(currentX);
+        
+        const diff = currentX - touchStart;
+        // Limit drag slightly at edges if no more items
+        if ((currentIndex === 0 && diff > 0) || (currentIndex === members.length - 1 && diff < 0)) {
+            setTranslateX(diff * 0.3); // Resistance
+        } else {
+            setTranslateX(diff);
+        }
     };
 
     const onTouchEnd = () => {
-        if (!touchStart || !touchEnd) return;
+        if (!touchStart || !touchCurrent) return;
         
-        const distance = touchStart - touchEnd;
-        const isLeftSwipe = distance > minSwipeDistance;
-        const isRightSwipe = distance < -minSwipeDistance;
+        const distance = touchCurrent - touchStart;
+        const isLeftSwipe = distance < -minSwipeDistance;
+        const isRightSwipe = distance > minSwipeDistance;
+
+        setIsAnimating(true); // Re-enable transition for snap/switch
 
         if (isLeftSwipe && currentIndex < members.length - 1) {
-            setCurrentIndex(prev => prev + 1);
+            // Commit switch to next
+            setTranslateX(-window.innerWidth); // Animate out completely
+            setTimeout(() => {
+                setCurrentIndex(prev => prev + 1);
+                setTranslateX(window.innerWidth); // Reset from right
+                requestAnimationFrame(() => {
+                    setTranslateX(0); // Animate in
+                    setTimeout(() => setIsAnimating(false), 300);
+                });
+            }, 200);
+        } else if (isRightSwipe && currentIndex > 0) {
+            // Commit switch to prev
+            setTranslateX(window.innerWidth); // Animate out completely
+            setTimeout(() => {
+                setCurrentIndex(prev => prev - 1);
+                setTranslateX(-window.innerWidth); // Reset from left
+                requestAnimationFrame(() => {
+                    setTranslateX(0); // Animate in
+                    setTimeout(() => setIsAnimating(false), 300);
+                });
+            }, 200);
+        } else {
+            // Snap back
+            setTranslateX(0);
+            setTimeout(() => setIsAnimating(false), 300);
         }
-        if (isRightSwipe && currentIndex > 0) {
-            setCurrentIndex(prev => prev - 1);
-        }
+
+        setTouchStart(null);
+        setTouchCurrent(null);
     };
 
     return (
@@ -156,7 +222,7 @@ const ExpandedIdCard = ({
             {currentIndex > 0 && (
                 <button 
                     onClick={handlePrev} 
-                    className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md z-50 transition-all active:scale-95"
+                    className="hidden md:block absolute left-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md z-50 transition-all active:scale-95"
                 >
                     <ChevronLeft className="w-8 h-8" />
                 </button>
@@ -165,19 +231,23 @@ const ExpandedIdCard = ({
             {currentIndex < members.length - 1 && (
                 <button 
                     onClick={handleNext} 
-                    className="absolute right-2 md:right-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md z-50 transition-all active:scale-95"
+                    className="hidden md:block absolute right-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md z-50 transition-all active:scale-95"
                 >
                     <ChevronRight className="w-8 h-8" />
                 </button>
             )}
 
-            {/* Main Card Container */}
+            {/* Main Card Container with Swipe Animation */}
             <div 
                 ref={cardRef} 
-                className={`relative w-full h-full max-w-md bg-white flex flex-col overflow-hidden shadow-2xl transition-all duration-300 ${isFullscreen ? '' : 'rounded-none sm:rounded-3xl sm:h-auto sm:aspect-[9/16] sm:max-h-[90vh]'}`}
+                className={`relative w-full h-full max-w-md bg-white flex flex-col overflow-hidden shadow-2xl ${isFullscreen ? '' : 'rounded-none sm:rounded-3xl sm:h-auto sm:aspect-[9/16] sm:max-h-[90vh]'}`}
                 onTouchStart={onTouchStart}
                 onTouchMove={onTouchMove}
                 onTouchEnd={onTouchEnd}
+                style={{ 
+                    transform: `translateX(${translateX}px)`,
+                    transition: isAnimating ? 'transform 0.3s ease-out' : 'none'
+                }}
             >
                 {/* 1. Header Section */}
                 <div className={`relative h-[35%] ${bgGradient} rounded-b-[30px] shadow-lg shrink-0`}>
@@ -272,12 +342,20 @@ const ExpandedIdCard = ({
                             / {members.length}
                         </span>
                     </div>
-                    <p className="text-center text-[10px] text-gray-400 mt-2">Swipe to view next member</p>
+                    <p className="text-center text-[10px] text-gray-400 mt-2 flex items-center justify-center gap-1">
+                        <ArrowLeftRightIcon className="w-3 h-3" /> Swipe to view next member
+                    </p>
                 </div>
             </div>
         </div>
     );
 };
+
+const ArrowLeftRightIcon = ({className}:{className?:string}) => (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+    </svg>
+);
 
 // --- DigitalIdCard & DigitalIdModal (Assume unchanged or paste if necessary) ---
 const DigitalIdCard = ({ member, role, team, activity, schoolName, viewLevel, onClick }: { member: any, role: string, team: Team, activity: string, schoolName: string, viewLevel: 'cluster' | 'area', onClick: () => void }) => {
@@ -987,7 +1065,7 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
           }
           // IMPORTANT UPDATE: Generate Full URL for scanning into App with specific ID Cards path
           const appUrl = `${window.location.origin}${window.location.pathname}#/idcards?id=${team.teamId}`;
-          const qrUrl = getQrCodeUrl(appUrl, 150);
+          const qrUrl = getQrCodeUrl(appUrl, 300); // Generate a larger QR source for better quality
           
           const headerColor = viewLevel === 'area' ? 'linear-gradient(135deg, #6b21a8 0%, #a855f7 100%)' : 'linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)'; 
           const htmlContent = `
@@ -1017,7 +1095,8 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
                   .activity-name { font-size: 10pt; color: #333; font-weight: 600; }
                   .footer { display: flex; justify-content: space-between; align-items: center; padding: 8px 15px; background: #f9fafb; border-top: 1px solid #eee; }
                   .footer-text { text-align: left; }
-                  .qr-code { width: 60px; height: 60px; display: block; }
+                  /* INCREASED QR SIZE HERE */
+                  .qr-code { width: 35mm; height: 35mm; display: block; mix-blend-mode: multiply; }
                   .no-print { display: block; position: fixed; bottom: 20px; right: 20px; z-index: 1000; }
                   @media print { .no-print { display: none; } }
                 </style>
