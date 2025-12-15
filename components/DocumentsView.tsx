@@ -616,7 +616,10 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
                   dateText: `ให้ไว้ ณ วันที่ ${new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}`,
                   showRank: true,
                   serialFormat: '{activityId}-{year}-{run:4}',
-                  serialStart: 1
+                  serialStart: 1,
+                  contentTop: 25,
+                  footerBottom: 25,
+                  logoHeight: 35
               } as CertificateTemplate;
           }
 
@@ -631,6 +634,11 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
                 ? 'งานศิลปหัตถกรรมนักเรียน ระดับเขตพื้นที่การศึกษา' 
                 : `งานศิลปหัตถกรรมนักเรียน ${clusterName}`;
           }
+
+          // Resolve Layout Configs
+          const contentTop = template.contentTop ? `${template.contentTop}mm` : '25mm';
+          const footerBottom = template.footerBottom ? `${template.footerBottom}mm` : '25mm';
+          const logoHeight = template.logoHeight ? `${template.logoHeight}mm` : '35mm';
 
           // Serial Generation Function (Running Number)
           const generateSerial = (index: number) => {
@@ -767,14 +775,14 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
                         display: flex;
                         flex-direction: column;
                         align-items: center;
-                        padding-top: 25mm;
+                        padding-top: ${contentTop}; /* Configurable */
                         box-sizing: border-box;
                     }
                     .logos {
                         display: flex;
                         justify-content: space-between;
                         width: 80%;
-                        height: 35mm; /* Increased Height */
+                        height: ${logoHeight}; /* Configurable */
                         margin-bottom: 5mm;
                         position: relative;
                     }
@@ -791,7 +799,7 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
                         display: flex;
                         justify-content: center;
                         gap: 15mm;
-                        margin-bottom: 25mm; /* Move up slightly */
+                        margin-bottom: ${footerBottom}; /* Configurable */
                         width: 90%;
                         align-items: flex-end;
                     }
