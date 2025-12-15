@@ -47,18 +47,30 @@ const Toast = ({ message, type, isVisible, onClose }: { message: string, type: '
     );
 };
 
-const ConfirmationModal = ({ isOpen, title, description, confirmLabel, confirmColor, onConfirm, onCancel, isLoading, children, count }: any) => {
+const ConfirmationModal = ({ isOpen, title, description, confirmLabel, confirmColor, onConfirm, onCancel, isLoading, children, count, actionType }: any) => {
     if (!isOpen) return null;
     const isHighVolume = count > 20;
+    const isDelete = actionType === 'delete';
 
     return (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden transform scale-100 transition-all">
-                <div className="p-6 text-center">
-                    <div className={`mx-auto flex items-center justify-center h-12 w-12 rounded-full mb-4 ${confirmColor === 'red' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>
-                        <AlertTriangle className="h-6 w-6" />
+                {isDelete && (
+                    <div className="bg-red-50 p-4 border-b border-red-100 flex justify-center">
+                        <div className="h-16 w-16 bg-red-100 rounded-full flex items-center justify-center animate-pulse">
+                            <Trash2 className="h-8 w-8 text-red-600" />
+                        </div>
                     </div>
-                    <h3 className="text-lg leading-6 font-bold text-gray-900">{title}</h3>
+                )}
+                
+                <div className={`p-6 text-center ${isDelete ? 'pt-2' : ''}`}>
+                    {!isDelete && (
+                        <div className={`mx-auto flex items-center justify-center h-12 w-12 rounded-full mb-4 ${confirmColor === 'red' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>
+                            <AlertTriangle className="h-6 w-6" />
+                        </div>
+                    )}
+                    
+                    <h3 className={`text-lg leading-6 font-bold ${isDelete ? 'text-red-600' : 'text-gray-900'}`}>{title}</h3>
                     <div className="mt-2">
                         <p className="text-sm text-gray-500">{description}</p>
                     </div>
@@ -158,8 +170,11 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
 
   // Helper: Check Data Completeness
   const getValidationWarnings = (team: Team, activity?: Activity) => {
-    // Only check validation for Pending or Approved teams, ignore Rejected
-    if (!activity || normalizeStatus(team.status) === TeamStatus.REJECTED) return [];
+    if (!activity) return [];
+    
+    // Always check regardless of status to prompt users to fix it
+    // But maybe skip 'Rejected' as it's already dead
+    if (normalizeStatus(team.status) === TeamStatus.REJECTED) return [];
     
     let teacherCount = 0;
     let studentCount = 0;
@@ -476,8 +491,8 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
       let color = 'blue';
       
       if (actionType === 'delete') {
-          title = 'ยืนยันการลบทีม (Delete)';
-          desc = `คุณต้องการลบข้อมูลจำนวน ${targetIds.length} ทีม ใช่หรือไม่? การกระทำนี้ไม่สามารถเรียกคืนได้`;
+          title = 'ยืนยันการลบข้อมูล (Delete)';
+          desc = `คุณต้องการลบข้อมูลทีมจำนวน ${targetIds.length} ทีม ใช่หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้`;
           color = 'red';
       } else if (status === '1') {
           title = 'ยืนยันการอนุมัติ (Approve)';
@@ -646,9 +661,10 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
         isOpen={confirmModal.isOpen}
         title={confirmModal.title}
         description={confirmModal.desc}
-        confirmLabel="ยืนยัน"
+        confirmLabel={confirmModal.action === 'delete' ? 'ลบข้อมูล' : 'ยืนยัน'}
         confirmColor={confirmModal.color}
         count={selectedTeamIds.size} // Pass count for validation
+        actionType={confirmModal.action}
         onConfirm={executeAction}
         onCancel={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
         isLoading={isUpdatingStatus}
@@ -846,12 +862,12 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
                       รอตรวจ (Pending)
                   </button>
                   <button 
-                    onClick={() => promptAction('updateStatus', '2')}
+                    onClick={() => promptAction('delete')}
                     disabled={isUpdatingStatus}
                     className="flex items-center px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-all hover:shadow-md disabled:opacity-50"
                   >
-                      <XCircle className="w-4 h-4 mr-1.5" />
-                      ปฏิเสธ (Reject)
+                      <Trash2 className="w-4 h-4 mr-1.5" />
+                      ลบ (Delete)
                   </button>
               </div>
           </div>
@@ -964,8 +980,13 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
                     onClick={() => setSelectedTeam(team)}
                     className={`bg-white p-4 rounded-xl shadow-sm border ${canEdit ? 'border-l-4 border-l-blue-500 border-gray-100' : 'border-gray-100'} flex items-start space-x-4 cursor-pointer hover:shadow-md transition-all active:scale-[0.98]`}
                 >
-                    <div className="flex-shrink-0">
+                    <div className="flex-shrink-0 relative">
                         <img className="h-16 w-16 rounded-lg object-cover border border-gray-100" src={imageUrl} alt="" />
+                        {warnings.length > 0 && (
+                            <div className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 border-2 border-white shadow-sm">
+                                <AlertTriangle className="w-3 h-3" />
+                            </div>
+                        )}
                     </div>
                     <div className="flex-1 min-w-0">
                         <div className="flex justify-between items-start">
@@ -1094,18 +1115,27 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
                                     <span className="relative inline-flex rounded-full h-4 w-4 bg-blue-500 border-2 border-white"></span>
                                   </span>
                               )}
+                              {warnings.length > 0 && (
+                                  <div className="absolute -bottom-1 -right-1 bg-red-500 text-white rounded-full p-0.5 border border-white shadow-sm z-10" title={`ข้อมูลไม่ครบ: ${warnings.join(', ')}`}>
+                                      <AlertTriangle className="w-3 h-3" />
+                                  </div>
+                              )}
                           </div>
                           <div className="ml-4">
                             <div className="text-sm font-medium text-gray-900 group-hover:text-blue-600 transition-colors flex items-center">
                                 {viewRound === 'area' && areaInfo?.name ? areaInfo.name : team.teamName}
                                 {canEdit && <span className="ml-2 text-[10px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded font-bold">EDIT</span>}
-                                {warnings.length > 0 && (
-                                    <span className="ml-2 text-red-500" title={`ข้อมูลไม่ครบ: ${warnings.join(', ')}`}>
-                                        <AlertTriangle className="w-4 h-4" />
-                                    </span>
-                                )}
                             </div>
                             <div className="text-xs text-gray-500">ID: {team.teamId}</div>
+                            {warnings.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                    {warnings.map((w, idx) => (
+                                        <span key={idx} className="bg-red-50 text-red-700 font-bold text-[10px] px-1.5 py-0.5 rounded-md flex items-center border border-red-200">
+                                            <AlertCircle className="w-3 h-3 mr-1" />{w}
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
                           </div>
                         </div>
                       </td>
