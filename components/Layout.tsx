@@ -5,6 +5,8 @@ import { logoutLiff } from '../services/liff';
 import { User, AppData } from '../types';
 import { useNavigate, useLocation } from 'react-router-dom';
 import SearchableSelect from './SearchableSelect';
+// @ts-ignore
+import jsQR from 'jsqr';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -27,12 +29,14 @@ const ScannerModal = ({
     user?: User | any;
 }) => {
     const videoRef = useRef<HTMLVideoElement>(null);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
     const [mode, setMode] = useState<'scan' | 'manual'>('scan');
     const [manualId, setManualId] = useState(''); // Stores Team ID
     const [viewLevel, setViewLevel] = useState<'cluster' | 'area'>('cluster');
     const [cameraError, setCameraError] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
     const streamRef = useRef<MediaStream | null>(null);
+    const animationFrameRef = useRef<number | null>(null);
 
     // Compute teams list for the Select2 dropdown - STRICT FILTERING
     const myTeams = useMemo(() => {
@@ -141,11 +145,61 @@ const ScannerModal = ({
             // IMPORTANT: Wait for metadata to load before playing to avoid "The play() request was interrupted" errors
             videoRef.current.onloadedmetadata = () => {
                 videoRef.current?.play().catch(e => console.error("Error playing video:", e));
+                // Start scanning loop
+                requestAnimationFrame(scanFrame);
             };
         }
     };
 
+    const scanFrame = () => {
+        if (!videoRef.current || !canvasRef.current || !streamRef.current) return;
+        
+        const video = videoRef.current;
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+
+        if (video.readyState === video.HAVE_ENOUGH_DATA && ctx) {
+            canvas.height = video.videoHeight;
+            canvas.width = video.videoWidth;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            
+            // Perform QR Code Detection
+            const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                inversionAttempts: "dontInvert",
+            });
+
+            if (code) {
+                // Found a QR code!
+                console.log("Found QR code:", code.data);
+                
+                // Draw a box around it (Visual Feedback)
+                ctx.beginPath();
+                ctx.lineWidth = 4;
+                ctx.strokeStyle = "#00FF00";
+                ctx.moveTo(code.location.topLeftCorner.x, code.location.topLeftCorner.y);
+                ctx.lineTo(code.location.topRightCorner.x, code.location.topRightCorner.y);
+                ctx.lineTo(code.location.bottomRightCorner.x, code.location.bottomRightCorner.y);
+                ctx.lineTo(code.location.bottomLeftCorner.x, code.location.bottomLeftCorner.y);
+                ctx.lineTo(code.location.topLeftCorner.x, code.location.topLeftCorner.y);
+                ctx.stroke();
+
+                // Stop scanning and Trigger search
+                stopCamera();
+                onSearch(code.data);
+                return;
+            }
+        }
+        
+        animationFrameRef.current = requestAnimationFrame(scanFrame);
+    };
+
     const stopCamera = () => {
+        if (animationFrameRef.current) {
+            cancelAnimationFrame(animationFrameRef.current);
+            animationFrameRef.current = null;
+        }
         if (streamRef.current) {
             streamRef.current.getTracks().forEach(track => {
                 try {
@@ -189,7 +243,7 @@ const ScannerModal = ({
                 {mode === 'scan' ? (
                     <>
                         {!cameraError ? (
-                            <div className="relative w-full h-full">
+                            <div className="relative w-full h-full flex items-center justify-center bg-black">
                                 <video 
                                     ref={videoRef} 
                                     autoPlay 
@@ -197,6 +251,8 @@ const ScannerModal = ({
                                     muted 
                                     className="w-full h-full object-cover"
                                 />
+                                <canvas ref={canvasRef} className="hidden" />
+                                
                                 {/* Overlay Scanning Frame */}
                                 <div className="absolute inset-0 border-[40px] border-black/50 flex items-center justify-center pointer-events-none">
                                     <div className="w-64 h-64 border-2 border-white/50 rounded-xl relative">
@@ -369,10 +425,23 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
             // Determine if it's a URL or a raw ID
             let teamId = scannedValue;
             try {
+                // If scanned full URL e.g. "https://domain.com/#/idcards?id=T001" or "/idcards?id=T001"
                 if (scannedValue.includes('id=')) {
-                    // Extract ID from URL (e.g., .../idcards?id=T001)
-                    const url = new URL(scannedValue);
-                    const idParam = url.searchParams.get('id');
+                    // We need to parse search params from a potential full URL or just query string
+                    const urlStr = scannedValue.startsWith('http') || scannedValue.startsWith('/') 
+                        ? scannedValue 
+                        : `http://dummy.com/${scannedValue}`;
+                    
+                    const url = new URL(urlStr);
+                    // Search in hash if using hash router (#/...) or search if normal
+                    let idParam = url.searchParams.get('id');
+                    
+                    if (!idParam && url.hash.includes('?')) {
+                        const hashQuery = url.hash.split('?')[1];
+                        const hashParams = new URLSearchParams(hashQuery);
+                        idParam = hashParams.get('id');
+                    }
+                    
                     if (idParam) teamId = idParam;
                 }
             } catch (e) {
