@@ -96,18 +96,36 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
 
   const getPhotoUrl = (driveId: string) => `https://drive.google.com/thumbnail?id=${driveId}`;
 
+  // Check if this is an Area Level Team
+  const isAreaLevel = team.stageStatus === 'Area' || team.flag === 'TRUE';
+
   useEffect(() => {
-      setEditTeamName(team.teamName);
+      // Logic: If Area Level, load data from 'stageInfo'. If not, use standard columns.
+      let nameToUse = team.teamName;
+      let contactToUse = team.contact;
+      let membersToUse = team.members;
+
+      if (isAreaLevel && team.stageInfo) {
+          try {
+              const areaData = JSON.parse(team.stageInfo);
+              // Use Area data if available, otherwise fallback to team data (might be first time entering area stage)
+              if (areaData.name) nameToUse = areaData.name;
+              if (areaData.contact) contactToUse = areaData.contact;
+              if (areaData.members) membersToUse = areaData.members;
+          } catch(e) { console.error("Error parsing Area Info", e); }
+      }
+
+      setEditTeamName(nameToUse);
       
       // Parse Contact
       try {
-        const parsed = typeof team.contact === 'string' ? JSON.parse(team.contact) : team.contact;
+        const parsed = typeof contactToUse === 'string' ? JSON.parse(contactToUse) : contactToUse;
         setEditContact(parsed || {});
       } catch { setEditContact({}); }
 
       // Parse Members
       try {
-        const rawMembers = typeof team.members === 'string' ? JSON.parse(team.members) : team.members;
+        const rawMembers = typeof membersToUse === 'string' ? JSON.parse(membersToUse) : membersToUse;
         
         // Process existing photoDriveId to displayable image URL
         const processMember = (m: any) => ({
@@ -127,14 +145,14 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
             }
         }
       } catch { setEditTeachers([]); setEditStudents([]); }
-  }, [team]);
+  }, [team, isAreaLevel]);
 
   const activity = data.activities.find(a => a.id === team.activityId);
   const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
   const cluster = data.clusters.find(c => c.ClusterID === school?.SchoolCluster);
   const files = data.files.filter(f => f.TeamID === team.teamId);
 
-  // Safe parsing for Stage Info
+  // Safe parsing for Stage Info (for display purposes)
   let areaInfo: AreaStageInfo | null = null;
   try {
     if (team.stageInfo) {
@@ -162,7 +180,6 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
   };
 
   const displayStatus = normalizeStatus(team.status);
-  const isAreaLevel = team.stageStatus === 'Area' || team.flag === 'TRUE';
 
   // Deadline Logic
   const hasDeadline = team.editDeadline && new Date(team.editDeadline) > new Date();
@@ -282,7 +299,8 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
           members: JSON.stringify({ 
               teachers: editTeachers.map(prepareForSave), 
               students: editStudents.map(prepareForSave) 
-          })
+          }),
+          isArea: isAreaLevel // Flag to tell backend to update area columns
       };
 
       const success = await updateTeamDetails(payload);
@@ -365,15 +383,21 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
              <img src={imageUrl} className="w-14 h-14 rounded-xl object-cover border border-gray-200 bg-gray-50 shrink-0 shadow-sm" alt="Logo"/>
             <div className="min-w-0 flex-1">
                 {isEditing ? (
-                    <input 
-                        type="text" 
-                        className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-lg font-bold text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none" 
-                        value={editTeamName}
-                        onChange={(e) => { setHasUnsavedChanges(true); setEditTeamName(e.target.value); }}
-                        placeholder="ชื่อทีม..."
-                    />
+                    <div className="flex flex-col">
+                        {isAreaLevel && <span className="text-[10px] text-purple-600 font-bold mb-1">แก้ไขชื่อทีม (ระดับเขตพื้นที่)</span>}
+                        <input 
+                            type="text" 
+                            className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-lg font-bold text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none" 
+                            value={editTeamName}
+                            onChange={(e) => { setHasUnsavedChanges(true); setEditTeamName(e.target.value); }}
+                            placeholder="ชื่อทีม..."
+                        />
+                    </div>
                 ) : (
-                    <h3 className="text-xl font-bold text-gray-900 truncate">{team.teamName}</h3>
+                    <h3 className="text-xl font-bold text-gray-900 truncate">
+                        {/* Display correct name context */}
+                        {isAreaLevel && areaInfo?.name ? areaInfo.name : team.teamName}
+                    </h3>
                 )}
                 
                 <div className="flex flex-wrap items-center gap-2 text-sm text-gray-500 mt-1">
@@ -383,9 +407,9 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
                         {displayStatus === 'Pending' && <Clock className="w-3 h-3 mr-1"/>}
                         {displayStatus}
                     </span>
-                    {team.flag && (
+                    {isAreaLevel && (
                         <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 shrink-0">
-                            <Flag className="w-3 h-3 mr-1" /> ตัวแทนกลุ่มฯ
+                            <Flag className="w-3 h-3 mr-1" /> ตัวแทนเขต
                         </span>
                     )}
                 </div>
@@ -524,7 +548,7 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
             <div>
                 <h4 className="font-bold text-gray-800 mb-4 flex items-center pb-2 border-b border-gray-200">
                     <Users className="w-5 h-5 mr-2 text-gray-600" />
-                    สมาชิกในทีม
+                    สมาชิกในทีม {isAreaLevel && <span className="text-purple-600 text-xs ml-2 font-normal">(ระดับเขตพื้นที่)</span>}
                     <span className="ml-2 text-xs font-normal text-gray-500 bg-gray-200 px-2 py-0.5 rounded-full">
                         {editTeachers.length + editStudents.length} คน
                     </span>
