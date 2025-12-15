@@ -31,7 +31,6 @@ const DigitalIdCard = ({ member, role, team, activity, schoolName, viewLevel }: 
     const isArea = viewLevel === 'area';
     const bgGradient = isArea ? 'bg-gradient-to-br from-indigo-900 via-purple-900 to-indigo-900' : 'bg-gradient-to-br from-blue-900 via-blue-800 to-blue-900';
     const accentColor = isArea ? 'text-purple-400' : 'text-blue-400';
-    const badgeColor = isArea ? 'bg-purple-500' : 'bg-blue-500';
     const levelText = isArea ? 'DISTRICT LEVEL' : 'CLUSTER LEVEL';
     const levelThai = isArea ? 'ระดับเขตพื้นที่การศึกษา' : 'ระดับกลุ่มเครือข่าย';
 
@@ -233,32 +232,28 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
   // Filter Logic
   const filteredTeams = useMemo(() => {
     return data.teams.filter(team => {
-        if (user && user.SchoolID) {
-            const isSchoolUser = user.level === 'school_admin' || user.level === 'user';
-            if (isSchoolUser) {
+        
+        // 1. School Filter (Strict if School Admin or User)
+        if (user && (user.level === 'school_admin' || user.level === 'user')) {
+             if (user.SchoolID) {
                 const teamSchool = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
                 const userSchool = data.schools.find(s => s.SchoolID === user.SchoolID);
-                const isMySchool = team.schoolId === user.SchoolID || teamSchool?.SchoolName === userSchool?.SchoolName;
+                // Allow match by ID or Name (for legacy/mixed data)
+                const isMySchool = team.schoolId === user.SchoolID || (userSchool && team.schoolId === userSchool.SchoolName);
                 if (!isMySchool) return false;
-            }
+             }
+        }
+
+        // 2. Area Level Restriction (Must be Representative AND Rank 1)
+        if (viewLevel === 'area') {
+            const isRep = String(team.flag).toUpperCase() === 'TRUE';
+            const isRank1 = String(team.rank) === '1'; // Assuming selection comes from Cluster Rank 1
+            if (!isRep || !isRank1) return false;
         }
         
-        if (type === 'certificate') {
-             const hasClusterScore = team.score > 0;
-             let hasAreaScore = false;
-             try {
-                if(team.stageInfo) {
-                    const info = JSON.parse(team.stageInfo);
-                    hasAreaScore = info.score > 0;
-                }
-             } catch {}
-
-             if (viewLevel === 'cluster' && !hasClusterScore) return false;
-             if (viewLevel === 'area' && !hasAreaScore) return false;
-        }
-
-        const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
+        // 3. Search Filter
         const activity = data.activities.find(a => a.id === team.activityId);
+        const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
         const term = searchTerm.toLowerCase();
         
         return (
@@ -285,8 +280,7 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
       const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId)?.SchoolName || team.schoolId;
       
       const levelTitle = viewLevel === 'area' ? 'ระดับเขตพื้นที่การศึกษา' : 'ระดับกลุ่มเครือข่าย';
-      const levelSubtitle = viewLevel === 'area' ? 'District Level' : 'Cluster Level';
-      const headerColor = viewLevel === 'area' ? '#581c87' : '#1e40af'; // Purple vs Blue
+      const headerColor = viewLevel === 'area' ? 'linear-gradient(135deg, #6b21a8 0%, #a855f7 100%)' : 'linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)'; 
 
       // 1. Prepare Data List
       let allMembers: any[] = [];
@@ -335,7 +329,7 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
               }
               .page {
                 width: 210mm;
-                height: 296mm; /* Slightly less than 297mm to prevent overflow */
+                height: 296mm;
                 background: white;
                 margin: 0 auto;
                 page-break-after: always;
@@ -348,68 +342,100 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
               }
               .card {
                 border: 1px dashed #ccc;
-                border-radius: 8px;
+                border-radius: 12px;
                 overflow: hidden;
                 position: relative;
                 display: flex;
                 flex-direction: column;
                 background: white;
+                box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+                /* Pattern Background */
+                background-image: radial-gradient(#e5e7eb 1px, transparent 1px);
+                background-size: 20px 20px;
               }
               .card-header {
                 background: ${headerColor};
                 color: white;
                 padding: 15px 10px;
                 text-align: center;
-                height: 70px;
+                height: 80px;
                 display: flex;
                 flex-direction: column;
                 justify-content: center;
+                position: relative;
+              }
+              .card-header::after {
+                  content: '';
+                  position: absolute;
+                  bottom: -10px;
+                  left: 0;
+                  right: 0;
+                  height: 20px;
+                  background: white;
+                  border-radius: 50% 50% 0 0;
               }
               .card-header h1 { margin: 0; font-size: 14pt; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }
               .card-header p { margin: 2px 0 0; font-size: 9pt; opacity: 0.9; }
               
               .card-body {
-                padding: 15px;
+                padding: 10px 15px;
                 flex: 1;
                 display: flex;
                 flex-direction: column;
                 align-items: center;
                 text-align: center;
+                z-index: 1;
               }
+              .photo-container {
+                width: 80px;
+                height: 80px;
+                margin-top: -30px;
+                margin-bottom: 10px;
+                border-radius: 50%;
+                border: 4px solid white;
+                background: #f3f4f6;
+                overflow: hidden;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+              }
+              .photo { width: 100%; height: 100%; object-fit: cover; }
+              
               .role-badge {
                 display: inline-block;
-                padding: 4px 15px;
-                border-radius: 20px;
-                font-size: 10pt;
+                padding: 2px 12px;
+                border-radius: 12px;
+                font-size: 9pt;
                 font-weight: bold;
-                margin-bottom: 10px;
+                margin-bottom: 5px;
                 text-transform: uppercase;
               }
               .role-teacher { background: #e0e7ff; color: #3730a3; }
               .role-student { background: #dcfce7; color: #166534; }
               
-              .name { font-size: 16pt; font-weight: bold; color: #000; margin-bottom: 5px; line-height: 1.2; }
-              .school { font-size: 11pt; color: #555; margin-bottom: 5px; font-weight: 500; }
-              .team { font-size: 10pt; color: #777; margin-bottom: 15px; }
+              .name { font-size: 14pt; font-weight: bold; color: #000; margin-bottom: 2px; line-height: 1.2; }
+              .school { font-size: 10pt; color: #555; margin-bottom: 5px; font-weight: 500; }
+              .team { font-size: 9pt; color: #777; margin-bottom: 10px; }
               
               .activity-box {
                 width: 100%;
-                border-top: 1px solid #eee;
-                padding-top: 10px;
+                border-top: 1px dashed #ddd;
+                padding-top: 8px;
                 margin-top: auto;
               }
-              .activity-name { font-size: 11pt; color: #333; font-weight: 600; }
+              .activity-name { font-size: 10pt; color: #333; font-weight: 600; }
 
               .footer {
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
-                padding: 10px 15px;
+                padding: 8px 15px;
                 background: #f9fafb;
                 border-top: 1px solid #eee;
               }
               .footer-text { text-align: left; }
-              .qr-code { width: 50px; height: 50px; }
+              .qr-code { width: 40px; height: 40px; }
               
               @media print {
                 body { background: white; }
@@ -429,8 +455,13 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
                     const prefix = m.prefix || '';
                     const name = m.name || `${m.firstname || ''} ${m.lastname || ''}`;
                     const fullName = `${prefix}${name}`.trim();
-                    const roleLabel = m.role === 'Teacher' ? 'ครูผู้ฝึกสอน (Teacher)' : 'ผู้เข้าแข่งขัน (Student)';
                     const roleClass = m.role === 'Teacher' ? 'role-teacher' : 'role-student';
+                    
+                    const getImg = (mem: any) => {
+                        if (mem.image) return mem.image;
+                        if (mem.photoDriveId) return `https://drive.google.com/thumbnail?id=${mem.photoDriveId}`;
+                        return "https://cdn-icons-png.flaticon.com/512/3135/3135768.png";
+                    };
 
                     return `
                       <div class="card">
@@ -439,6 +470,9 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
                           <p>${levelTitle}</p>
                         </div>
                         <div class="card-body">
+                          <div class="photo-container">
+                             <img src="${getImg(m)}" class="photo" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3135/3135768.png'" />
+                          </div>
                           <div class="${roleClass} role-badge">${m.role}</div>
                           <div class="name">${fullName}</div>
                           <div class="school">${school}</div>
@@ -512,7 +546,7 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
                 <input
                     type="text"
                     className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg leading-5 bg-gray-50 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm transition-all"
-                    placeholder="ค้นหาชื่อทีม, โรงเรียน..."
+                    placeholder="ค้นหาชื่อทีม, โรงเรียน, กิจกรรม..."
                     value={searchTerm}
                     onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
                 />
@@ -525,6 +559,14 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
           <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 flex items-center text-blue-700 text-sm">
                <School className="w-4 h-4 mr-2" />
                แสดงข้อมูลเฉพาะ: <span className="font-bold ml-1">{data.schools.find(s => s.SchoolID === user.SchoolID)?.SchoolName || user.SchoolID}</span>
+          </div>
+      )}
+      
+      {/* Area Level Warning */}
+      {viewLevel === 'area' && (
+          <div className="bg-purple-50 border border-purple-100 rounded-lg p-3 flex items-center text-purple-700 text-sm">
+               <Trophy className="w-4 h-4 mr-2" />
+               ระดับเขตพื้นที่: แสดงเฉพาะทีมที่เป็นตัวแทน (Representative) และได้ลำดับที่ 1 เท่านั้น
           </div>
       )}
 
