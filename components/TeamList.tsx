@@ -47,8 +47,10 @@ const Toast = ({ message, type, isVisible, onClose }: { message: string, type: '
     );
 };
 
-const ConfirmationModal = ({ isOpen, title, description, confirmLabel, confirmColor, onConfirm, onCancel, isLoading, children }: any) => {
+const ConfirmationModal = ({ isOpen, title, description, confirmLabel, confirmColor, onConfirm, onCancel, isLoading, children, count }: any) => {
     if (!isOpen) return null;
+    const isHighVolume = count > 20;
+
     return (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden transform scale-100 transition-all">
@@ -60,6 +62,22 @@ const ConfirmationModal = ({ isOpen, title, description, confirmLabel, confirmCo
                     <div className="mt-2">
                         <p className="text-sm text-gray-500">{description}</p>
                     </div>
+                    
+                    {/* Warning for High Volume */}
+                    {isHighVolume && (
+                        <div className="mt-4 bg-orange-50 border border-orange-200 rounded-lg p-3 text-left">
+                            <div className="flex items-start">
+                                <AlertTriangle className="w-5 h-5 text-orange-600 mr-2 shrink-0" />
+                                <div>
+                                    <h4 className="text-sm font-bold text-orange-800">คำเตือน: เลือกจำนวนมาก ({count})</h4>
+                                    <p className="text-xs text-orange-700 mt-1">
+                                        การทำรายการพร้อมกันจำนวนมากอาจทำให้ระบบทำงานช้าหรือเกิดข้อผิดพลาดได้ แนะนำให้ทำครั้งละไม่เกิน 20 รายการ
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {children}
                 </div>
                 <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse gap-2">
@@ -99,7 +117,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
   const [clusterFilter, setClusterFilter] = useState<string>('All');
   const [quickFilter, setQuickFilter] = useState<'all' | 'gold' | 'qualified'>('all'); 
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState<number>(20); // State for pagination limit
+  const [itemsPerPage, setItemsPerPage] = useState<number>(20); 
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const [viewRound, setViewRound] = useState<'cluster' | 'area'>('area');
   
@@ -252,6 +270,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
           if (viewRound === 'cluster') {
               score = t.score;
           } else {
+              // AREA LEVEL STATS
               const info = getAreaInfo(t.stageInfo);
               score = info?.score || 0;
           }
@@ -260,7 +279,8 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
           else if (score >= 70) silver++;
           else if (score >= 60) bronze++;
 
-          if (viewRound === 'area' && score > 0) {
+          // For Top Schools calculation, we use score > 0
+          if (score > 0) {
               const sName = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId)?.SchoolName || t.schoolId;
               schoolScores[sName] = (schoolScores[sName] || 0) + score;
           }
@@ -588,6 +608,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
         description={confirmModal.desc}
         confirmLabel="ยืนยัน"
         confirmColor={confirmModal.color}
+        count={selectedTeamIds.size} // Pass count for validation
         onConfirm={executeAction}
         onCancel={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
         isLoading={isUpdatingStatus}
@@ -609,6 +630,46 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
           )}
       </ConfirmationModal>
 
+      {/* Header with Actions */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+        <div>
+            <h2 className="text-xl font-bold text-gray-800 flex items-center">
+                <Users className="w-6 h-6 mr-2 text-blue-600" />
+                รายชื่อทีมผู้เข้าแข่งขัน
+            </h2>
+            <p className="text-gray-500 text-sm">จัดการข้อมูลทีม ตรวจสอบสถานะ และผลการแข่งขัน</p>
+        </div>
+        
+        <div className="flex flex-wrap gap-2 w-full md:w-auto">
+            {/* Level Toggle */}
+            <div className="bg-gray-100 p-1 rounded-lg flex shrink-0">
+                <button
+                    onClick={() => setViewRound('cluster')}
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all flex items-center ${viewRound === 'cluster' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                    <LayoutGrid className="w-4 h-4 mr-1.5" />
+                    ระดับกลุ่มฯ
+                </button>
+                <button
+                    onClick={() => setViewRound('area')}
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all flex items-center ${viewRound === 'area' ? 'bg-white text-purple-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                    <Trophy className="w-4 h-4 mr-1.5" />
+                    ระดับเขตฯ
+                </button>
+            </div>
+
+            {/* Print Button */}
+            <button
+                onClick={handlePrintSummary}
+                className="flex items-center px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium"
+            >
+                <Printer className="w-4 h-4 mr-2" />
+                <span className="hidden sm:inline">พิมพ์สรุป</span>
+            </button>
+        </div>
+      </div>
+
       {/* Enhanced Dashboard Stats */}
       {dashboardStats && (
         <div className={`bg-gradient-to-r ${dashboardStats.bgGradient} rounded-2xl p-6 text-white shadow-lg mb-6 transition-all duration-300`}>
@@ -626,7 +687,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="bg-white/10 backdrop-blur-sm rounded-xl p-5 border border-white/20">
                          <h4 className="text-white/80 text-sm mb-4 font-semibold flex items-center">
-                             <Award className="w-4 h-4 mr-2"/> สรุปเหรียญรางวัลรวม
+                             <Award className="w-4 h-4 mr-2"/> สรุปเหรียญรางวัลรวม (ระดับเขต)
                          </h4>
                          <div className="grid grid-cols-3 gap-2 text-center">
                             <div className="p-3 bg-yellow-500/20 rounded-lg border border-yellow-400/30 flex flex-col items-center">
@@ -649,7 +710,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
 
                     <div className="bg-white/10 backdrop-blur-sm rounded-xl p-5 border border-white/20">
                          <h4 className="text-white/80 text-sm mb-4 font-semibold flex items-center">
-                             <Crown className="w-4 h-4 mr-2 text-yellow-300"/> Top 3 โรงเรียนยอดเยี่ยม (คะแนนรวม)
+                             <Crown className="w-4 h-4 mr-2 text-yellow-300"/> Top 3 โรงเรียนยอดเยี่ยม (คะแนนเขต)
                          </h4>
                          <div className="space-y-3">
                              {dashboardStats.topSchools.map((school, idx) => (
@@ -664,7 +725,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
                                  </div>
                              ))}
                              {dashboardStats.topSchools.length === 0 && (
-                                 <p className="text-center text-white/50 text-xs py-4">ยังไม่มีข้อมูลคะแนน</p>
+                                 <p className="text-center text-white/50 text-xs py-4">ยังไม่มีข้อมูลคะแนนระดับเขต</p>
                              )}
                          </div>
                     </div>
@@ -717,11 +778,14 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
       {isSuperUser && selectedTeamIds.size > 0 && (
           <div className="sticky top-14 z-20 bg-white border border-blue-200 shadow-xl rounded-xl p-3 flex flex-col sm:flex-row items-center justify-between gap-3 animate-in slide-in-from-top-2">
               <div className="flex items-center gap-3 w-full sm:w-auto">
-                  <div className="bg-blue-600 text-white text-sm font-bold px-3 py-1 rounded-full shadow-sm flex items-center">
+                  <div className={`text-white text-sm font-bold px-3 py-1 rounded-full shadow-sm flex items-center ${selectedTeamIds.size > 20 ? 'bg-orange-500 animate-pulse' : 'bg-blue-600'}`}>
                       <CheckSquare className="w-4 h-4 mr-1.5" />
                       {selectedTeamIds.size}
                   </div>
-                  <span className="text-sm text-gray-700 font-medium">รายการที่เลือก</span>
+                  <span className="text-sm text-gray-700 font-medium">
+                      รายการที่เลือก
+                      {selectedTeamIds.size > 20 && <span className="text-orange-600 ml-2 text-xs font-normal">(จำนวนมาก อาจใช้เวลานาน)</span>}
+                  </span>
               </div>
               
               <div className="flex flex-wrap gap-2 w-full sm:w-auto justify-end">
@@ -753,55 +817,9 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
           </div>
       )}
 
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-800">รายชื่อทีม (Teams)</h2>
-          <p className="text-gray-500">
-             ข้อมูลทีม <span className="font-semibold text-blue-600">{filteredTeams.length}</span> ทีม 
-          </p>
-        </div>
-        
-        <div className="flex gap-2">
-            {/* Add Team Button */}
-            {user && !user.isGuest && (['school_admin', 'user', 'admin'].includes(role || '')) && (
-                <button 
-                    onClick={() => alert("ระบบลงทะเบียนทีมยังไม่เปิดใช้งานในส่วนนี้")} 
-                    className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
-                >
-                    <Plus className="w-4 h-4 sm:mr-2" />
-                    <span className="hidden sm:inline">ลงทะเบียนทีม</span>
-                </button>
-            )}
-
-            {/* Round Toggle */}
-            <div className="flex bg-gray-100 p-1 rounded-lg shadow-inner">
-                <button
-                    onClick={() => { setViewRound('area'); setCurrentPage(1); setQuickFilter('all'); }}
-                    className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all ${viewRound === 'area' ? 'bg-white shadow text-purple-600' : 'text-gray-500 hover:text-gray-700'}`}
-                >
-                    ระดับเขตพื้นที่
-                </button>
-                <button
-                    onClick={() => { setViewRound('cluster'); setCurrentPage(1); setQuickFilter('all'); }}
-                    className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all ${viewRound === 'cluster' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-                >
-                    ระดับกลุ่มเครือข่าย
-                </button>
-            </div>
-
-            {/* Print Button */}
-            <button 
-                onClick={handlePrintSummary}
-                className="flex items-center px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 hover:text-blue-600 transition-colors shadow-sm"
-                title="พิมพ์สรุปข้อมูล"
-            >
-                <Printer className="w-4 h-4 sm:mr-2" />
-                <span className="hidden sm:inline">พิมพ์สรุป</span>
-            </button>
-        </div>
-      </div>
-
-      {/* Filters & Quick Filter */}
+      {/* Rest of the component content (Filters, Mobile Cards, Table, Pagination) remains largely same but updated Modal prop */}
+      
+      {/* ... Filters Section ... */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col gap-4">
         
         {/* Quick Filter Buttons */}
@@ -1262,6 +1280,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
           <TeamDetailModal 
             team={selectedTeam} 
             data={data} 
+            viewLevel={viewRound} // Pass current view level context
             onClose={() => setSelectedTeam(null)} 
             canEdit={canEditTeam(selectedTeam)}
             onSaveSuccess={onDataUpdate}
