@@ -70,6 +70,8 @@ export interface Team {
   stageInfo: string; // JSON string containing AreaStageInfo (Area Score, etc.)
   stageStatus: string;
   editDeadline?: string; // New field for editing deadline
+  lastEditedBy?: string; // New: Who edited last
+  lastEditedAt?: string; // New: When edited last
 }
 
 export interface User {
