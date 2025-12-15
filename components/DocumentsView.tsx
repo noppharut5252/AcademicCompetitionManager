@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { AppData, Team, TeamStatus, User, CertificateTemplate } from '../types';
-import { Search, Printer, IdCard, Smartphone, CheckCircle, X, ChevronLeft, ChevronRight, User as UserIcon, GraduationCap, School, MapPin, LayoutGrid, Trophy, Lock, QrCode, Maximize2, Minimize2, Share2, Download, Settings, FileBadge, Loader2, Calendar, Clock, Star } from 'lucide-react';
+import { Search, Printer, IdCard, Smartphone, CheckCircle, X, ChevronLeft, ChevronRight, User as UserIcon, GraduationCap, School, MapPin, LayoutGrid, Trophy, Lock, QrCode, Maximize2, Minimize2, Share2, Download, Settings, FileBadge, Loader2, Calendar, Clock } from 'lucide-react';
 import CertificateConfigModal from './CertificateConfigModal';
 import { getCertificateConfig } from '../services/api';
 import { useSearchParams } from 'react-router-dom';
@@ -67,7 +67,13 @@ const ExpandedIdCard = ({
     const bgGradient = isArea 
         ? 'bg-gradient-to-br from-indigo-900 via-purple-900 to-slate-900' 
         : 'bg-gradient-to-br from-blue-900 via-blue-800 to-slate-900';
+    const accentColor = isArea ? 'text-purple-600' : 'text-blue-600';
     const levelText = isArea ? 'DISTRICT LEVEL' : 'CLUSTER LEVEL';
+
+    // Mock Date/Time for status (Use current time for demo as "Verification Time")
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' });
+    const timeStr = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
 
     const toggleFullscreen = () => {
         if (!document.fullscreenElement) {
@@ -144,6 +150,7 @@ const ExpandedIdCard = ({
         setTouchCurrent(currentX);
         
         const diff = currentX - touchStart;
+        // Limit drag slightly at edges if no more items
         if ((currentIndex === 0 && diff > 0) || (currentIndex === members.length - 1 && diff < 0)) {
             setTranslateX(diff * 0.3); // Resistance
         } else {
@@ -161,26 +168,29 @@ const ExpandedIdCard = ({
         setIsAnimating(true); // Re-enable transition for snap/switch
 
         if (isLeftSwipe && currentIndex < members.length - 1) {
-            setTranslateX(-window.innerWidth);
+            // Commit switch to next
+            setTranslateX(-window.innerWidth); // Animate out completely
             setTimeout(() => {
                 setCurrentIndex(prev => prev + 1);
-                setTranslateX(window.innerWidth);
+                setTranslateX(window.innerWidth); // Reset from right
                 requestAnimationFrame(() => {
-                    setTranslateX(0);
+                    setTranslateX(0); // Animate in
                     setTimeout(() => setIsAnimating(false), 300);
                 });
             }, 200);
         } else if (isRightSwipe && currentIndex > 0) {
-            setTranslateX(window.innerWidth);
+            // Commit switch to prev
+            setTranslateX(window.innerWidth); // Animate out completely
             setTimeout(() => {
                 setCurrentIndex(prev => prev - 1);
-                setTranslateX(-window.innerWidth);
+                setTranslateX(-window.innerWidth); // Reset from left
                 requestAnimationFrame(() => {
-                    setTranslateX(0);
+                    setTranslateX(0); // Animate in
                     setTimeout(() => setIsAnimating(false), 300);
                 });
             }, 200);
         } else {
+            // Snap back
             setTranslateX(0);
             setTimeout(() => setIsAnimating(false), 300);
         }
@@ -208,7 +218,7 @@ const ExpandedIdCard = ({
                 </div>
             )}
 
-            {/* Navigation Arrows */}
+            {/* Navigation Arrows (Visual Hint) */}
             {currentIndex > 0 && (
                 <button 
                     onClick={handlePrev} 
@@ -227,7 +237,7 @@ const ExpandedIdCard = ({
                 </button>
             )}
 
-            {/* Main Card Container */}
+            {/* Main Card Container with Swipe Animation */}
             <div 
                 ref={cardRef} 
                 className={`relative w-full h-full max-w-md bg-white flex flex-col overflow-hidden shadow-2xl ${isFullscreen ? '' : 'rounded-none sm:rounded-3xl sm:h-auto sm:aspect-[9/16] sm:max-h-[90vh]'}`}
@@ -240,8 +250,7 @@ const ExpandedIdCard = ({
                 }}
             >
                 {/* 1. Header Section */}
-                {/* Reduced height to push photo up */}
-                <div className={`relative h-[25%] ${bgGradient} rounded-b-[30px] shadow-lg shrink-0`}>
+                <div className={`relative h-[35%] ${bgGradient} rounded-b-[30px] shadow-lg shrink-0`}>
                      <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
                      <div className="absolute top-12 left-0 right-0 text-center">
                          <span className="inline-block px-3 py-1 bg-white/20 backdrop-blur-sm rounded-full text-xs font-bold text-white tracking-widest uppercase border border-white/30">
@@ -249,10 +258,10 @@ const ExpandedIdCard = ({
                          </span>
                      </div>
                      
-                     {/* Photo: Positioned closer to top boundary */}
-                     <div className="absolute bottom-[-60px] left-1/2 -translate-x-1/2">
+                     {/* Photo */}
+                     <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/3">
                         <div className="relative">
-                            <div className="w-36 h-36 rounded-full border-4 border-white shadow-xl overflow-hidden bg-gray-200">
+                            <div className="w-32 h-32 rounded-full border-4 border-white shadow-xl overflow-hidden bg-gray-200">
                                 <img 
                                     src={imageUrl} 
                                     alt={fullName}
@@ -260,7 +269,7 @@ const ExpandedIdCard = ({
                                     onError={(e) => { (e.target as HTMLImageElement).src = "https://cdn-icons-png.flaticon.com/512/3135/3135768.png"; }}
                                 />
                             </div>
-                            <div className={`absolute bottom-2 right-2 w-8 h-8 rounded-full border-2 border-white flex items-center justify-center shadow-md text-white ${role === 'Teacher' ? 'bg-indigo-600' : 'bg-emerald-500'}`}>
+                            <div className={`absolute bottom-1 right-1 w-8 h-8 rounded-full border-2 border-white flex items-center justify-center shadow-md text-white ${role === 'Teacher' ? 'bg-indigo-600' : 'bg-emerald-500'}`}>
                                 {role === 'Teacher' ? <UserIcon className="w-4 h-4" /> : <GraduationCap className="w-4 h-4" />}
                             </div>
                         </div>
@@ -268,45 +277,51 @@ const ExpandedIdCard = ({
                 </div>
 
                 {/* 2. Identity Section */}
-                <div className="pt-20 px-6 text-center shrink-0">
+                <div className="pt-14 px-6 text-center shrink-0">
                     <h2 className="text-2xl font-bold text-gray-900 leading-tight mb-1">{fullName}</h2>
                     <p className="text-sm text-gray-500 font-medium mb-1">{role === 'Teacher' ? 'Teacher / Trainer' : 'Student / Competitor'}</p>
+                    <p className="text-sm text-gray-600 line-clamp-1">{schoolName}</p>
                 </div>
 
-                {/* 3. Activity & QR Section (Replaced Info Grid) */}
-                <div className="flex-1 flex flex-col px-6 py-2 min-h-0">
-                    
-                    {/* Activity Box */}
-                    <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 text-center mb-4 shrink-0">
-                        <div className="flex items-center justify-center mb-2">
-                            <Star className="w-4 h-4 text-amber-500 mr-1.5" />
-                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Competition Activity</span>
+                {/* 3. Status & Info Grid */}
+                <div className="px-6 py-4 shrink-0">
+                    <div className="bg-gray-50 rounded-xl p-3 border border-gray-100 grid grid-cols-2 gap-3">
+                        <div className="col-span-2 flex items-center justify-between bg-white p-2 rounded-lg shadow-sm border border-gray-100">
+                            <div className="flex items-center gap-2">
+                                <div className={`p-1.5 rounded-full ${isArea ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>
+                                    <CheckCircle className="w-4 h-4" /> 
+                                </div>
+                                <div className="text-left">
+                                    <p className="text-[10px] text-gray-400 font-bold uppercase">Status</p>
+                                    <p className="text-xs font-bold text-green-600">Active / Checked In</p>
+                                </div>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-[10px] text-gray-400 font-bold uppercase">Time</p>
+                                <p className="text-xs font-bold text-gray-700">{timeStr}</p>
+                            </div>
                         </div>
-                        <h3 className="text-base font-bold text-blue-900 line-clamp-2 leading-snug">{activity}</h3>
-                        <p className="text-xs text-gray-500 mt-2 font-medium line-clamp-1">{schoolName}</p>
-                        <p className="text-[10px] text-gray-400 mt-0.5 font-mono tracking-wider">{team.teamId}</p>
+                        <div className="bg-white p-2 rounded-lg shadow-sm border border-gray-100">
+                            <p className="text-[10px] text-gray-400 font-bold uppercase mb-1">Venue</p>
+                            <p className="text-xs font-medium text-gray-800 line-clamp-1">Stadium A (TBD)</p>
+                        </div>
+                        <div className="bg-white p-2 rounded-lg shadow-sm border border-gray-100">
+                            <p className="text-[10px] text-gray-400 font-bold uppercase mb-1">Date</p>
+                            <p className="text-xs font-medium text-gray-800">{dateStr}</p>
+                        </div>
                     </div>
+                </div>
 
-                    {/* Large QR Code Filling Remaining Space */}
-                    <div className="flex-1 flex flex-col items-center justify-center relative">
-                        <div className="w-full max-w-[260px] aspect-square bg-white p-3 rounded-3xl shadow-lg border border-gray-200 flex items-center justify-center relative overflow-hidden">
-                            {/* Decorative corners */}
-                            <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-blue-500 rounded-tl-xl opacity-50"></div>
-                            <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-blue-500 rounded-tr-xl opacity-50"></div>
-                            <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-blue-500 rounded-bl-xl opacity-50"></div>
-                            <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-blue-500 rounded-br-xl opacity-50"></div>
-                            
-                            <img 
-                                src={getQrCodeUrl(`${window.location.origin}${window.location.pathname}#/idcards?id=${team.teamId}&level=${viewLevel}`, 400)} 
-                                alt="QR" 
-                                className="w-full h-full object-contain mix-blend-multiply" 
-                            />
-                        </div>
-                        <p className="text-[10px] text-gray-400 mt-3 flex items-center animate-pulse">
-                            <Smartphone className="w-3 h-3 mr-1" /> 
-                            Scan to verify {viewLevel === 'area' ? 'District' : 'Network'} status
-                        </p>
+                {/* 4. Large QR Code Area */}
+                <div className="flex-1 flex flex-col items-center justify-center px-6 min-h-0">
+                    <div className="bg-white p-2 rounded-2xl shadow-lg border-2 border-dashed border-gray-200 w-full max-w-[240px] aspect-square flex items-center justify-center">
+                        <img 
+                            src={getQrCodeUrl(`${window.location.origin}${window.location.pathname}#/idcards?id=${team.teamId}`, 300)} 
+                            alt="QR" 
+                            className="w-full h-full object-contain mix-blend-multiply" 
+                        />
                     </div>
+                    <p className="text-[10px] text-gray-400 mt-2 font-mono">ID: {team.teamId}</p>
                 </div>
 
                 {/* 5. Footer / Pagination */}
@@ -533,17 +548,12 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
   useEffect(() => {
       // Check for 'id' parameter in URL to auto-open Digital ID
       const teamIdParam = searchParams.get('id');
-      const levelParam = searchParams.get('level');
-      
-      // Update View Level from URL if present
-      if (levelParam === 'cluster' || levelParam === 'area') {
-          setViewLevel(levelParam);
-      }
-
       if (teamIdParam && type === 'idcard' && data.teams.length > 0) {
           const foundTeam = data.teams.find(t => t.teamId === teamIdParam);
           if (foundTeam) {
               setSelectedTeamForDigital(foundTeam);
+              // Clean up the URL parameter to prevent reopening on refresh if desired, 
+              // or keep it to allow sharing. Keeping it for now.
           }
       }
   }, [searchParams, data.teams, type]);
@@ -1054,7 +1064,7 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
               pages.push(allMembers.slice(i, i + 4));
           }
           // IMPORTANT UPDATE: Generate Full URL for scanning into App with specific ID Cards path
-          const appUrl = `${window.location.origin}${window.location.pathname}#/idcards?id=${team.teamId}&level=${viewLevel}`;
+          const appUrl = `${window.location.origin}${window.location.pathname}#/idcards?id=${team.teamId}`;
           const qrUrl = getQrCodeUrl(appUrl, 300); // Generate a larger QR source for better quality
           
           const headerColor = viewLevel === 'area' ? 'linear-gradient(135deg, #6b21a8 0%, #a855f7 100%)' : 'linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)'; 
