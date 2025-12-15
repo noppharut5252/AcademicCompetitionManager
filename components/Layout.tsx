@@ -24,7 +24,7 @@ const ScannerModal = ({
 }: { 
     isOpen: boolean; 
     onClose: () => void; 
-    onSearch: (id: string, level?: string) => void; 
+    onSearch: (id: string) => void; 
     data?: AppData;
     user?: User | any;
 }) => {
@@ -189,34 +189,7 @@ const ScannerModal = ({
 
                 // Stop scanning and Trigger search
                 stopCamera();
-                
-                // Parse detected data to separate ID and Level
-                let detectedId = code.data;
-                let detectedLevel = undefined;
-
-                if (code.data.includes('id=')) {
-                    try {
-                        const urlStr = code.data.startsWith('http') || code.data.startsWith('/') 
-                            ? code.data 
-                            : `http://dummy.com/${code.data}`;
-                        const url = new URL(urlStr);
-                        
-                        let idParam = url.searchParams.get('id');
-                        let levelParam = url.searchParams.get('level');
-
-                        if (!idParam && url.hash.includes('?')) {
-                            const hashQuery = url.hash.split('?')[1];
-                            const hashParams = new URLSearchParams(hashQuery);
-                            idParam = hashParams.get('id');
-                            levelParam = hashParams.get('level');
-                        }
-                        
-                        if (idParam) detectedId = idParam;
-                        if (levelParam) detectedLevel = levelParam;
-                    } catch(e) {}
-                }
-
-                onSearch(detectedId, detectedLevel);
+                onSearch(code.data);
                 return;
             }
         }
@@ -247,7 +220,7 @@ const ScannerModal = ({
     const handleManualSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (manualId.trim()) {
-            onSearch(manualId, viewLevel);
+            onSearch(manualId);
             onClose();
         }
     };
@@ -470,43 +443,40 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
         onClose={() => setShowScanner(false)} 
         data={data}
         user={userProfile}
-        onSearch={(scannedValue, level) => {
+        onSearch={(scannedValue) => {
             // Close scanner first
             setShowScanner(false);
             
             // Determine if it's a URL or a raw ID
             let teamId = scannedValue;
-            let levelParam = level;
-
             try {
-                // If scanned full URL e.g. "https://domain.com/#/idcards?id=T001&level=area"
+                // If scanned full URL e.g. "https://domain.com/#/idcards?id=T001" or "/idcards?id=T001"
                 if (scannedValue.includes('id=')) {
+                    // We need to parse search params from a potential full URL or just query string
                     const urlStr = scannedValue.startsWith('http') || scannedValue.startsWith('/') 
                         ? scannedValue 
                         : `http://dummy.com/${scannedValue}`;
                     
                     const url = new URL(urlStr);
+                    // Search in hash if using hash router (#/...) or search if normal
                     let idParam = url.searchParams.get('id');
-                    let lvl = url.searchParams.get('level');
                     
                     if (!idParam && url.hash.includes('?')) {
                         const hashQuery = url.hash.split('?')[1];
                         const hashParams = new URLSearchParams(hashQuery);
                         idParam = hashParams.get('id');
-                        lvl = hashParams.get('level');
                     }
                     
                     if (idParam) teamId = idParam;
-                    if (lvl) levelParam = lvl;
                 }
             } catch (e) {
+                // If invalid URL, assume it's just the ID string
                 console.log("Not a valid URL, using as ID");
             }
 
-            // Navigate to ID Cards with search param
+            // Navigate to ID Cards with search param (Ideally pass state, but standard nav works)
             setTimeout(() => {
-                const search = levelParam ? `?id=${teamId}&level=${levelParam}` : `?id=${teamId}`;
-                navigate(`/idcards${search}`); 
+                navigate(`/idcards?id=${teamId}`); 
             }, 100);
         }}
       />
