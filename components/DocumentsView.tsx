@@ -88,20 +88,27 @@ const ExpandedIdCard = ({
     };
 
     const handleShare = async () => {
-        const result = await shareIdCard(
-            team.teamName,
-            schoolName,
-            fullName,
-            role,
-            team.teamId,
-            imageUrl,
-            levelText
-        );
+        try {
+            const result = await shareIdCard(
+                team.teamName,
+                schoolName,
+                fullName,
+                role,
+                team.teamId,
+                imageUrl,
+                levelText,
+                viewLevel
+            );
 
-        if (result.success) {
-            if (result.method === 'copy') {
-                alert('Copied ID Card Link to Clipboard!');
+            if (result.success) {
+                if (result.method === 'copy') {
+                    alert('คัดลอกลิงก์ ID Card เรียบร้อยแล้ว');
+                }
+            } else {
+                alert('ไม่สามารถแชร์ได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง');
             }
+        } catch(e) {
+            alert('เกิดข้อผิดพลาดในการแชร์: ' + e);
         }
     };
 
@@ -249,8 +256,13 @@ const ExpandedIdCard = ({
                     transition: isAnimating ? 'transform 0.3s ease-out' : 'none'
                 }}
             >
-                {/* 1. Header Section */}
-                <div className={`relative h-[35%] ${bgGradient} rounded-b-[30px] shadow-lg shrink-0`}>
+                {/* Member Counter Badge */}
+                <div className="absolute top-4 right-4 z-20 bg-black/40 text-white text-[10px] px-2.5 py-1 rounded-full font-bold backdrop-blur-sm border border-white/20">
+                    {currentIndex + 1} / {members.length}
+                </div>
+
+                {/* 1. Header Section - Reduced Height to 25% (was 35%) */}
+                <div className={`relative h-[25%] ${bgGradient} rounded-b-[30px] shadow-lg shrink-0`}>
                      <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
                      <div className="absolute top-12 left-0 right-0 text-center">
                          <span className="inline-block px-3 py-1 bg-white/20 backdrop-blur-sm rounded-full text-xs font-bold text-white tracking-widest uppercase border border-white/30">
@@ -258,8 +270,8 @@ const ExpandedIdCard = ({
                          </span>
                      </div>
                      
-                     {/* Photo */}
-                     <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/3">
+                     {/* Photo - Centered on bottom edge with translate-y-1/2 */}
+                     <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 z-10">
                         <div className="relative">
                             <div className="w-32 h-32 rounded-full border-4 border-white shadow-xl overflow-hidden bg-gray-200">
                                 <img 
@@ -276,8 +288,8 @@ const ExpandedIdCard = ({
                      </div>
                 </div>
 
-                {/* 2. Identity Section */}
-                <div className="pt-14 px-6 text-center shrink-0">
+                {/* 2. Identity Section - Increased top padding to accommodate image */}
+                <div className="pt-20 px-6 text-center shrink-0">
                     <h2 className="text-2xl font-bold text-gray-900 leading-tight mb-1">{fullName}</h2>
                     <p className="text-sm text-gray-500 font-medium mb-1">{role === 'Teacher' ? 'Teacher / Trainer' : 'Student / Competitor'}</p>
                     <p className="text-sm text-gray-600 line-clamp-1">{schoolName}</p>
