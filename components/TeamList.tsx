@@ -92,8 +92,6 @@ const ConfirmationModal = ({ isOpen, title, description, confirmLabel, confirmCo
 
 // --- Main Component ---
 
-const ITEMS_PER_PAGE = 20;
-
 const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('All');
@@ -101,6 +99,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
   const [clusterFilter, setClusterFilter] = useState<string>('All');
   const [quickFilter, setQuickFilter] = useState<'all' | 'gold' | 'qualified'>('all'); 
   const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState<number>(20); // State for pagination limit
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const [viewRound, setViewRound] = useState<'cluster' | 'area'>('area');
   
@@ -351,10 +350,10 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
     });
   }, [data.teams, data.schools, data.activities, data.clusters, user, searchTerm, statusFilter, categoryFilter, clusterFilter, viewRound, quickFilter, role]);
 
-  const totalPages = Math.ceil(filteredTeams.length / ITEMS_PER_PAGE);
+  const totalPages = Math.ceil(filteredTeams.length / itemsPerPage);
   const paginatedTeams = filteredTeams.slice(
-    (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
   );
 
   const getStatusBadge = (team: Team) => {
@@ -1117,10 +1116,30 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
       {/* Pagination Controls */}
       {filteredTeams.length > 0 && (
             <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6 rounded-b-xl shadow-sm">
-                <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                
+                {/* Items Per Page Selector (Mobile & Desktop) */}
+                <div className="flex items-center">
+                    <span className="text-sm text-gray-700 mr-2 hidden sm:inline">แสดง:</span>
+                    <select 
+                        className="text-sm border border-gray-300 rounded-md py-1 px-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                        value={itemsPerPage}
+                        onChange={(e) => {
+                            const val = Number(e.target.value);
+                            setItemsPerPage(val);
+                            setCurrentPage(1); // Reset to first page
+                        }}
+                    >
+                        <option value={20}>20</option>
+                        <option value={50}>50</option>
+                        <option value={100}>100</option>
+                        <option value={filteredTeams.length > 0 ? filteredTeams.length : 1000}>ทั้งหมด</option>
+                    </select>
+                </div>
+
+                <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between sm:ml-4">
                     <div>
                         <p className="text-sm text-gray-700">
-                            แสดง <span className="font-medium">{(currentPage - 1) * ITEMS_PER_PAGE + 1}</span> ถึง <span className="font-medium">{Math.min(currentPage * ITEMS_PER_PAGE, filteredTeams.length)}</span> จาก <span className="font-medium">{filteredTeams.length}</span> รายการ
+                            แสดง <span className="font-medium">{(currentPage - 1) * itemsPerPage + 1}</span> ถึง <span className="font-medium">{Math.min(currentPage * itemsPerPage, filteredTeams.length)}</span> จาก <span className="font-medium">{filteredTeams.length}</span> รายการ
                         </p>
                     </div>
                     <div>
@@ -1148,23 +1167,23 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
                     </div>
                 </div>
                  {/* Mobile Pagination */}
-                 <div className="flex items-center justify-between w-full sm:hidden">
+                 <div className="flex items-center justify-end w-full sm:hidden gap-2">
                     <button
                         onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                         disabled={currentPage === 1}
-                        className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                        className="relative inline-flex items-center px-3 py-1 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
                     >
-                        ก่อนหน้า
+                        <ChevronLeft className="h-4 w-4" />
                     </button>
                     <span className="text-sm text-gray-700">
-                        {currentPage} / {totalPages}
+                        {currentPage}/{totalPages}
                     </span>
                     <button
                         onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                         disabled={currentPage === totalPages}
-                        className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                        className="relative inline-flex items-center px-3 py-1 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
                     >
-                        ถัดไป
+                        <ChevronRight className="h-4 w-4" />
                     </button>
                 </div>
             </div>
