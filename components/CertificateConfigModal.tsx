@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { CertificateTemplate, AppData, User } from '../types';
-import { Save, X, Image as ImageIcon, Plus, Trash2, LayoutTemplate, PenTool, CheckCircle, Upload, Loader2, AlertCircle, Hash, Info } from 'lucide-react';
+import { Save, X, Image as ImageIcon, Plus, Trash2, LayoutTemplate, PenTool, CheckCircle, Upload, Loader2, AlertCircle, Hash, Info, Type } from 'lucide-react';
 import { uploadImage, saveCertificateConfig } from '../services/api';
-import { resizeImage } from '../services/utils';
+import { resizeImage, fileToBase64 } from '../services/utils';
 
 interface CertificateConfigModalProps {
   isOpen: boolean;
@@ -20,11 +20,13 @@ const DEFAULT_TEMPLATE: CertificateTemplate = {
     backgroundUrl: '',
     headerText: 'สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน',
     subHeaderText: 'เกียรติบัตรฉบับนี้ให้ไว้เพื่อแสดงว่า',
+    eventName: '', 
     logoLeftUrl: 'https://cdn-icons-png.flaticon.com/512/3135/3135768.png',
     logoRightUrl: '',
     signatories: [
         { name: 'นายสมชาย ใจดี', position: 'ผู้อำนวยการเขตพื้นที่การศึกษา', signatureUrl: '' }
     ],
+    showSignatureLine: true,
     dateText: `ให้ไว้ ณ วันที่ ${new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric'})}`,
     showRank: true,
     serialFormat: 'REF-{year}-{run:4}',
@@ -104,7 +106,22 @@ const CertificateConfigModal: React.FC<CertificateConfigModalProps> = ({ isOpen,
 
       setUploadingState({ field: targetFieldForUpload, loading: true });
       try {
-          const base64 = await resizeImage(file, 800, 800, 0.8); // Reasonable size for logos/sigs
+          let base64 = '';
+          
+          if (targetFieldForUpload === 'backgroundUrl') {
+              // Special handling for Background: Allow up to 1MB without resize
+              if (file.size > 1024 * 1024) {
+                  alert('ไฟล์พื้นหลังมีขนาดเกิน 1MB ระบบจะทำการย่อขนาดอัตโนมัติเพื่อให้สามารถบันทึกได้');
+                  base64 = await resizeImage(file, 1920, 1080, 0.9); // High quality resize
+              } else {
+                  // Use original file
+                  base64 = await fileToBase64(file);
+              }
+          } else {
+              // Logos and Signatures: Resize to reasonable limits
+              base64 = await resizeImage(file, 800, 800, 0.8);
+          }
+
           const res = await uploadImage(base64, `cert_${selectedContext}_${targetFieldForUpload}.jpg`);
           
           if (res.status === 'success' && res.fileUrl) {
@@ -262,7 +279,7 @@ const CertificateConfigModal: React.FC<CertificateConfigModalProps> = ({ isOpen,
                                     {uploadingState.loading && uploadingState.field === 'backgroundUrl' ? <Loader2 className="w-4 h-4 animate-spin"/> : <Upload className="w-4 h-4"/>}
                                 </button>
                             </div>
-                            <p className="text-[10px] text-gray-400 mt-1">แนะนำขนาด A4 แนวนอน (1123 x 794 px)</p>
+                            <p className="text-[10px] text-gray-400 mt-1">แนะนำขนาด A4 แนวนอน (1123 x 794 px). หากไฟล์ &lt; 1MB จะไม่มีการย่อขนาด</p>
                         </div>
 
                         {/* Logos */}
@@ -324,6 +341,17 @@ const CertificateConfigModal: React.FC<CertificateConfigModalProps> = ({ isOpen,
                                 value={currentTemplate.subHeaderText}
                                 onChange={(e) => updateField('subHeaderText', e.target.value)}
                             />
+                        </div>
+                        <div>
+                             <label className="block text-xs font-medium text-gray-600 mb-1">ชื่องาน (Event Name)</label>
+                             <input 
+                                type="text" 
+                                className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                                placeholder="เว้นว่างเพื่อใช้ค่าเริ่มต้นของระบบ"
+                                value={currentTemplate.eventName || ''}
+                                onChange={(e) => updateField('eventName', e.target.value)}
+                            />
+                            <p className="text-[10px] text-gray-400 mt-1">เช่น: งานศิลปหัตถกรรมนักเรียน ครั้งที่ 71</p>
                         </div>
                         <div>
                              <label className="block text-xs font-medium text-gray-600 mb-1">ข้อความวันที่</label>
@@ -392,9 +420,23 @@ const CertificateConfigModal: React.FC<CertificateConfigModalProps> = ({ isOpen,
 
                         {/* Signatories */}
                         <div>
-                            <h4 className="font-bold text-gray-800 border-b pb-2 mb-2 flex items-center">
-                                <PenTool className="w-4 h-4 mr-2" /> ผู้ลงนาม (Signatories)
-                            </h4>
+                            <div className="flex justify-between items-center border-b pb-2 mb-2">
+                                <h4 className="font-bold text-gray-800 flex items-center">
+                                    <PenTool className="w-4 h-4 mr-2" /> ผู้ลงนาม (Signatories)
+                                </h4>
+                                <div className="flex items-center">
+                                    <input 
+                                        type="checkbox" 
+                                        id="showSigLine" 
+                                        className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                                        checked={currentTemplate.showSignatureLine !== false} // Default true
+                                        onChange={(e) => updateField('showSignatureLine', e.target.checked)}
+                                    />
+                                    <label htmlFor="showSigLine" className="ml-2 text-xs text-gray-600 cursor-pointer select-none">
+                                        แสดงเส้นบรรทัด
+                                    </label>
+                                </div>
+                            </div>
                             
                             <div className="space-y-4 max-h-[250px] overflow-y-auto pr-2 custom-scrollbar">
                                 {currentTemplate.signatories.map((sig, idx) => (
