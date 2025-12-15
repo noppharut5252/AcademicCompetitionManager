@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { AppData, Team, TeamStatus, User, CertificateTemplate } from '../types';
-import { Search, Printer, IdCard, Smartphone, CheckCircle, X, ChevronLeft, ChevronRight, User as UserIcon, GraduationCap, School, MapPin, LayoutGrid, Trophy, Lock, QrCode, Maximize2, Minimize2, Share2, Download, Settings, FileBadge, Loader2, Calendar, Clock } from 'lucide-react';
+import { Search, Printer, IdCard, Smartphone, CheckCircle, X, ChevronLeft, ChevronRight, User as UserIcon, GraduationCap, School, MapPin, LayoutGrid, Trophy, Lock, QrCode, Maximize2, Minimize2, Share2, Download, Settings, FileBadge, Loader2, Calendar, Clock, Sparkles } from 'lucide-react';
 import CertificateConfigModal from './CertificateConfigModal';
 import { getCertificateConfig } from '../services/api';
 import { useSearchParams } from 'react-router-dom';
@@ -67,7 +67,6 @@ const ExpandedIdCard = ({
     const bgGradient = isArea 
         ? 'bg-gradient-to-br from-indigo-900 via-purple-900 to-slate-900' 
         : 'bg-gradient-to-br from-blue-900 via-blue-800 to-slate-900';
-    const accentColor = isArea ? 'text-purple-600' : 'text-blue-600';
     const levelText = isArea ? 'DISTRICT LEVEL' : 'CLUSTER LEVEL';
 
     // Mock Date/Time for status (Use current time for demo as "Verification Time")
@@ -208,6 +207,22 @@ const ExpandedIdCard = ({
 
     return (
         <div className="fixed inset-0 z-[150] bg-black flex flex-col items-center justify-center animate-in fade-in zoom-in duration-300">
+            {/* CSS for Holographic Effect */}
+            <style>{`
+                @keyframes holo {
+                    0% { background-position: 0% 50%; opacity: 0.5; }
+                    50% { background-position: 100% 50%; opacity: 1; }
+                    100% { background-position: 0% 50%; opacity: 0.5; }
+                }
+                .holo-overlay {
+                    background: linear-gradient(115deg, transparent 20%, rgba(255,255,255,0.4) 30%, transparent 40%, transparent 60%, rgba(255,255,255,0.4) 70%, transparent 80%);
+                    background-size: 200% 200%;
+                    animation: holo 3s linear infinite;
+                    mix-blend-mode: overlay;
+                    pointer-events: none;
+                }
+            `}</style>
+
             {/* Toolbar */}
             {!isFullscreen && (
                 <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-center z-50 bg-gradient-to-b from-black/80 to-transparent">
@@ -256,12 +271,15 @@ const ExpandedIdCard = ({
                     transition: isAnimating ? 'transform 0.3s ease-out' : 'none'
                 }}
             >
+                {/* Holographic Overlay */}
+                <div className="absolute inset-0 holo-overlay z-20"></div>
+
                 {/* Member Counter Badge */}
                 <div className="absolute top-4 right-4 z-20 bg-black/40 text-white text-[10px] px-2.5 py-1 rounded-full font-bold backdrop-blur-sm border border-white/20">
                     {currentIndex + 1} / {members.length}
                 </div>
 
-                {/* 1. Header Section - Reduced Height to 25% (was 35%) */}
+                {/* 1. Header Section */}
                 <div className={`relative h-[25%] ${bgGradient} rounded-b-[30px] shadow-lg shrink-0`}>
                      <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
                      <div className="absolute top-12 left-0 right-0 text-center">
@@ -288,7 +306,7 @@ const ExpandedIdCard = ({
                      </div>
                 </div>
 
-                {/* 2. Identity Section - Increased top padding to accommodate image */}
+                {/* 2. Identity Section */}
                 <div className="pt-20 px-6 text-center shrink-0">
                     <h2 className="text-2xl font-bold text-gray-900 leading-tight mb-1">{fullName}</h2>
                     <p className="text-sm text-gray-500 font-medium mb-1">{role === 'Teacher' ? 'Teacher / Trainer' : 'Student / Competitor'}</p>
@@ -315,7 +333,7 @@ const ExpandedIdCard = ({
                         </div>
                         <div className="bg-white p-2 rounded-lg shadow-sm border border-gray-100">
                             <p className="text-[10px] text-gray-400 font-bold uppercase mb-1">Venue</p>
-                            <p className="text-xs font-medium text-gray-800 line-clamp-1">Stadium A (TBD)</p>
+                            <p className="text-xs font-medium text-gray-800 line-clamp-1">TBD</p>
                         </div>
                         <div className="bg-white p-2 rounded-lg shadow-sm border border-gray-100">
                             <p className="text-[10px] text-gray-400 font-bold uppercase mb-1">Date</p>
@@ -326,7 +344,8 @@ const ExpandedIdCard = ({
 
                 {/* 4. Large QR Code Area */}
                 <div className="flex-1 flex flex-col items-center justify-center px-6 min-h-0">
-                    <div className="bg-white p-2 rounded-2xl shadow-lg border-2 border-dashed border-gray-200 w-full max-w-[240px] aspect-square flex items-center justify-center">
+                    <div className="bg-white p-2 rounded-2xl shadow-lg border-2 border-dashed border-gray-200 w-full max-w-[240px] aspect-square flex items-center justify-center relative overflow-hidden group">
+                        <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 transform -translate-x-full group-hover:translate-x-full" style={{ transition: 'transform 1s' }}></div>
                         <img 
                             src={getQrCodeUrl(`${window.location.origin}${window.location.pathname}#/idcards?id=${team.teamId}&level=${viewLevel}`, 300)} 
                             alt="QR" 
@@ -369,7 +388,7 @@ const ArrowLeftRightIcon = ({className}:{className?:string}) => (
     </svg>
 );
 
-// --- DigitalIdCard & DigitalIdModal (Assume unchanged or paste if necessary) ---
+// --- DigitalIdCard (Preview Card) ---
 const DigitalIdCard = ({ member, role, team, activity, schoolName, viewLevel, onClick }: { member: any, role: string, team: Team, activity: string, schoolName: string, viewLevel: 'cluster' | 'area', onClick: () => void }) => {
     const getPhotoUrl = (urlOrId: string) => {
         if (!urlOrId) return "https://cdn-icons-png.flaticon.com/512/3135/3135768.png";
@@ -391,6 +410,9 @@ const DigitalIdCard = ({ member, role, team, activity, schoolName, viewLevel, on
             onClick={onClick}
             className="group relative w-full aspect-[3/4.5] bg-white rounded-2xl shadow-md hover:shadow-xl overflow-hidden border border-gray-200 cursor-pointer transform transition-all duration-300 hover:-translate-y-1"
         >
+            {/* Holographic Overlay for Preview */}
+            <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 z-20 pointer-events-none" style={{ mixBlendMode: 'overlay' }}></div>
+
             {/* Header Background */}
             <div className={`absolute top-0 left-0 right-0 h-1/3 ${bgGradient} z-0`}></div>
             
@@ -421,16 +443,11 @@ const DigitalIdCard = ({ member, role, team, activity, schoolName, viewLevel, on
                 {/* Bottom Info */}
                 <div className="w-full text-center mt-4 pt-3 border-t border-dashed border-gray-200">
                     <div className="flex items-center justify-center text-xs text-gray-400 mb-2">
-                        <QrCode className="w-3 h-3 mr-1" />
+                        <Sparkles className="w-3 h-3 mr-1 text-yellow-500" />
                         <span>Tap to Expand</span>
                     </div>
                     <p className="text-[10px] text-gray-400 font-mono">ID: {team.teamId}</p>
                 </div>
-            </div>
-            
-            {/* Hover Overlay Hint */}
-            <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
-                <Maximize2 className="w-8 h-8 text-white drop-shadow-md opacity-80" />
             </div>
         </div>
     );
@@ -531,7 +548,7 @@ const DigitalIdModal = ({ team, data, onClose, viewLevel }: { team: Team, data: 
                 </div>
                 
                 <div className="bg-white border-t border-gray-200 p-3 text-center text-xs text-gray-400">
-                    <p>คลิกที่บัตรเพื่อดูแบบเต็มจอและ QR Code สำหรับสแกน | สามารถปัดซ้าย-ขวาเพื่อเปลี่ยนคนได้</p>
+                    <p>คลิกที่บัตรเพื่อดูแบบเต็มจอ (Holographic View) | สามารถปัดซ้าย-ขวาเพื่อเปลี่ยนคนได้</p>
                 </div>
             </div>
         </div>
@@ -1471,3 +1488,4 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
 };
 
 export default DocumentsView;
+
