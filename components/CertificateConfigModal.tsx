@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { CertificateTemplate, AppData, User } from '../types';
-import { Save, X, Image as ImageIcon, Plus, Trash2, LayoutTemplate, PenTool, CheckCircle, Upload, Loader2, AlertCircle, Hash, Info, Type } from 'lucide-react';
+import { Save, X, Image as ImageIcon, Plus, Trash2, LayoutTemplate, PenTool, CheckCircle, Upload, Loader2, AlertCircle, Hash, Info, Type, BoxSelect } from 'lucide-react';
 import { uploadImage, saveCertificateConfig } from '../services/api';
 import { resizeImage, fileToBase64 } from '../services/utils';
 
@@ -20,7 +20,8 @@ const DEFAULT_TEMPLATE: CertificateTemplate = {
     backgroundUrl: '',
     headerText: 'สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน',
     subHeaderText: 'เกียรติบัตรฉบับนี้ให้ไว้เพื่อแสดงว่า',
-    eventName: '', 
+    eventName: '',
+    frameStyle: 'simple-gold',
     logoLeftUrl: 'https://cdn-icons-png.flaticon.com/512/3135/3135768.png',
     logoRightUrl: '',
     signatories: [
@@ -29,7 +30,7 @@ const DEFAULT_TEMPLATE: CertificateTemplate = {
     showSignatureLine: true,
     dateText: `ให้ไว้ ณ วันที่ ${new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric'})}`,
     showRank: true,
-    serialFormat: 'REF-{year}-{run:4}',
+    serialFormat: '{activityId}-{year}-{run:4}',
     serialStart: 1
 };
 
@@ -169,7 +170,7 @@ const CertificateConfigModal: React.FC<CertificateConfigModalProps> = ({ isOpen,
   };
 
   const toggleIncludeTeamId = (checked: boolean) => {
-      let currentFormat = currentTemplate.serialFormat || 'REF-{year}-{run:4}';
+      let currentFormat = currentTemplate.serialFormat || '{activityId}-{year}-{run:4}';
       if (checked) {
           if (!currentFormat.includes('{id}')) {
               updateField('serialFormat', currentFormat + '-{id}');
@@ -181,7 +182,7 @@ const CertificateConfigModal: React.FC<CertificateConfigModalProps> = ({ isOpen,
 
   // Serial Number Preview
   const getSerialPreview = () => {
-      const fmt = currentTemplate.serialFormat || 'REF-{year}-{run:4}';
+      const fmt = currentTemplate.serialFormat || '{activityId}-{year}-{run:4}';
       const start = currentTemplate.serialStart || 1;
       const year = new Date().getFullYear();
       const thYear = year + 543;
@@ -189,7 +190,8 @@ const CertificateConfigModal: React.FC<CertificateConfigModalProps> = ({ isOpen,
       let sample = fmt
         .replace('{year}', String(year))
         .replace('{th_year}', String(thYear))
-        .replace('{id}', 'T001');
+        .replace('{id}', 'T001')
+        .replace('{activityId}', 'ACT01');
 
       if (sample.includes('{run:')) {
           const match = sample.match(/{run:(\d+)}/);
@@ -280,6 +282,39 @@ const CertificateConfigModal: React.FC<CertificateConfigModalProps> = ({ isOpen,
                                 </button>
                             </div>
                             <p className="text-[10px] text-gray-400 mt-1">แนะนำขนาด A4 แนวนอน (1123 x 794 px). หากไฟล์ &lt; 1MB จะไม่มีการย่อขนาด</p>
+                        </div>
+
+                        {/* Frame Selection */}
+                        <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                            <label className="block text-xs font-medium text-gray-600 mb-2 flex items-center">
+                                <BoxSelect className="w-3.5 h-3.5 mr-1" /> รูปแบบกรอบ (Frame Style)
+                            </label>
+                            <div className="grid grid-cols-2 gap-2">
+                                <button 
+                                    className={`p-2 rounded border text-xs text-center transition-colors ${currentTemplate.frameStyle === 'simple-gold' ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold' : 'bg-white border-gray-200 hover:bg-gray-100'}`}
+                                    onClick={() => updateField('frameStyle', 'simple-gold')}
+                                >
+                                    เส้นเดี่ยว (Gold)
+                                </button>
+                                <button 
+                                    className={`p-2 rounded border text-xs text-center transition-colors ${currentTemplate.frameStyle === 'infinite-wave' ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold' : 'bg-white border-gray-200 hover:bg-gray-100'}`}
+                                    onClick={() => updateField('frameStyle', 'infinite-wave')}
+                                >
+                                    คลื่น (Wave)
+                                </button>
+                                <button 
+                                    className={`p-2 rounded border text-xs text-center transition-colors ${currentTemplate.frameStyle === 'ornamental-corners' ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold' : 'bg-white border-gray-200 hover:bg-gray-100'}`}
+                                    onClick={() => updateField('frameStyle', 'ornamental-corners')}
+                                >
+                                    ขอบลายไทย
+                                </button>
+                                <button 
+                                    className={`p-2 rounded border text-xs text-center transition-colors ${currentTemplate.frameStyle === 'none' ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold' : 'bg-white border-gray-200 hover:bg-gray-100'}`}
+                                    onClick={() => updateField('frameStyle', 'none')}
+                                >
+                                    ไม่มีกรอบ
+                                </button>
+                            </div>
                         </div>
 
                         {/* Logos */}
@@ -376,7 +411,7 @@ const CertificateConfigModal: React.FC<CertificateConfigModalProps> = ({ isOpen,
                                     <input 
                                         type="text" 
                                         className="w-full border border-gray-300 rounded px-3 py-2 text-sm font-mono"
-                                        placeholder="REF-{year}-{run:4}"
+                                        placeholder="{activityId}-{year}-{run:4}"
                                         value={currentTemplate.serialFormat}
                                         onChange={(e) => updateField('serialFormat', e.target.value)}
                                     />
@@ -393,6 +428,7 @@ const CertificateConfigModal: React.FC<CertificateConfigModalProps> = ({ isOpen,
                                         </label>
                                     </div>
                                     <div className="text-[10px] text-gray-400 mt-1 flex flex-wrap gap-1">
+                                        <span className="bg-gray-100 px-1 rounded">{"{activityId}"}: ACT01</span>
                                         <span className="bg-gray-100 px-1 rounded">{"{year}"}: 2024</span>
                                         <span className="bg-gray-100 px-1 rounded">{"{th_year}"}: 2567</span>
                                         <span className="bg-gray-100 px-1 rounded">{"{run:4}"}: 0001</span>
