@@ -3,6 +3,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { AppData, Team, TeamStatus, User, AreaStageInfo, Activity } from '../types';
 import { Search, Filter, CheckCircle, XCircle, Clock, ChevronLeft, ChevronRight, Eye, Trophy, Medal, Hash, LayoutGrid, Users, Award, School, Printer, FileText, Star, Crown, Zap, Edit, Trash2, Plus, Square, CheckSquare, Loader2, AlertTriangle, Info, X, Calendar, AlertCircle, History } from 'lucide-react';
 import TeamDetailModal from './TeamDetailModal';
+import ConfirmationModal from './ConfirmationModal';
 import { updateTeamStatus, deleteTeam } from '../services/api';
 import { formatDeadline } from '../services/utils';
 
@@ -43,79 +44,6 @@ const Toast = ({ message, type, isVisible, onClose }: { message: string, type: '
             <button onClick={onClose} className="ml-4 p-1 hover:bg-white/20 rounded-full transition-colors">
                 <X className="w-4 h-4" />
             </button>
-        </div>
-    );
-};
-
-const ConfirmationModal = ({ isOpen, title, description, confirmLabel, confirmColor, onConfirm, onCancel, isLoading, children, count, actionType }: any) => {
-    if (!isOpen) return null;
-    const isHighVolume = count > 20;
-    const isDelete = actionType === 'delete';
-
-    return (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden transform scale-100 transition-all">
-                {isDelete && (
-                    <div className="bg-red-50 p-4 border-b border-red-100 flex justify-center">
-                        <div className="h-16 w-16 bg-red-100 rounded-full flex items-center justify-center animate-pulse">
-                            <Trash2 className="h-8 w-8 text-red-600" />
-                        </div>
-                    </div>
-                )}
-                
-                <div className={`p-6 text-center ${isDelete ? 'pt-2' : ''}`}>
-                    {!isDelete && (
-                        <div className={`mx-auto flex items-center justify-center h-12 w-12 rounded-full mb-4 ${confirmColor === 'red' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>
-                            <AlertTriangle className="h-6 w-6" />
-                        </div>
-                    )}
-                    
-                    <h3 className={`text-lg leading-6 font-bold ${isDelete ? 'text-red-600' : 'text-gray-900'}`}>{title}</h3>
-                    <div className="mt-2">
-                        <p className="text-sm text-gray-500">{description}</p>
-                    </div>
-                    
-                    {/* Warning for High Volume */}
-                    {isHighVolume && (
-                        <div className="mt-4 bg-orange-50 border border-orange-200 rounded-lg p-3 text-left">
-                            <div className="flex items-start">
-                                <AlertTriangle className="w-5 h-5 text-orange-600 mr-2 shrink-0" />
-                                <div>
-                                    <h4 className="text-sm font-bold text-orange-800">คำเตือน: เลือกจำนวนมาก ({count})</h4>
-                                    <p className="text-xs text-orange-700 mt-1">
-                                        การทำรายการพร้อมกันจำนวนมากอาจทำให้ระบบทำงานช้าหรือเกิดข้อผิดพลาดได้ แนะนำให้ทำครั้งละไม่เกิน 20 รายการ
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {children}
-                </div>
-                <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse gap-2">
-                    <button
-                        type="button"
-                        disabled={isLoading}
-                        className={`w-full inline-flex justify-center rounded-lg border border-transparent shadow-sm px-4 py-2 text-base font-medium text-white focus:outline-none sm:ml-3 sm:w-auto sm:text-sm ${
-                            confirmColor === 'red' ? 'bg-red-600 hover:bg-red-700' : 
-                            confirmColor === 'green' ? 'bg-green-600 hover:bg-green-700' :
-                            confirmColor === 'yellow' ? 'bg-yellow-500 hover:bg-yellow-600' :
-                            'bg-blue-600 hover:bg-blue-700'
-                        } disabled:opacity-50`}
-                        onClick={onConfirm}
-                    >
-                        {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : confirmLabel}
-                    </button>
-                    <button
-                        type="button"
-                        className="mt-3 w-full inline-flex justify-center rounded-lg border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
-                        onClick={onCancel}
-                        disabled={isLoading}
-                    >
-                        ยกเลิก
-                    </button>
-                </div>
-            </div>
         </div>
     );
 };
@@ -169,23 +97,43 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
   };
 
   // Helper: Check Data Completeness
-  const getValidationWarnings = (team: Team, activity?: Activity) => {
+  const getValidationWarnings = (team: Team, activity?: Activity, round?: 'cluster' | 'area') => {
     if (!activity) return [];
-    
-    // Always check regardless of status to prompt users to fix it
-    // But maybe skip 'Rejected' as it's already dead
+    // Skip if status is Rejected
     if (normalizeStatus(team.status) === TeamStatus.REJECTED) return [];
     
     let teacherCount = 0;
     let studentCount = 0;
 
     try {
-        const parsed = typeof team.members === 'string' ? JSON.parse(team.members) : team.members;
-        if (Array.isArray(parsed)) {
-            studentCount = parsed.length; // Legacy: array of students
-        } else if (parsed && typeof parsed === 'object') {
-            teacherCount = Array.isArray(parsed.teachers) ? parsed.teachers.length : 0;
-            studentCount = Array.isArray(parsed.students) ? parsed.students.length : 0;
+        let sourceData: any = null;
+
+        // Check source based on round
+        if (round === 'area') {
+            // Parse stageInfo for Area Members (Column W)
+            const stageInfo = team.stageInfo ? JSON.parse(team.stageInfo) : {};
+            sourceData = stageInfo.members;
+        } else {
+            // Default to Cluster (team.members)
+            sourceData = team.members;
+        }
+
+        // IMPORTANT: sourceData might be a JSON string (especially from AreaMembers col), parse it if needed
+        if (typeof sourceData === 'string') {
+            try {
+                sourceData = JSON.parse(sourceData);
+            } catch {
+                sourceData = []; // parsing failed
+            }
+        }
+
+        if (Array.isArray(sourceData)) {
+            // Legacy array format (mostly students)
+            studentCount = sourceData.length; 
+        } else if (sourceData && typeof sourceData === 'object') {
+            // Object format { teachers: [], students: [] }
+            teacherCount = Array.isArray(sourceData.teachers) ? sourceData.teachers.length : 0;
+            studentCount = Array.isArray(sourceData.students) ? sourceData.students.length : 0;
         }
     } catch { return []; }
 
@@ -440,9 +388,9 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
                     <Clock className="w-3 h-3 mr-1"/> รอตรวจ
                 </span>
                 {hasDeadline && (
-                    <span className="text-[10px] text-orange-600 flex items-center bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100">
+                    <span className="text-[10px] text-orange-600 flex items-center bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100 mt-0.5">
                         <Clock className="w-3 h-3 mr-1" />
-                        ถึง {formatDeadline(team.editDeadline!)}
+                        แก้ได้ถึง {formatDeadline(team.editDeadline!)}
                     </span>
                 )}
             </div>
@@ -972,7 +920,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
             const showScore = viewRound === 'cluster' ? team.score : areaInfo?.score;
             const showRank = viewRound === 'cluster' ? team.rank : (areaInfo?.rank || areaInfo?.medal);
             const canEdit = canEditTeam(team);
-            const warnings = getValidationWarnings(team, activity);
+            const warnings = getValidationWarnings(team, activity, viewRound);
 
             return (
                 <div 
@@ -983,7 +931,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
                     <div className="flex-shrink-0 relative">
                         <img className="h-16 w-16 rounded-lg object-cover border border-gray-100" src={imageUrl} alt="" />
                         {warnings.length > 0 && (
-                            <div className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 border-2 border-white shadow-sm">
+                            <div className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-1 border-2 border-white shadow-sm z-10">
                                 <AlertTriangle className="w-3 h-3" />
                             </div>
                         )}
@@ -1090,7 +1038,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
                   const showRank = viewRound === 'cluster' ? team.rank : (areaInfo?.rank || areaInfo?.medal);
                   const canEdit = canEditTeam(team);
                   const isSelected = selectedTeamIds.has(team.teamId);
-                  const warnings = getValidationWarnings(team, activity);
+                  const warnings = getValidationWarnings(team, activity, viewRound);
 
                   return (
                     <tr 
@@ -1125,6 +1073,11 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
                             <div className="text-sm font-medium text-gray-900 group-hover:text-blue-600 transition-colors flex items-center">
                                 {viewRound === 'area' && areaInfo?.name ? areaInfo.name : team.teamName}
                                 {canEdit && <span className="ml-2 text-[10px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded font-bold">EDIT</span>}
+                                {warnings.length > 0 && (
+                                    <span className="ml-2 text-red-500" title={`ข้อมูลไม่ครบ: ${warnings.join(', ')}`}>
+                                        <AlertTriangle className="w-4 h-4" />
+                                    </span>
+                                )}
                             </div>
                             <div className="text-xs text-gray-500">ID: {team.teamId}</div>
                             {warnings.length > 0 && (
@@ -1235,148 +1188,61 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
         </div>
       </div>
 
-      {/* Pagination Controls */}
-      {filteredTeams.length > 0 && (
-            <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6 rounded-b-xl shadow-sm">
-                
-                {/* Items Per Page Selector (Mobile & Desktop) */}
-                <div className="flex items-center">
-                    <span className="text-sm text-gray-700 mr-2 hidden sm:inline">แสดง:</span>
-                    <select 
-                        className="text-sm border border-gray-300 rounded-md py-1 px-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                        value={itemsPerPage}
-                        onChange={(e) => {
-                            const val = Number(e.target.value);
-                            setItemsPerPage(val);
-                            setCurrentPage(1); // Reset to first page
-                        }}
-                    >
-                        <option value={20}>20</option>
-                        <option value={50}>50</option>
-                        <option value={100}>100</option>
-                        <option value={filteredTeams.length > 0 ? filteredTeams.length : 1000}>ทั้งหมด</option>
-                    </select>
-                </div>
-
-                <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between sm:ml-4">
-                    <div>
-                        <p className="text-sm text-gray-700">
-                            แสดง <span className="font-medium">{(currentPage - 1) * itemsPerPage + 1}</span> ถึง <span className="font-medium">{Math.min(currentPage * itemsPerPage, filteredTeams.length)}</span> จาก <span className="font-medium">{filteredTeams.length}</span> รายการ
-                        </p>
-                    </div>
-                    <div>
-                        <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
-                            <button
-                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                                disabled={currentPage === 1}
-                                className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
-                            >
-                                <span className="sr-only">Previous</span>
-                                <ChevronLeft className="h-5 w-5" />
-                            </button>
-                            <span className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700">
-                                หน้า {currentPage} / {totalPages}
-                            </span>
-                            <button
-                                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                                disabled={currentPage === totalPages}
-                                className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
-                            >
-                                <span className="sr-only">Next</span>
-                                <ChevronRight className="h-5 w-5" />
-                            </button>
-                        </nav>
-                    </div>
-                </div>
-                 {/* Mobile Pagination */}
-                 <div className="flex items-center justify-end w-full sm:hidden gap-2">
-                    <button
-                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                        disabled={currentPage === 1}
-                        className="relative inline-flex items-center px-3 py-1 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-                    >
-                        <ChevronLeft className="h-4 w-4" />
-                    </button>
-                    <span className="text-sm text-gray-700">
-                        {currentPage}/{totalPages}
-                    </span>
-                    <button
-                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                        disabled={currentPage === totalPages}
-                        className="relative inline-flex items-center px-3 py-1 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-                    >
-                        <ChevronRight className="h-4 w-4" />
-                    </button>
-                </div>
-            </div>
-        )}
-
-      {/* Hidden Print Section (Visible only when printing) */}
-      <div id="printable-content" className="hidden">
-        {/* ... (Existing Print Logic) ... */}
-        <div className="text-center mb-6">
-            <h1 className="text-2xl font-bold text-gray-900">สรุปข้อมูลทีมผู้เข้าแข่งขัน</h1>
-            <p className="text-gray-500">
-                {viewRound === 'area' ? 'ระดับเขตพื้นที่การศึกษา' : 'ระดับกลุ่มเครือข่าย'} | ข้อมูล ณ วันที่ {new Date().toLocaleDateString('th-TH')}
-            </p>
-        </div>
-        <table className="w-full text-left border-collapse">
-            <thead>
-                <tr className="border-b-2 border-gray-300">
-                    <th className="py-2 px-2 text-sm font-bold text-gray-700 w-12">#</th>
-                    <th className="py-2 px-2 text-sm font-bold text-gray-700">ทีม</th>
-                    <th className="py-2 px-2 text-sm font-bold text-gray-700">โรงเรียน / กลุ่มฯ</th>
-                    <th className="py-2 px-2 text-sm font-bold text-gray-700">รายการแข่งขัน</th>
-                    <th className="py-2 px-2 text-sm font-bold text-gray-700 text-center">สถานะ</th>
-                    <th className="py-2 px-2 text-sm font-bold text-gray-700 text-right">คะแนน</th>
-                </tr>
-            </thead>
-            <tbody>
-                {filteredTeams.map((team, idx) => {
-                    const activity = data.activities.find(a => a.id === team.activityId);
-                    const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
-                    const cluster = school ? data.clusters.find(c => c.ClusterID === school.SchoolCluster) : null;
-                    const areaInfo = getAreaInfo(team.stageInfo);
-                    
-                    const showScore = viewRound === 'cluster' ? team.score : areaInfo?.score;
-                    const showRank = viewRound === 'cluster' ? team.rank : (areaInfo?.rank || areaInfo?.medal);
-
-                    return (
-                        <tr key={team.teamId} className="border-b border-gray-200">
-                            <td className="py-2 px-2 text-sm text-gray-600">{idx + 1}</td>
-                            <td className="py-2 px-2 text-sm text-gray-900">
-                                <div className="font-bold">{viewRound === 'area' && areaInfo?.name ? areaInfo.name : team.teamName}</div>
-                                <div className="text-xs text-gray-500">{team.teamId}</div>
-                            </td>
-                            <td className="py-2 px-2 text-sm text-gray-600">
-                                <div>{school?.SchoolName}</div>
-                                <div className="text-xs text-gray-400">{cluster?.ClusterName}</div>
-                            </td>
-                            <td className="py-2 px-2 text-sm text-gray-600">
-                                <div>{activity?.name}</div>
-                                <div className="text-xs text-gray-400">{team.level}</div>
-                            </td>
-                            <td className="py-2 px-2 text-sm text-center">
-                                <span className={`px-2 py-0.5 rounded text-xs font-medium border ${
-                                    normalizeStatus(team.status) === 'Approved' ? 'bg-green-50 text-green-700 border-green-200' :
-                                    normalizeStatus(team.status) === 'Pending' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
-                                    'bg-red-50 text-red-700 border-red-200'
-                                }`}>
-                                    {normalizeStatus(team.status)}
-                                </span>
-                            </td>
-                            <td className="py-2 px-2 text-sm text-right font-medium text-gray-900">
-                                <div>{showScore > 0 ? showScore : '-'}</div>
-                                {showRank && <div className="text-xs text-gray-500">#{showRank}</div>}
-                            </td>
-                        </tr>
-                    );
-                })}
-            </tbody>
-        </table>
-        <div className="mt-4 text-xs text-gray-400 text-right">
-            พิมพ์จากระบบ CompManager
-        </div>
+      {/* Pagination Controls - Restored */}
+      <div className="flex items-center justify-between border-t border-gray-200 bg-white px-4 py-3 sm:px-6 rounded-b-xl shadow-sm">
+          <div className="flex flex-1 justify-between sm:hidden">
+              <button
+                  onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                  disabled={currentPage === 1}
+                  className="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                  ก่อนหน้า
+              </button>
+              <button
+                  onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                  disabled={currentPage === totalPages}
+                  className="relative ml-3 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                  ถัดไป
+              </button>
+          </div>
+          <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+              <div>
+                  <p className="text-sm text-gray-700">
+                      แสดง <span className="font-medium">{(currentPage - 1) * itemsPerPage + 1}</span> ถึง <span className="font-medium">{Math.min(currentPage * itemsPerPage, filteredTeams.length)}</span> จาก <span className="font-medium">{filteredTeams.length}</span> รายการ
+                  </p>
+              </div>
+              <div className="flex items-center gap-2">
+                  <select
+                      className="block rounded-md border-gray-300 py-1.5 text-base focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
+                      value={itemsPerPage}
+                      onChange={(e) => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}
+                  >
+                      <option value={10}>10 / หน้า</option>
+                      <option value={20}>20 / หน้า</option>
+                      <option value={50}>50 / หน้า</option>
+                      <option value={100}>100 / หน้า</option>
+                  </select>
+                  <nav className="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
+                      <button
+                          onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                          disabled={currentPage === 1}
+                          className="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50"
+                      >
+                          <span className="sr-only">Previous</span>
+                          <ChevronLeft className="h-5 w-5" aria-hidden="true" />
+                      </button>
+                      <button
+                          onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                          disabled={currentPage === totalPages}
+                          className="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50"
+                      >
+                          <span className="sr-only">Next</span>
+                          <ChevronRight className="h-5 w-5" aria-hidden="true" />
+                      </button>
+                  </nav>
+              </div>
+          </div>
       </div>
 
       {/* Modal - Pass canEdit status and update handler */}
