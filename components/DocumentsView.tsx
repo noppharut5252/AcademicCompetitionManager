@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { AppData, Team, TeamStatus, User, CertificateTemplate } from '../types';
-import { Search, Printer, IdCard, Smartphone, CheckCircle, X, ChevronLeft, ChevronRight, User as UserIcon, GraduationCap, School, MapPin, LayoutGrid, Trophy, Lock, QrCode, Maximize2, Minimize2, Share2, Download, Settings, FileBadge } from 'lucide-react';
+import { Search, Printer, IdCard, Smartphone, CheckCircle, X, ChevronLeft, ChevronRight, User as UserIcon, GraduationCap, School, MapPin, LayoutGrid, Trophy, Lock, QrCode, Maximize2, Minimize2, Share2, Download, Settings, FileBadge, Loader2 } from 'lucide-react';
 import CertificateConfigModal from './CertificateConfigModal';
 import { getCertificateConfig } from '../services/api';
 
@@ -16,11 +16,37 @@ const getQrCodeUrl = (text: string, size: number = 150) => {
     return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(text)}&margin=10`;
 };
 
-// ... (ExpandedIdCard, DigitalIdCard, DigitalIdModal components - KEEP AS IS)
 // --- Single Expanded Digital ID Card (Full Screen Mode) ---
-const ExpandedIdCard = ({ member, role, team, activity, schoolName, viewLevel, onClose }: { member: any, role: string, team: Team, activity: string, schoolName: string, viewLevel: 'cluster' | 'area', onClose: () => void }) => {
+const ExpandedIdCard = ({ 
+    members, 
+    initialIndex, 
+    team, 
+    activity, 
+    schoolName, 
+    viewLevel, 
+    onClose 
+}: { 
+    members: any[], 
+    initialIndex: number, 
+    team: Team, 
+    activity: string, 
+    schoolName: string, 
+    viewLevel: 'cluster' | 'area', 
+    onClose: () => void 
+}) => {
     const cardRef = useRef<HTMLDivElement>(null);
+    const [currentIndex, setCurrentIndex] = useState(initialIndex);
     const [isFullscreen, setIsFullscreen] = useState(false);
+
+    // Touch handling state
+    const [touchStart, setTouchStart] = useState<number | null>(null);
+    const [touchEnd, setTouchEnd] = useState<number | null>(null);
+
+    // Minimum swipe distance (in px) 
+    const minSwipeDistance = 50; 
+
+    const currentMember = members[currentIndex];
+    const role = currentMember.role;
 
     const getPhotoUrl = (urlOrId: string) => {
         if (!urlOrId) return "https://cdn-icons-png.flaticon.com/512/3135/3135768.png";
@@ -28,9 +54,9 @@ const ExpandedIdCard = ({ member, role, team, activity, schoolName, viewLevel, o
         return `https://drive.google.com/thumbnail?id=${urlOrId}`;
     };
 
-    const imageUrl = member.image || (member.photoDriveId ? getPhotoUrl(member.photoDriveId) : getPhotoUrl(''));
-    const prefix = member.prefix || '';
-    const name = member.name || `${member.firstname || ''} ${member.lastname || ''}`;
+    const imageUrl = currentMember.image || (currentMember.photoDriveId ? getPhotoUrl(currentMember.photoDriveId) : getPhotoUrl(''));
+    const prefix = currentMember.prefix || '';
+    const name = currentMember.name || `${currentMember.firstname || ''} ${currentMember.lastname || ''}`;
     const fullName = `${prefix}${name}`.trim();
     
     const isArea = viewLevel === 'area';
@@ -67,6 +93,41 @@ const ExpandedIdCard = ({ member, role, team, activity, schoolName, viewLevel, o
         }
     };
 
+    const handlePrev = (e?: React.MouseEvent) => {
+        e?.stopPropagation();
+        if (currentIndex > 0) setCurrentIndex(prev => prev - 1);
+    };
+
+    const handleNext = (e?: React.MouseEvent) => {
+        e?.stopPropagation();
+        if (currentIndex < members.length - 1) setCurrentIndex(prev => prev + 1);
+    };
+
+    // Swipe Handlers
+    const onTouchStart = (e: React.TouchEvent) => {
+        setTouchEnd(null); // Reset
+        setTouchStart(e.targetTouches[0].clientX);
+    };
+
+    const onTouchMove = (e: React.TouchEvent) => {
+        setTouchEnd(e.targetTouches[0].clientX);
+    };
+
+    const onTouchEnd = () => {
+        if (!touchStart || !touchEnd) return;
+        
+        const distance = touchStart - touchEnd;
+        const isLeftSwipe = distance > minSwipeDistance;
+        const isRightSwipe = distance < -minSwipeDistance;
+
+        if (isLeftSwipe && currentIndex < members.length - 1) {
+            setCurrentIndex(prev => prev + 1);
+        }
+        if (isRightSwipe && currentIndex > 0) {
+            setCurrentIndex(prev => prev - 1);
+        }
+    };
+
     return (
         <div className="fixed inset-0 z-[150] bg-black flex flex-col items-center justify-center animate-in fade-in zoom-in duration-300">
             {/* Toolbar */}
@@ -86,13 +147,33 @@ const ExpandedIdCard = ({ member, role, team, activity, schoolName, viewLevel, o
                 </div>
             )}
 
+            {/* Navigation Arrows (Desktop/Visual Hint) */}
+            <button 
+                onClick={handlePrev} 
+                className={`absolute left-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md z-50 transition-all ${currentIndex === 0 ? 'opacity-20 cursor-not-allowed' : 'opacity-100'}`}
+                disabled={currentIndex === 0}
+            >
+                <ChevronLeft className="w-8 h-8" />
+            </button>
+
+            <button 
+                onClick={handleNext} 
+                className={`absolute right-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md z-50 transition-all ${currentIndex === members.length - 1 ? 'opacity-20 cursor-not-allowed' : 'opacity-100'}`}
+                disabled={currentIndex === members.length - 1}
+            >
+                <ChevronRight className="w-8 h-8" />
+            </button>
+
             {/* Main Card Container */}
             <div 
                 ref={cardRef} 
-                className={`relative w-full h-full max-w-md bg-white flex flex-col overflow-hidden shadow-2xl ${isFullscreen ? '' : 'rounded-none sm:rounded-3xl sm:h-auto sm:aspect-[9/16] sm:max-h-[85vh]'}`}
+                className={`relative w-full h-full max-w-md bg-white flex flex-col overflow-hidden shadow-2xl transition-all duration-300 ${isFullscreen ? '' : 'rounded-none sm:rounded-3xl sm:h-auto sm:aspect-[9/16] sm:max-h-[85vh]'}`}
+                onTouchStart={onTouchStart}
+                onTouchMove={onTouchMove}
+                onTouchEnd={onTouchEnd}
             >
                 {/* Header Background */}
-                <div className={`absolute top-0 left-0 right-0 h-1/3 ${bgGradient} rounded-b-[40%] z-0`}>
+                <div className={`absolute top-0 left-0 right-0 h-1/3 ${bgGradient} rounded-b-[40%] z-0 transition-colors duration-500`}>
                      <div className="absolute inset-0 opacity-30" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)', backgroundSize: '30px 30px' }}></div>
                      {/* Decorative Circles */}
                      <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-2xl"></div>
@@ -125,8 +206,10 @@ const ExpandedIdCard = ({ member, role, team, activity, schoolName, viewLevel, o
                             </div>
                         </div>
 
-                        <h2 className="text-gray-900 font-bold text-2xl sm:text-3xl leading-tight text-center font-kanit mb-1">{fullName}</h2>
-                        <p className="text-gray-500 font-medium">{schoolName}</p>
+                        <div className="text-center w-full animate-in fade-in duration-300" key={currentIndex}>
+                            <h2 className="text-gray-900 font-bold text-2xl sm:text-3xl leading-tight text-center font-kanit mb-1">{fullName}</h2>
+                            <p className="text-gray-500 font-medium">{schoolName}</p>
+                        </div>
                     </div>
 
                     {/* Middle Section: Details */}
@@ -165,6 +248,16 @@ const ExpandedIdCard = ({ member, role, team, activity, schoolName, viewLevel, o
                         <div className="bg-white p-1 rounded-lg border border-gray-100">
                             <img src={getQrCodeUrl(team.teamId, 120)} alt="QR" className="w-24 h-24 mix-blend-multiply" />
                         </div>
+                    </div>
+                    
+                    {/* Pagination Dots */}
+                    <div className="flex justify-center gap-1.5 mt-2 absolute bottom-2">
+                        {members.map((_, idx) => (
+                            <div 
+                                key={idx} 
+                                className={`w-1.5 h-1.5 rounded-full transition-colors ${idx === currentIndex ? 'bg-gray-800' : 'bg-gray-300'}`}
+                            />
+                        ))}
                     </div>
                 </div>
             </div>
@@ -241,8 +334,7 @@ const DigitalIdCard = ({ member, role, team, activity, schoolName, viewLevel, on
 
 // --- DigitalIdModal ---
 const DigitalIdModal = ({ team, data, onClose, viewLevel }: { team: Team, data: AppData, onClose: () => void, viewLevel: 'cluster' | 'area' }) => {
-    const [expandedMember, setExpandedMember] = useState<any | null>(null);
-    const [expandedRole, setExpandedRole] = useState('');
+    const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
 
     const activity = data.activities.find(a => a.id === team.activityId)?.name || team.activityId;
     const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId)?.SchoolName || team.schoolId;
@@ -271,19 +363,25 @@ const DigitalIdModal = ({ team, data, onClose, viewLevel }: { team: Team, data: 
         }
     } catch { }
 
+    // Combine for swipeable list
+    const allMembers = [
+        ...teachers.map(t => ({...t, role: 'Teacher'})),
+        ...students.map(s => ({...s, role: 'Student'}))
+    ];
+
     return (
         <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
             
             {/* Full Screen Member View */}
-            {expandedMember && (
+            {expandedIndex !== null && (
                 <ExpandedIdCard 
-                    member={expandedMember} 
-                    role={expandedRole} 
+                    members={allMembers}
+                    initialIndex={expandedIndex}
                     team={team} 
                     activity={activity} 
                     schoolName={school} 
                     viewLevel={viewLevel} 
-                    onClose={() => setExpandedMember(null)} 
+                    onClose={() => setExpandedIndex(null)} 
                 />
             )}
 
@@ -308,31 +406,19 @@ const DigitalIdModal = ({ team, data, onClose, viewLevel }: { team: Team, data: 
 
                 <div className="overflow-y-auto p-6 flex-1 bg-gray-50">
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 pb-10">
-                        {teachers.map((m, idx) => (
+                        {allMembers.map((m, idx) => (
                             <DigitalIdCard 
-                                key={`t-${idx}`} 
+                                key={`m-${idx}`} 
                                 member={m} 
-                                role="Teacher" 
+                                role={m.role} 
                                 team={team} 
                                 activity={activity} 
                                 schoolName={school} 
                                 viewLevel={viewLevel} 
-                                onClick={() => { setExpandedMember(m); setExpandedRole('Teacher'); }}
+                                onClick={() => setExpandedIndex(idx)}
                             />
                         ))}
-                        {students.map((m, idx) => (
-                            <DigitalIdCard 
-                                key={`s-${idx}`} 
-                                member={m} 
-                                role="Student" 
-                                team={team} 
-                                activity={activity} 
-                                schoolName={school} 
-                                viewLevel={viewLevel} 
-                                onClick={() => { setExpandedMember(m); setExpandedRole('Student'); }}
-                            />
-                        ))}
-                        {(teachers.length === 0 && students.length === 0) && (
+                        {allMembers.length === 0 && (
                             <div className="col-span-full text-center py-20 text-gray-400">
                                 ไม่พบข้อมูลสมาชิกในทีม
                             </div>
@@ -341,7 +427,7 @@ const DigitalIdModal = ({ team, data, onClose, viewLevel }: { team: Team, data: 
                 </div>
                 
                 <div className="bg-white border-t border-gray-200 p-3 text-center text-xs text-gray-400">
-                    <p>คลิกที่บัตรเพื่อดูแบบเต็มจอและ QR Code สำหรับสแกน</p>
+                    <p>คลิกที่บัตรเพื่อดูแบบเต็มจอและ QR Code สำหรับสแกน | สามารถปัดซ้าย-ขวาเพื่อเปลี่ยนคนได้</p>
                 </div>
             </div>
         </div>
@@ -356,6 +442,9 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
   const [itemsPerPage, setItemsPerPage] = useState(12);
   const [selectedTeamForDigital, setSelectedTeamForDigital] = useState<Team | null>(null);
   const [viewLevel, setViewLevel] = useState<'cluster' | 'area'>('cluster');
+  
+  // Certificate Generation State
+  const [isGenerating, setIsGenerating] = useState(false);
   
   // Certificate Configuration State
   const [showConfigModal, setShowConfigModal] = useState(false);
@@ -457,9 +546,19 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
     currentPage * itemsPerPage
   );
 
-  const handlePrint = (team: Team) => {
+  const handlePrint = async (team: Team) => {
+      // Start Loading Overlay
+      setIsGenerating(true);
+      
+      // Delay slightly to allow UI update
+      await new Promise(resolve => setTimeout(resolve, 500));
+
       const printWindow = window.open('', '_blank');
-      if (!printWindow) return;
+      if (!printWindow) {
+          setIsGenerating(false);
+          alert('Pop-up ถูกบล็อก กรุณาอนุญาตให้เปิดหน้าต่างใหม่');
+          return;
+      }
 
       const activity = data.activities.find(a => a.id === team.activityId)?.name || team.activityId;
       const schoolObj = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
@@ -509,13 +608,14 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
                   headerText: 'สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน',
                   subHeaderText: 'เกียรติบัตรฉบับนี้ให้ไว้เพื่อแสดงว่า',
                   eventName: '',
+                  frameStyle: 'simple-gold',
                   logoLeftUrl: 'https://cdn-icons-png.flaticon.com/512/3135/3135768.png',
                   logoRightUrl: '',
                   signatories: [{ name: '.......................................', position: 'ผู้อำนวยการ', signatureUrl: '' }],
                   showSignatureLine: true,
                   dateText: `ให้ไว้ ณ วันที่ ${new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}`,
                   showRank: true,
-                  serialFormat: 'REF-{year}-{run:4}',
+                  serialFormat: '{activityId}-{year}-{run:4}',
                   serialStart: 1
               } as CertificateTemplate;
           }
@@ -534,7 +634,7 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
 
           // Serial Generation Function (Running Number)
           const generateSerial = (index: number) => {
-              const fmt = template.serialFormat || 'REF-{year}-{run:4}';
+              const fmt = template.serialFormat || '{activityId}-{year}-{run:4}';
               const start = template.serialStart || 1;
               const year = new Date().getFullYear();
               const thYear = year + 543;
@@ -544,7 +644,8 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
               let serial = fmt
                 .replace('{year}', String(year))
                 .replace('{th_year}', String(thYear))
-                .replace('{id}', team.teamId);
+                .replace('{id}', team.teamId)
+                .replace('{activityId}', team.activityId); // Added activity ID support
 
               // Handle padding {run:X}
               if (serial.includes('{run:')) {
@@ -576,16 +677,73 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
                         page-break-after: always;
                         background-color: white;
                     }
-                    /* Fallback Frame: Single Faint Gold Line */
-                    .frame-default {
+                    /* Simple Gold Frame - Modified for open bottom */
+                    .frame-simple-gold {
                         position: absolute;
                         top: 6mm; left: 6mm; right: 6mm; bottom: 6mm;
-                        border: 2px solid #D4AF37; /* Elegant Gold */
-                        opacity: 0.4; /* Faint/Subtle */
+                        border: 2px solid #D4AF37;
+                        border-bottom: none; /* Open bottom */
+                        opacity: 1.0;
                         box-sizing: border-box;
                         z-index: 1;
                         pointer-events: none;
-                        border-radius: 8px;
+                        border-radius: 8px 8px 0 0;
+                    }
+                    /* Add bottom corners */
+                    .frame-simple-gold::before {
+                        content: ''; position: absolute; bottom: 0; left: 0; height: 2px; width: 15%; background: #D4AF37;
+                    }
+                    .frame-simple-gold::after {
+                        content: ''; position: absolute; bottom: 0; right: 0; height: 2px; width: 15%; background: #D4AF37;
+                    }
+
+                    /* Infinite Wave Frame - Fainter */
+                    .frame-infinite-wave {
+                        position: absolute;
+                        top: 6mm; left: 6mm; right: 6mm; bottom: 6mm;
+                        border: 2px solid #D4AF37;
+                        /* SVG Wave Pattern - Opacity lowered to 0.15 */
+                        background-image: url("data:image/svg+xml,%3Csvg width='40' height='20' viewBox='0 0 40 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 10 Q10 0 20 10 T40 10' fill='none' stroke='%23D4AF37' stroke-opacity='0.15' stroke-width='2'/%3E%3C/svg%3E");
+                        background-size: 20mm 10mm;
+                        z-index: 1;
+                        pointer-events: none;
+                        border-radius: 4px;
+                    }
+                    /* Ornamental Corners (Thai Style) */
+                    .frame-ornamental-corners {
+                        position: absolute;
+                        top: 6mm; left: 6mm; right: 6mm; bottom: 6mm;
+                        border: 3px double #D4AF37;
+                        box-sizing: border-box;
+                        z-index: 1;
+                        pointer-events: none;
+                    }
+                    .frame-ornamental-corners::before, .frame-ornamental-corners::after {
+                        content: ''; position: absolute; width: 100%; height: 100%; top: 0; left: 0;
+                        /* Thai-ish Corner Pattern via SVG */
+                        background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M2,2 L30,2 L30,6 L6,6 L6,30 L2,30 Z M20,20 L35,20 L35,22 L22,22 L22,35 L20,35 Z' fill='%23D4AF37' /%3E%3C/svg%3E");
+                        background-repeat: no-repeat;
+                        background-position: top left;
+                        background-size: 30mm 30mm;
+                    }
+                    .frame-ornamental-corners::after {
+                        transform: rotate(180deg);
+                    }
+                    .frame-ornamental-extra {
+                        position: absolute; top: 6mm; left: 6mm; right: 6mm; bottom: 6mm; z-index: 1; pointer-events: none;
+                        background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M2,2 L30,2 L30,6 L6,6 L6,30 L2,30 Z M20,20 L35,20 L35,22 L22,22 L22,35 L20,35 Z' fill='%23D4AF37' /%3E%3C/svg%3E");
+                        background-repeat: no-repeat;
+                        background-position: top right;
+                        background-size: 30mm 30mm;
+                        transform: scaleX(-1);
+                    }
+                    .frame-ornamental-extra2 {
+                        position: absolute; top: 6mm; left: 6mm; right: 6mm; bottom: 6mm; z-index: 1; pointer-events: none;
+                        background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M2,2 L30,2 L30,6 L6,6 L6,30 L2,30 Z M20,20 L35,20 L35,22 L22,22 L22,35 L20,35 Z' fill='%23D4AF37' /%3E%3C/svg%3E");
+                        background-repeat: no-repeat;
+                        background-position: bottom left;
+                        background-size: 30mm 30mm;
+                        transform: scaleY(-1);
                     }
 
                     .bg-img {
@@ -595,7 +753,7 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
                         z-index: 0;
                     }
                     @media print {
-                        .bg-img {
+                        .bg-img, .frame-infinite-wave, .frame-ornamental-corners, .frame-simple-gold {
                             -webkit-print-color-adjust: exact;
                             print-color-adjust: exact;
                         }
@@ -616,7 +774,7 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
                         display: flex;
                         justify-content: space-between;
                         width: 80%;
-                        height: 25mm;
+                        height: 35mm; /* Increased Height */
                         margin-bottom: 5mm;
                         position: relative;
                     }
@@ -633,7 +791,7 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
                         display: flex;
                         justify-content: center;
                         gap: 15mm;
-                        margin-bottom: 15mm;
+                        margin-bottom: 25mm; /* Move up slightly */
                         width: 90%;
                         align-items: flex-end;
                     }
@@ -677,9 +835,18 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
                         color: #555;
                         font-weight: bold;
                     }
+                    .no-print { display: block; position: fixed; bottom: 20px; right: 20px; z-index: 1000; }
+                    @media print {
+                        .no-print { display: none; }
+                    }
                 </style>
             </head>
             <body>
+                <div class="no-print">
+                    <button onclick="window.print()" style="padding: 10px 20px; background: #2563eb; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; font-family: 'Sarabun'; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">
+                        🖨️ พิมพ์ / บันทึก PDF (Print/Save PDF)
+                    </button>
+                </div>
                 ${allMembers.map((member, idx) => {
                     const prefix = member.prefix || '';
                     const name = member.name || `${member.firstname || ''} ${member.lastname || ''}`;
@@ -705,11 +872,25 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
                         else awardText = "เข้าร่วมการแข่งขัน";
                     }
 
+                    // Select Frame Style
+                    let frameElement = '';
+                    if (!template.backgroundUrl) {
+                        if (template.frameStyle === 'infinite-wave') {
+                            frameElement = '<div class="frame-infinite-wave"></div>';
+                        } else if (template.frameStyle === 'ornamental-corners') {
+                            frameElement = `
+                                <div class="frame-ornamental-corners"></div>
+                                <div class="frame-ornamental-extra"></div>
+                                <div class="frame-ornamental-extra2"></div>
+                            `;
+                        } else if (template.frameStyle === 'simple-gold' || !template.frameStyle) {
+                            frameElement = '<div class="frame-simple-gold"></div>';
+                        }
+                    }
+
                     return `
                     <div class="page">
-                        ${template.backgroundUrl ? `<img src="${template.backgroundUrl}" class="bg-img" />` : `
-                            <div class="frame-default"></div>
-                        `}
+                        ${template.backgroundUrl ? `<img src="${template.backgroundUrl}" class="bg-img" />` : frameElement}
                         <div class="serial-no">No. ${serialNo}</div>
                         <div class="content">
                             <div class="logos ${!template.logoRightUrl ? 'single' : ''}">
@@ -745,13 +926,24 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
                     </div>
                     `;
                 }).join('')}
+                <script>
+                    // Auto print on load (optional, but convenient)
+                    window.onload = function() {
+                        setTimeout(function(){ window.print(); }, 500);
+                    }
+                </script>
             </body>
             </html>
           `;
           printWindow.document.write(htmlContent);
           printWindow.document.close();
+          
+          setIsGenerating(false);
+
       } else {
-          // ... (ID Card Logic Remains Same) ...
+          // ... (ID Card Logic - Just trigger print)
+          setIsGenerating(false); 
+          // ... (Existing ID Card Logic Remains Same) ...
           const pages = [];
           for (let i = 0; i < allMembers.length; i += 4) {
               pages.push(allMembers.slice(i, i + 4));
@@ -786,9 +978,14 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
                   .footer { display: flex; justify-content: space-between; align-items: center; padding: 8px 15px; background: #f9fafb; border-top: 1px solid #eee; }
                   .footer-text { text-align: left; }
                   .qr-code { width: 60px; height: 60px; display: block; }
+                  .no-print { display: block; position: fixed; bottom: 20px; right: 20px; z-index: 1000; }
+                  @media print { .no-print { display: none; } }
                 </style>
               </head>
               <body>
+                <div class="no-print">
+                    <button onclick="window.print()" style="padding: 10px 20px; background: #2563eb; color: white; border: none; border-radius: 5px; cursor: pointer; font-family: 'Kanit';">🖨️ พิมพ์ / บันทึก PDF</button>
+                </div>
                 ${pages.map(pageMembers => `
                   <div class="page">
                     ${pageMembers.map((m: any) => {
@@ -826,7 +1023,17 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="space-y-6 animate-in fade-in duration-500 relative">
+      
+      {/* Loading Overlay */}
+      {isGenerating && (
+          <div className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm flex flex-col items-center justify-center text-white">
+              <Loader2 className="w-12 h-12 animate-spin mb-4 text-blue-400" />
+              <h3 className="text-xl font-bold mb-2">กำลังสร้างเอกสาร...</h3>
+              <p className="text-sm opacity-80">กรุณารอสักครู่ ระบบกำลังจัดเตรียมหน้าสำหรับพิมพ์</p>
+          </div>
+      )}
+
       {selectedTeamForDigital && (
           <DigitalIdModal team={selectedTeamForDigital} data={data} onClose={() => setSelectedTeamForDigital(null)} viewLevel={viewLevel} />
       )}
