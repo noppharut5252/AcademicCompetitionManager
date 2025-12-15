@@ -34,25 +34,46 @@ const ScannerModal = ({
     const [errorMessage, setErrorMessage] = useState('');
     const streamRef = useRef<MediaStream | null>(null);
 
-    // Compute teams list for the Select2 dropdown
+    // Compute teams list for the Select2 dropdown - STRICT FILTERING
     const myTeams = useMemo(() => {
         if (!data || !user) return [];
         let teams = data.teams;
+        const role = user.level?.toLowerCase();
 
-        // 1. Filter by School (if User is school-level)
-        if (user.level === 'school_admin' || user.level === 'user') {
-             const userSchool = data.schools.find(s => s.SchoolID === user.SchoolID);
-             if (user.SchoolID) {
-                 teams = teams.filter(t => t.schoolId === user.SchoolID || t.schoolId === userSchool?.SchoolName);
-             } else {
-                 // Fallback if no SchoolID but user exists
-                 teams = teams.filter(t => t.createdBy === user.userid);
-             }
+        // 1. Filter by User Role (Strict Scope)
+        if (role === 'admin' || role === 'area') {
+            // Admin sees all
+        } else if (role === 'group_admin') {
+            const userSchool = data.schools.find(s => s.SchoolID === user.SchoolID);
+            if (userSchool) {
+                const userClusterId = userSchool.SchoolCluster;
+                teams = teams.filter(t => {
+                    const teamSchool = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
+                    return teamSchool && teamSchool.SchoolCluster === userClusterId;
+                });
+            } else {
+                teams = []; // No cluster assigned
+            }
+        } else if (role === 'school_admin' || role === 'user') {
+            const userSchool = data.schools.find(s => s.SchoolID === user.SchoolID);
+            if (user.SchoolID) {
+                teams = teams.filter(t => 
+                    t.schoolId === user.SchoolID || 
+                    (userSchool && t.schoolId === userSchool.SchoolName)
+                );
+            } else {
+                // Fallback for users without SchoolID (show only created by them)
+                teams = teams.filter(t => t.createdBy === user.userid);
+            }
+        } else if (role === 'score') {
+             // Score keeper sees assigned activities
+             const allowedActivities = user.assignedActivities || [];
+             teams = teams.filter(t => allowedActivities.includes(t.activityId));
+        } else if (user.isGuest) {
+             teams = []; // Guest shouldn't select teams
         }
-        // Note: Admin/Area/GroupAdmin see all relevant to their scope, or we could strict filter to "own school" if they have one. 
-        // For now, if admin/area, we show all, assuming they might need to help anyone.
 
-        // 2. Filter by Level
+        // 2. Filter by Level (Cluster vs Area)
         if (viewLevel === 'area') {
             // Show only teams qualified for Area or marked as Area Stage
             teams = teams.filter(t => t.stageStatus === 'Area' || String(t.flag).toUpperCase() === 'TRUE');
@@ -239,7 +260,7 @@ const ScannerModal = ({
 
                             <form onSubmit={handleManualSubmit} className="space-y-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-600 mb-1">เลือกทีม (จากโรงเรียนของท่าน)</label>
+                                    <label className="block text-sm font-medium text-gray-600 mb-1">เลือกทีม ({user?.level === 'admin' ? 'ทั้งหมด' : 'จากโรงเรียนของท่าน'})</label>
                                     <SearchableSelect 
                                         options={myTeams}
                                         value={manualId}
@@ -249,7 +270,7 @@ const ScannerModal = ({
                                     />
                                     {myTeams.length === 0 && (
                                         <p className="text-xs text-red-500 mt-1 text-center">
-                                            ไม่พบทีมในระดับ{viewLevel === 'cluster' ? 'กลุ่มฯ' : 'เขตฯ'}
+                                            ไม่พบทีมในระดับ{viewLevel === 'cluster' ? 'กลุ่มฯ' : 'เขตฯ'} ที่คุณมีสิทธิ์เข้าถึง
                                         </p>
                                     )}
                                 </div>
@@ -341,17 +362,27 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
         onClose={() => setShowScanner(false)} 
         data={data}
         user={userProfile}
-        onSearch={(id) => {
+        onSearch={(scannedValue) => {
             // Close scanner first
             setShowScanner(false);
+            
+            // Determine if it's a URL or a raw ID
+            let teamId = scannedValue;
+            try {
+                if (scannedValue.includes('id=')) {
+                    // Extract ID from URL (e.g., .../idcards?id=T001)
+                    const url = new URL(scannedValue);
+                    const idParam = url.searchParams.get('id');
+                    if (idParam) teamId = idParam;
+                }
+            } catch (e) {
+                // If invalid URL, assume it's just the ID string
+                console.log("Not a valid URL, using as ID");
+            }
+
             // Navigate to ID Cards with search param (Ideally pass state, but standard nav works)
-            // We use a small timeout to allow modal animation to clear if needed
             setTimeout(() => {
-                navigate('/idcards'); 
-                // Note: In a full implementation, we'd pass the 'id' to the DocumentsView to auto-open the modal.
-                // Since DocumentsView uses local state for 'selectedTeamForDigital', we can't easily trigger it from URL without adding route params.
-                // For now, this takes the user to the list where they can see their teams. 
-                // A better approach would be to add ?teamId=... to the URL and handle it in DocumentsView.
+                navigate(`/idcards?id=${teamId}`); 
             }, 100);
         }}
       />
