@@ -8,6 +8,7 @@ import ResultsView from './components/ResultsView';
 import DocumentsView from './components/DocumentsView';
 import ProfileView from './components/ProfileView'; // Import ProfileView
 import ScoreEntry from './components/ScoreEntry'; // Import ScoreEntry
+import VerifyCertificate from './components/VerifyCertificate'; // Import VerifyCertificate
 import { AppData, User } from './types';
 import { fetchData, loginStandardUser, checkUserPermission } from './services/api';
 import { initLiff, loginLiff, LiffProfile } from './services/liff';
@@ -345,26 +346,34 @@ const App: React.FC = () => {
 
   return (
     <HashRouter>
-      <Layout userProfile={currentUser}>
-        {renderLoadingOrError() || (data && (
-            <Routes>
-                <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                <Route path="/dashboard" element={<Dashboard data={data} user={currentUser} />} />
-                <Route path="/teams" element={<TeamList data={data} user={currentUser} onDataUpdate={() => fetchAppData(true)} />} />
-                <Route path="/activities" element={<ActivityList data={data} />} />
-                <Route path="/score" element={<ScoreEntry data={data} user={currentUser} onDataUpdate={() => fetchAppData(true)} />} />
-                <Route path="/results" element={<ResultsView data={data} />} />
-                <Route path="/certificates" element={<DocumentsView data={data} type="certificate" user={currentUser} />} />
-                <Route path="/idcards" element={<DocumentsView data={data} type="idcard" user={currentUser} />} />
-                <Route path="/schools" element={<PlaceholderMenu title="ข้อมูลโรงเรียน" />} />
-                <Route path="/settings" element={<PlaceholderMenu title="ตั้งค่าระบบ" />} />
-                <Route 
-                    path="/profile" 
-                    element={currentUser ? <ProfileView user={currentUser} data={data} onUpdateUser={setCurrentUser} /> : <Navigate to="/dashboard" />} 
-                />
-            </Routes>
-        ))}
-      </Layout>
+        {/* Public Route for Verification - Does not need Layout/Auth */}
+        <Routes>
+            <Route path="/verify" element={
+                data ? <VerifyCertificate data={data} /> : <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-blue-600" /></div>
+            } />
+            <Route path="*" element={
+                <Layout userProfile={currentUser}>
+                    {renderLoadingOrError() || (data && (
+                        <Routes>
+                            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                            <Route path="/dashboard" element={<Dashboard data={data} user={currentUser} />} />
+                            <Route path="/teams" element={<TeamList data={data} user={currentUser} onDataUpdate={() => fetchAppData(true)} />} />
+                            <Route path="/activities" element={<ActivityList data={data} />} />
+                            <Route path="/score" element={<ScoreEntry data={data} user={currentUser} onDataUpdate={() => fetchAppData(true)} />} />
+                            <Route path="/results" element={<ResultsView data={data} />} />
+                            <Route path="/certificates" element={<DocumentsView data={data} type="certificate" user={currentUser} />} />
+                            <Route path="/idcards" element={<DocumentsView data={data} type="idcard" user={currentUser} />} />
+                            <Route path="/schools" element={<PlaceholderMenu title="ข้อมูลโรงเรียน" />} />
+                            <Route path="/settings" element={<PlaceholderMenu title="ตั้งค่าระบบ" />} />
+                            <Route 
+                                path="/profile" 
+                                element={currentUser ? <ProfileView user={currentUser} data={data} onUpdateUser={setCurrentUser} /> : <Navigate to="/dashboard" />} 
+                            />
+                        </Routes>
+                    ))}
+                </Layout>
+            } />
+        </Routes>
     </HashRouter>
   );
 };
