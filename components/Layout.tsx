@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { LayoutDashboard, Users, Trophy, School, Settings, LogOut, Award, FileBadge, IdCard, LogIn, UserCircle, Edit3, ScanLine, X, Camera, Search, ChevronRight, LayoutGrid, RotateCcw } from 'lucide-react';
+import { LayoutDashboard, Users, Trophy, School, Settings, LogOut, Award, FileBadge, IdCard, LogIn, UserCircle, Edit3, ScanLine, X, Camera, Search, ChevronRight, LayoutGrid, RotateCcw, Loader2, Zap } from 'lucide-react';
 import { logoutLiff } from '../services/liff';
 import { User, AppData } from '../types';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -251,21 +251,44 @@ const ScannerModal = ({
                                     autoPlay 
                                     playsInline 
                                     muted 
-                                    className="w-full h-full object-cover"
+                                    className="w-full h-full object-cover opacity-80"
                                 />
                                 <canvas ref={canvasRef} className="hidden" />
                                 
-                                {/* Overlay Scanning Frame */}
-                                <div className="absolute inset-0 border-[40px] border-black/50 flex items-center justify-center pointer-events-none">
-                                    <div className="w-64 h-64 border-2 border-white/50 rounded-xl relative">
-                                        <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-blue-500 rounded-tl-lg"></div>
-                                        <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-blue-500 rounded-tr-lg"></div>
-                                        <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-blue-500 rounded-bl-lg"></div>
-                                        <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-blue-500 rounded-br-lg"></div>
-                                        <div className="absolute top-1/2 left-4 right-4 h-0.5 bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.8)]"></div>
+                                {/* Active Scanning UI */}
+                                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                                    {/* Scan Frame */}
+                                    <div className="relative w-72 h-72 border-2 border-blue-400/50 rounded-3xl overflow-hidden shadow-[0_0_20px_rgba(59,130,246,0.3)]">
+                                        
+                                        {/* Corners */}
+                                        <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-blue-500 rounded-tl-xl"></div>
+                                        <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-blue-500 rounded-tr-xl"></div>
+                                        <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-blue-500 rounded-bl-xl"></div>
+                                        <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-blue-500 rounded-br-xl"></div>
+                                        
+                                        {/* Animated Laser Line */}
+                                        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-green-400 to-transparent shadow-[0_0_15px_#4ade80] animate-[scan_2s_ease-in-out_infinite]"></div>
+                                        
+                                        {/* Grid Pattern Background Effect (Optional) */}
+                                        <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/graphy.png')]"></div>
                                     </div>
+
+                                    {/* Scanning Text Status */}
+                                    <div className="mt-8 flex items-center space-x-2 px-4 py-2 bg-black/60 backdrop-blur-md rounded-full border border-white/10 animate-pulse">
+                                        <Loader2 className="w-4 h-4 text-green-400 animate-spin" />
+                                        <span className="text-white text-sm font-medium tracking-wide">กำลังค้นหา QR Code...</span>
+                                    </div>
+                                    <p className="mt-2 text-white/60 text-xs">วาง QR Code ให้อยู่ในกรอบสีฟ้า</p>
                                 </div>
-                                <p className="absolute bottom-20 w-full text-center text-white/80 text-sm">วาง QR Code ให้อยู่ในกรอบ</p>
+
+                                <style>{`
+                                    @keyframes scan {
+                                        0% { transform: translateY(0); opacity: 0; }
+                                        10% { opacity: 1; }
+                                        90% { opacity: 1; }
+                                        100% { transform: translateY(280px); opacity: 0; }
+                                    }
+                                `}</style>
                             </div>
                         ) : (
                             <div className="text-center text-white p-6 max-w-sm">
@@ -600,9 +623,9 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
                 <div className="absolute top-4 w-16 h-8 bg-transparent rounded-full shadow-[0_8px_0_0_white]"></div> {/* Fake Curve effect filler if needed, simplified here */}
                 <button
                     onClick={() => setShowScanner(true)}
-                    className="w-16 h-16 bg-blue-600 rounded-full shadow-lg flex items-center justify-center text-white border-4 border-gray-50 transform transition-transform active:scale-95"
+                    className="w-16 h-16 bg-blue-600 rounded-full shadow-lg flex items-center justify-center text-white border-4 border-gray-50 transform transition-transform active:scale-95 group"
                 >
-                    <ScanLine className="w-8 h-8" />
+                    <ScanLine className="w-8 h-8 group-hover:scale-110 transition-transform" />
                 </button>
             </div>
 
