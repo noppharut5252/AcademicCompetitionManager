@@ -1,7 +1,9 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { AppData, Team, TeamStatus, User } from '../types';
-import { Search, Printer, IdCard, Smartphone, CheckCircle, X, ChevronLeft, ChevronRight, User as UserIcon, GraduationCap, School, MapPin, LayoutGrid, Trophy, Lock, QrCode, Maximize2, Minimize2, Share2, Download } from 'lucide-react';
+import { AppData, Team, TeamStatus, User, CertificateTemplate } from '../types';
+import { Search, Printer, IdCard, Smartphone, CheckCircle, X, ChevronLeft, ChevronRight, User as UserIcon, GraduationCap, School, MapPin, LayoutGrid, Trophy, Lock, QrCode, Maximize2, Minimize2, Share2, Download, Settings, FileBadge } from 'lucide-react';
+import CertificateConfigModal from './CertificateConfigModal';
+import { getCertificateConfig } from '../services/api';
 
 interface DocumentsViewProps {
   data: AppData;
@@ -14,6 +16,7 @@ const getQrCodeUrl = (text: string, size: number = 150) => {
     return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(text)}&margin=10`;
 };
 
+// ... (ExpandedIdCard, DigitalIdCard, DigitalIdModal components - KEEP AS IS)
 // --- Single Expanded Digital ID Card (Full Screen Mode) ---
 const ExpandedIdCard = ({ member, role, team, activity, schoolName, viewLevel, onClose }: { member: any, role: string, team: Team, activity: string, schoolName: string, viewLevel: 'cluster' | 'area', onClose: () => void }) => {
     const cardRef = useRef<HTMLDivElement>(null);
@@ -169,7 +172,7 @@ const ExpandedIdCard = ({ member, role, team, activity, schoolName, viewLevel, o
     );
 };
 
-// --- Digital ID Card Thumbnail (In Grid) ---
+// --- DigitalIdCard & DigitalIdModal (Assume unchanged or paste if necessary) ---
 const DigitalIdCard = ({ member, role, team, activity, schoolName, viewLevel, onClick }: { member: any, role: string, team: Team, activity: string, schoolName: string, viewLevel: 'cluster' | 'area', onClick: () => void }) => {
     const getPhotoUrl = (urlOrId: string) => {
         if (!urlOrId) return "https://cdn-icons-png.flaticon.com/512/3135/3135768.png";
@@ -353,11 +356,36 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
   const [itemsPerPage, setItemsPerPage] = useState(12);
   const [selectedTeamForDigital, setSelectedTeamForDigital] = useState<Team | null>(null);
   const [viewLevel, setViewLevel] = useState<'cluster' | 'area'>('cluster');
+  
+  // Certificate Configuration State
+  const [showConfigModal, setShowConfigModal] = useState(false);
+  const [certificateTemplates, setCertificateTemplates] = useState<Record<string, CertificateTemplate>>({});
+
+  useEffect(() => {
+      // Fetch templates from API on load
+      const loadTemplates = async () => {
+          if (type === 'certificate') {
+              const configs = await getCertificateConfig();
+              setCertificateTemplates(configs);
+          }
+      };
+      loadTemplates();
+  }, [type]);
+
+  const handleSaveTemplates = (newTemplates: Record<string, CertificateTemplate>) => {
+      setCertificateTemplates(newTemplates);
+      // Saved to backend in modal, updating local state here
+  };
 
   const title = type === 'certificate' ? 'พิมพ์เกียรติบัตร (Certificates)' : 'พิมพ์บัตรประจำตัว (ID Cards)';
   const description = type === 'certificate' 
     ? 'ดาวน์โหลดเกียรติบัตรสำหรับทีมที่ได้รับรางวัล' 
     : 'พิมพ์บัตรประจำตัวผู้เข้าแข่งขันและครูผู้ฝึกสอน หรือแสดงบัตรดิจิทัล';
+
+  const userRole = user?.level?.toLowerCase();
+  const isSuperUser = userRole === 'admin' || userRole === 'area';
+  const isGroupAdmin = userRole === 'group_admin';
+  const canConfigureCert = isSuperUser || isGroupAdmin;
 
   // Helper: Count Members
   const getMemberCounts = (team: Team) => {
@@ -387,45 +415,28 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
   // Filter Logic
   const filteredTeams = useMemo(() => {
     return data.teams.filter(team => {
-        
-        // 1. School & Permission Gatekeeper (Strict Logic)
+        // ... (Existing Permission Logic) ...
         if (user) {
             const role = user.level?.toLowerCase();
-            
             if (role === 'school_admin' || role === 'user') {
                  const userSchoolInfo = data.schools.find(s => s.SchoolID === user.SchoolID);
                  let hasAccess = false;
-
                  if (user.SchoolID) {
-                    // Match by School ID
-                    if (team.schoolId === user.SchoolID) {
-                        hasAccess = true;
-                    } 
-                    // Match by Mapped School Name (since Teams sheet stores Name)
-                    else if (userSchoolInfo && team.schoolId === userSchoolInfo.SchoolName) {
-                        hasAccess = true;
-                    }
+                    if (team.schoolId === user.SchoolID) hasAccess = true;
+                    else if (userSchoolInfo && team.schoolId === userSchoolInfo.SchoolName) hasAccess = true;
                  }
-
-                 // Fallback: If not matched by school (or no school ID), check if created by user
-                 if (!hasAccess && team.createdBy === user.userid) {
-                     hasAccess = true;
-                 }
-
-                 // STRICT DENY: If not authorized by any means, exclude this team immediately
+                 if (!hasAccess && team.createdBy === user.userid) hasAccess = true;
                  if (!hasAccess) return false;
             }
-            // Note: Admin, Area, Group Admin pass through to next checks
         }
 
-        // 2. Area Level Restriction (Must be Representative AND Rank 1)
+        // Area Logic
         if (viewLevel === 'area') {
             const isRep = String(team.flag).toUpperCase() === 'TRUE';
-            const isRank1 = String(team.rank) === '1'; // Assuming selection comes from Cluster Rank 1
+            const isRank1 = String(team.rank) === '1'; 
             if (!isRep || !isRank1) return false;
         }
         
-        // 3. Search Filter
         const activity = data.activities.find(a => a.id === team.activityId);
         const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
         const term = searchTerm.toLowerCase();
@@ -451,15 +462,16 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
       if (!printWindow) return;
 
       const activity = data.activities.find(a => a.id === team.activityId)?.name || team.activityId;
-      const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId)?.SchoolName || team.schoolId;
-      
-      const levelTitle = viewLevel === 'area' ? 'ระดับเขตพื้นที่การศึกษา' : 'ระดับกลุ่มเครือข่าย';
-      const headerColor = viewLevel === 'area' ? 'linear-gradient(135deg, #6b21a8 0%, #a855f7 100%)' : 'linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)'; 
+      const schoolObj = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
+      const schoolName = schoolObj?.SchoolName || team.schoolId;
+      const clusterID = schoolObj?.SchoolCluster;
 
-      // 1. Prepare Data List
+      const levelTitle = viewLevel === 'area' ? 'ระดับเขตพื้นที่การศึกษา' : 'ระดับกลุ่มเครือข่าย';
+      
       let allMembers: any[] = [];
       let memberSource = team.members;
       
+      // Stage Check for members
       if (viewLevel === 'area' && team.stageInfo) {
           try {
               const areaInfo = JSON.parse(team.stageInfo);
@@ -478,223 +490,277 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
           }
       } catch {}
 
-      // 2. Chunk members into groups of 4 (for 4 cards per A4 page)
-      const pages = [];
-      for (let i = 0; i < allMembers.length; i += 4) {
-          pages.push(allMembers.slice(i, i + 4));
-      }
+      if (type === 'certificate') {
+          // Resolve Template
+          let template: CertificateTemplate;
+          if (viewLevel === 'area') {
+              template = certificateTemplates['area'];
+          } else {
+              template = clusterID ? certificateTemplates[clusterID] : undefined;
+          }
+          
+          // Fallback Default
+          if (!template) {
+              template = {
+                  id: 'default',
+                  name: 'Default',
+                  backgroundUrl: '',
+                  headerText: 'สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน',
+                  subHeaderText: 'เกียรติบัตรฉบับนี้ให้ไว้เพื่อแสดงว่า',
+                  logoLeftUrl: 'https://cdn-icons-png.flaticon.com/512/3135/3135768.png',
+                  logoRightUrl: '',
+                  signatories: [{ name: '.......................................', position: 'ผู้อำนวยการ', signatureUrl: '' }],
+                  dateText: `ให้ไว้ ณ วันที่ ${new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}`,
+                  showRank: true
+              } as CertificateTemplate;
+          }
 
-      const qrUrl = getQrCodeUrl(team.teamId, 150); // Bigger QR for print
-
-      const htmlContent = `
-        <html>
-          <head>
-            <title>Print ID Cards - ${team.teamName}</title>
-            <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;600;700&display=swap" rel="stylesheet">
-            <style>
-              @page { size: A4; margin: 0; }
-              body { 
-                font-family: 'Kanit', sans-serif; 
-                margin: 0; 
-                padding: 0; 
-                background: #eee;
-                -webkit-print-color-adjust: exact; 
-                print-color-adjust: exact;
-              }
-              .page {
-                width: 210mm;
-                height: 296mm;
-                background: white;
-                margin: 0 auto;
-                page-break-after: always;
-                display: grid;
-                grid-template-columns: 1fr 1fr;
-                grid-template-rows: 1fr 1fr;
-                padding: 10mm;
-                box-sizing: border-box;
-                gap: 5mm;
-              }
-              .card {
-                border: 1px dashed #ccc;
-                border-radius: 12px;
-                overflow: hidden;
-                position: relative;
-                display: flex;
-                flex-direction: column;
-                background: white;
-                box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-                background-image: radial-gradient(#e5e7eb 1px, transparent 1px);
-                background-size: 20px 20px;
-              }
-              .card-header {
-                background: ${headerColor};
-                color: white;
-                padding: 15px 10px;
-                text-align: center;
-                height: 80px;
-                display: flex;
-                flex-direction: column;
-                justify-content: center;
-                position: relative;
-              }
-              .card-header::after {
-                  content: '';
-                  position: absolute;
-                  bottom: -10px;
-                  left: 0;
-                  right: 0;
-                  height: 20px;
-                  background: white;
-                  border-radius: 50% 50% 0 0;
-              }
-              .card-header h1 { margin: 0; font-size: 14pt; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }
-              .card-header p { margin: 2px 0 0; font-size: 9pt; opacity: 0.9; }
-              
-              .card-body {
-                padding: 10px 15px;
-                flex: 1;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                text-align: center;
-                z-index: 1;
-              }
-              .photo-container {
-                width: 80px;
-                height: 80px;
-                margin-top: -30px;
-                margin-bottom: 10px;
-                border-radius: 50%;
-                border: 4px solid white;
-                background: #f3f4f6;
-                overflow: hidden;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-              }
-              .photo { width: 100%; height: 100%; object-fit: cover; }
-              
-              .role-badge {
-                display: inline-block;
-                padding: 2px 12px;
-                border-radius: 12px;
-                font-size: 9pt;
-                font-weight: bold;
-                margin-bottom: 5px;
-                text-transform: uppercase;
-              }
-              .role-teacher { background: #e0e7ff; color: #3730a3; }
-              .role-student { background: #dcfce7; color: #166534; }
-              
-              .name { font-size: 14pt; font-weight: bold; color: #000; margin-bottom: 2px; line-height: 1.2; }
-              .school { font-size: 10pt; color: #555; margin-bottom: 5px; font-weight: 500; }
-              .team { font-size: 9pt; color: #777; margin-bottom: 10px; }
-              
-              .activity-box {
-                width: 100%;
-                border-top: 1px dashed #ddd;
-                padding-top: 8px;
-                margin-top: auto;
-              }
-              .activity-name { font-size: 10pt; color: #333; font-weight: 600; }
-
-              .footer {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                padding: 8px 15px;
-                background: #f9fafb;
-                border-top: 1px solid #eee;
-              }
-              .footer-text { text-align: left; }
-              .qr-code { width: 60px; height: 60px; display: block; }
-              
-              @media print {
-                body { background: white; }
-                .no-print { display: none; }
-              }
-            </style>
-          </head>
-          <body>
-            <div class="no-print" style="padding: 20px; text-align: center; background: #333; color: white; position: sticky; top: 0; z-index: 999;">
-                <button onclick="window.print()" style="padding: 10px 20px; font-size: 16px; font-weight: bold; cursor: pointer; background: #fff; border: none; border-radius: 5px;">🖨️ Print Now (A4)</button>
-                <div style="margin-top: 5px; font-size: 12px;">Ensure "Background graphics" is enabled in print settings</div>
-            </div>
-
-            ${pages.map(pageMembers => `
-              <div class="page">
-                ${pageMembers.map((m: any) => {
-                    const prefix = m.prefix || '';
-                    const name = m.name || `${m.firstname || ''} ${m.lastname || ''}`;
-                    const fullName = `${prefix}${name}`.trim();
-                    const roleClass = m.role === 'Teacher' ? 'role-teacher' : 'role-student';
+          // Build HTML for Certificates
+          const htmlContent = `
+            <html>
+            <head>
+                <title>Certificates - ${team.teamName}</title>
+                <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;700&family=Thasadith:wght@400;700&display=swap" rel="stylesheet">
+                <style>
+                    @page { size: A4 landscape; margin: 0; }
+                    body { margin: 0; padding: 0; font-family: 'Sarabun', sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                    .page {
+                        width: 297mm;
+                        height: 210mm;
+                        position: relative;
+                        overflow: hidden;
+                        page-break-after: always;
+                        background-color: white;
+                    }
+                    .bg-img {
+                        position: absolute;
+                        top: 0; left: 0; width: 100%; height: 100%;
+                        object-fit: cover;
+                        z-index: 0;
+                    }
+                    .content {
+                        position: relative;
+                        z-index: 10;
+                        width: 100%;
+                        height: 100%;
+                        display: flex;
+                        flex-direction: column;
+                        align-items: center;
+                        padding-top: 20mm;
+                        box-sizing: border-box;
+                    }
+                    .logos {
+                        display: flex;
+                        justify-content: space-between;
+                        width: 80%;
+                        height: 25mm;
+                        margin-bottom: 5mm;
+                        position: relative;
+                    }
+                    .logo-img { height: 100%; object-fit: contain; }
+                    .header { font-size: 24pt; font-weight: bold; color: #1e3a8a; margin-bottom: 5mm; text-align: center; line-height: 1.2; text-shadow: 1px 1px 0px rgba(255,255,255,0.8); }
+                    .subheader { font-size: 16pt; margin-bottom: 8mm; text-align: center; }
+                    .name { font-size: 32pt; font-weight: bold; color: #111; margin-bottom: 5mm; font-family: 'Thasadith', sans-serif; text-align: center; border-bottom: 2px dotted #ccc; padding: 0 20px; min-width: 50%; }
+                    .desc { font-size: 16pt; margin-bottom: 5mm; max-width: 80%; text-align: center; line-height: 1.5; }
+                    .highlight { font-weight: bold; color: #2563eb; }
+                    .date { font-size: 14pt; margin-top: auto; margin-bottom: 10mm; }
                     
-                    const getImg = (mem: any) => {
-                        if (mem.image) return mem.image;
-                        if (mem.photoDriveId) return `https://drive.google.com/thumbnail?id=${mem.photoDriveId}`;
-                        return "https://cdn-icons-png.flaticon.com/512/3135/3135768.png";
-                    };
+                    .signatures {
+                        display: flex;
+                        justify-content: center;
+                        gap: 15mm;
+                        margin-bottom: 15mm;
+                        width: 90%;
+                    }
+                    .sig-block {
+                        display: flex;
+                        flex-direction: column;
+                        align-items: center;
+                        text-align: center;
+                        min-width: 60mm;
+                    }
+                    .sig-img { height: 20mm; object-fit: contain; margin-bottom: -5mm; z-index: 1; }
+                    .sig-name { font-size: 12pt; font-weight: bold; border-top: 1px solid #000; padding-top: 2px; width: 100%; margin-top: 5mm;}
+                    .sig-pos { font-size: 10pt; }
+                    .logos.single { justify-content: center; }
+                </style>
+            </head>
+            <body>
+                ${allMembers.map(member => {
+                    const prefix = member.prefix || '';
+                    const name = member.name || `${member.firstname || ''} ${member.lastname || ''}`;
+                    const fullName = `${prefix}${name}`.trim();
+                    const roleText = member.role === 'Teacher' ? 'ครูผู้ฝึกสอน' : 'นักเรียน';
+
+                    let awardText = "เข้าร่วมการแข่งขัน";
+                    if (template.showRank) {
+                        const rank = viewLevel === 'area' ? (JSON.parse(team.stageInfo || '{}').rank || team.rank) : team.rank;
+                        const medal = viewLevel === 'area' ? (JSON.parse(team.stageInfo || '{}').medal || team.medalOverride) : team.medalOverride;
+                        
+                        let medalThai = "";
+                        if (medal === 'Gold') medalThai = "เหรียญทอง";
+                        else if (medal === 'Silver') medalThai = "เหรียญเงิน";
+                        else if (medal === 'Bronze') medalThai = "เหรียญทองแดง";
+                        else if (medal === 'Participant') medalThai = "เข้าร่วม";
+
+                        if (rank === '1' || rank === 1) awardText = `รางวัลชนะเลิศ${medalThai ? ` (ระดับ${medalThai})` : ''}`;
+                        else if (rank === '2' || rank === 2) awardText = `รางวัลรองชนะเลิศอันดับ 1${medalThai ? ` (ระดับ${medalThai})` : ''}`;
+                        else if (rank === '3' || rank === 3) awardText = `รางวัลรองชนะเลิศอันดับ 2${medalThai ? ` (ระดับ${medalThai})` : ''}`;
+                        else if (medalThai && medalThai !== "เข้าร่วม") awardText = `รางวัลระดับ${medalThai}${rank ? ` (ลำดับที่ ${rank})` : ''}`;
+                        else awardText = "เข้าร่วมการแข่งขัน";
+                    }
 
                     return `
-                      <div class="card">
-                        <div class="card-header">
-                          <h1>ID CARD</h1>
-                          <p>${levelTitle}</p>
-                        </div>
-                        <div class="card-body">
-                          <div class="photo-container">
-                             <img src="${getImg(m)}" class="photo" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3135/3135768.png'" />
-                          </div>
-                          <div class="${roleClass} role-badge">${m.role}</div>
-                          <div class="name">${fullName}</div>
-                          <div class="school">${school}</div>
-                          <div class="team">ทีม: ${team.teamName}</div>
-                          
-                          <div class="activity-box">
-                             <div class="activity-name">${activity}</div>
-                          </div>
-                        </div>
-                        <div class="footer">
-                            <div class="footer-text">
-                                <div style="font-size: 8pt; font-weight: bold; color: #555;">ID: ${team.teamId}</div>
-                                <div style="font-size: 8pt; color: #888;">Scan for Check-in</div>
+                    <div class="page">
+                        ${template.backgroundUrl ? `<img src="${template.backgroundUrl}" class="bg-img" />` : ''}
+                        <div class="content">
+                            <div class="logos ${!template.logoRightUrl ? 'single' : ''}">
+                                ${template.logoLeftUrl ? `<img src="${template.logoLeftUrl}" class="logo-img" />` : '<div></div>'}
+                                ${template.logoRightUrl ? `<img src="${template.logoRightUrl}" class="logo-img" />` : ''}
                             </div>
-                            <img src="${qrUrl}" class="qr-code" />
+                            <div class="header">${template.headerText}</div>
+                            <div class="subheader">${template.subHeaderText}</div>
+                            <div class="name">${fullName}</div>
+                            <div class="desc">
+                                ${roleText}โรงเรียน <span class="highlight">${schoolName}</span><br/>
+                                ได้รับ <span class="highlight">${awardText}</span><br/>
+                                กิจกรรม ${activity}<br/>
+                                ${viewLevel === 'area' ? 'งานศิลปหัตถกรรมนักเรียน ระดับเขตพื้นที่การศึกษา' : `งานศิลปหัตถกรรมนักเรียน ${clusterID ? data.clusters.find(c=>c.ClusterID===clusterID)?.ClusterName : ''}`}
+                            </div>
+                            <div class="date">${template.dateText}</div>
+                            <div class="signatures">
+                                ${template.signatories.map(sig => `
+                                    <div class="sig-block">
+                                        ${sig.signatureUrl ? `<img src="${sig.signatureUrl}" class="sig-img" />` : '<div style="height:20mm;"></div>'}
+                                        <div class="sig-name">(${sig.name})</div>
+                                        <div class="sig-pos">${sig.position}</div>
+                                    </div>
+                                `).join('')}
+                            </div>
                         </div>
-                      </div>
+                    </div>
                     `;
                 }).join('')}
-              </div>
-            `).join('')}
-          </body>
-        </html>
-      `;
-
-      printWindow.document.write(htmlContent);
-      printWindow.document.close();
+            </body>
+            </html>
+          `;
+          printWindow.document.write(htmlContent);
+          printWindow.document.close();
+      } else {
+          // ... (ID Card Logic Remains Same) ...
+          const pages = [];
+          for (let i = 0; i < allMembers.length; i += 4) {
+              pages.push(allMembers.slice(i, i + 4));
+          }
+          const qrUrl = getQrCodeUrl(team.teamId, 150);
+          const headerColor = viewLevel === 'area' ? 'linear-gradient(135deg, #6b21a8 0%, #a855f7 100%)' : 'linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)'; 
+          const htmlContent = `
+            <html>
+              <head>
+                <title>Print ID Cards - ${team.teamName}</title>
+                <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;600;700&display=swap" rel="stylesheet">
+                <style>
+                  @page { size: A4; margin: 0; }
+                  body { font-family: 'Kanit', sans-serif; margin: 0; padding: 0; background: #eee; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                  .page { width: 210mm; height: 296mm; background: white; margin: 0 auto; page-break-after: always; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; padding: 10mm; box-sizing: border-box; gap: 5mm; }
+                  .card { border: 1px dashed #ccc; border-radius: 12px; overflow: hidden; position: relative; display: flex; flex-direction: column; background: white; box-shadow: 0 4px 6px rgba(0,0,0,0.05); background-image: radial-gradient(#e5e7eb 1px, transparent 1px); background-size: 20px 20px; }
+                  .card-header { background: ${headerColor}; color: white; padding: 15px 10px; text-align: center; height: 80px; display: flex; flex-direction: column; justify-content: center; position: relative; }
+                  .card-header::after { content: ''; position: absolute; bottom: -10px; left: 0; right: 0; height: 20px; background: white; border-radius: 50% 50% 0 0; }
+                  .card-header h1 { margin: 0; font-size: 14pt; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }
+                  .card-header p { margin: 2px 0 0; font-size: 9pt; opacity: 0.9; }
+                  .card-body { padding: 10px 15px; flex: 1; display: flex; flex-direction: column; align-items: center; text-align: center; z-index: 1; }
+                  .photo-container { width: 80px; height: 80px; margin-top: -30px; margin-bottom: 10px; border-radius: 50%; border: 4px solid white; background: #f3f4f6; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: center; }
+                  .photo { width: 100%; height: 100%; object-fit: cover; }
+                  .role-badge { display: inline-block; padding: 2px 12px; border-radius: 12px; font-size: 9pt; font-weight: bold; margin-bottom: 5px; text-transform: uppercase; }
+                  .role-teacher { background: #e0e7ff; color: #3730a3; }
+                  .role-student { background: #dcfce7; color: #166534; }
+                  .name { font-size: 14pt; font-weight: bold; color: #000; margin-bottom: 2px; line-height: 1.2; }
+                  .school { font-size: 10pt; color: #555; margin-bottom: 5px; font-weight: 500; }
+                  .team { font-size: 9pt; color: #777; margin-bottom: 10px; }
+                  .activity-box { width: 100%; border-top: 1px dashed #ddd; padding-top: 8px; margin-top: auto; }
+                  .activity-name { font-size: 10pt; color: #333; font-weight: 600; }
+                  .footer { display: flex; justify-content: space-between; align-items: center; padding: 8px 15px; background: #f9fafb; border-top: 1px solid #eee; }
+                  .footer-text { text-align: left; }
+                  .qr-code { width: 60px; height: 60px; display: block; }
+                </style>
+              </head>
+              <body>
+                ${pages.map(pageMembers => `
+                  <div class="page">
+                    ${pageMembers.map((m: any) => {
+                        const prefix = m.prefix || '';
+                        const name = m.name || `${m.firstname || ''} ${m.lastname || ''}`;
+                        const fullName = `${prefix}${name}`.trim();
+                        const roleClass = m.role === 'Teacher' ? 'role-teacher' : 'role-student';
+                        const getImg = (mem: any) => { if (mem.image) return mem.image; if (mem.photoDriveId) return `https://drive.google.com/thumbnail?id=${mem.photoDriveId}`; return "https://cdn-icons-png.flaticon.com/512/3135/3135768.png"; };
+                        return `
+                          <div class="card">
+                            <div class="card-header"><h1>ID CARD</h1><p>${levelTitle}</p></div>
+                            <div class="card-body">
+                              <div class="photo-container"><img src="${getImg(m)}" class="photo" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3135/3135768.png'" /></div>
+                              <div class="${roleClass} role-badge">${m.role}</div>
+                              <div class="name">${fullName}</div>
+                              <div class="school">${schoolName}</div>
+                              <div class="team">ทีม: ${team.teamName}</div>
+                              <div class="activity-box"><div class="activity-name">${activity}</div></div>
+                            </div>
+                            <div class="footer">
+                                <div class="footer-text"><div style="font-size: 8pt; font-weight: bold; color: #555;">ID: ${team.teamId}</div><div style="font-size: 8pt; color: #888;">Scan for Check-in</div></div>
+                                <img src="${qrUrl}" class="qr-code" />
+                            </div>
+                          </div>
+                        `;
+                    }).join('')}
+                  </div>
+                `).join('')}
+              </body>
+            </html>
+          `;
+          printWindow.document.write(htmlContent);
+          printWindow.document.close();
+      }
   };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      
       {selectedTeamForDigital && (
           <DigitalIdModal team={selectedTeamForDigital} data={data} onClose={() => setSelectedTeamForDigital(null)} viewLevel={viewLevel} />
+      )}
+      {showConfigModal && (
+          <CertificateConfigModal 
+              isOpen={showConfigModal} 
+              onClose={() => setShowConfigModal(false)}
+              data={data}
+              onSave={handleSaveTemplates}
+              initialTemplates={certificateTemplates}
+              currentUser={user}
+          />
       )}
 
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
         <div>
             <h2 className="text-xl font-bold text-gray-800 flex items-center font-kanit">
-                {type === 'certificate' ? <CheckCircle className="w-6 h-6 mr-2 text-green-600" /> : <IdCard className="w-6 h-6 mr-2 text-blue-600" />}
+                {type === 'certificate' ? <FileBadge className="w-6 h-6 mr-2 text-green-600" /> : <IdCard className="w-6 h-6 mr-2 text-blue-600" />}
                 {title}
             </h2>
             <p className="text-gray-500 text-sm mt-1">{description}</p>
         </div>
         
-        <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+        <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto items-center">
+             
+             {type === 'certificate' && canConfigureCert && (
+                 <button 
+                    onClick={() => setShowConfigModal(true)}
+                    className="p-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors flex items-center gap-2 text-sm font-medium"
+                 >
+                     <Settings className="w-4 h-4" />
+                     ตั้งค่ารูปแบบเกียรติบัตร
+                 </button>
+             )}
+
              {/* Level Toggle */}
-             <div className="flex bg-gray-100 p-1 rounded-lg shrink-0">
+             <div className="flex bg-gray-100 p-1 rounded-lg shrink-0 w-full sm:w-auto">
                 <button
                     onClick={() => setViewLevel('cluster')}
                     className={`flex-1 sm:flex-none px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center justify-center ${viewLevel === 'cluster' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
@@ -749,10 +815,13 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
               const activity = data.activities.find(a => a.id === team.activityId);
               const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
               const { tCount, sCount } = getMemberCounts(team);
+              
+              // Score Check
+              const score = viewLevel === 'area' ? (JSON.parse(team.stageInfo || '{}').score || 0) : team.score;
+              const hasScore = score > 0;
 
               return (
                   <div key={team.teamId} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 relative overflow-hidden">
-                      {/* Level Indicator Strip */}
                       <div className={`absolute left-0 top-0 bottom-0 w-1 ${viewLevel === 'area' ? 'bg-purple-500' : 'bg-blue-500'}`}></div>
                       
                       <div className="flex justify-between items-start mb-2 pl-2">
@@ -776,12 +845,28 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
                                   <Smartphone className="w-4 h-4 mr-1.5" /> Digital ID
                               </button>
                           )}
-                          <button 
-                            onClick={() => handlePrint(team)}
-                            className={`flex items-center justify-center px-3 py-2 rounded-lg text-xs font-bold text-white transition-colors ${type === 'idcard' ? (viewLevel === 'area' ? 'bg-purple-600 hover:bg-purple-700 col-span-1' : 'bg-blue-600 hover:bg-blue-700 col-span-1') : 'bg-green-600 hover:bg-green-700 col-span-2'}`}
-                          >
-                              <Printer className="w-4 h-4 mr-1.5" /> พิมพ์{type === 'certificate' ? 'เกียรติบัตร' : 'บัตร'}
-                          </button>
+                          {/* Print Button - Conditional */}
+                          {type === 'certificate' ? (
+                              hasScore ? (
+                                  <button 
+                                    onClick={() => handlePrint(team)}
+                                    className="flex items-center justify-center px-3 py-2 rounded-lg text-xs font-bold text-white transition-colors bg-green-600 hover:bg-green-700 col-span-2"
+                                  >
+                                      <Printer className="w-4 h-4 mr-1.5" /> พิมพ์เกียรติบัตร
+                                  </button>
+                              ) : (
+                                  <div className="col-span-2 text-center text-xs text-gray-400 py-2 border border-dashed rounded bg-gray-50">
+                                      ยังไม่มีผลคะแนน
+                                  </div>
+                              )
+                          ) : (
+                              <button 
+                                onClick={() => handlePrint(team)}
+                                className={`flex items-center justify-center px-3 py-2 rounded-lg text-xs font-bold text-white transition-colors ${viewLevel === 'area' ? 'bg-purple-600 hover:bg-purple-700 col-span-1' : 'bg-blue-600 hover:bg-blue-700 col-span-1'}`}
+                              >
+                                  <Printer className="w-4 h-4 mr-1.5" /> พิมพ์บัตร
+                              </button>
+                          )}
                       </div>
                   </div>
               );
@@ -806,6 +891,8 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
                           const activity = data.activities.find(a => a.id === team.activityId);
                           const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
                           const { tCount, sCount } = getMemberCounts(team);
+                          const score = viewLevel === 'area' ? (JSON.parse(team.stageInfo || '{}').score || 0) : team.score;
+                          const hasScore = score > 0;
 
                           return (
                               <tr key={team.teamId} className="hover:bg-gray-50 transition-colors">
@@ -837,13 +924,28 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
                                                   Digital ID
                                               </button>
                                           )}
-                                          <button 
-                                            onClick={() => handlePrint(team)}
-                                            className="flex items-center px-3 py-1.5 bg-gray-800 text-white rounded-lg hover:bg-gray-900 transition-colors shadow-sm"
-                                          >
-                                              <Printer className="w-4 h-4 mr-1.5" />
-                                              พิมพ์
-                                          </button>
+                                          
+                                          {type === 'certificate' ? (
+                                              hasScore ? (
+                                                  <button 
+                                                    onClick={() => handlePrint(team)}
+                                                    className="flex items-center px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-sm"
+                                                  >
+                                                      <Printer className="w-4 h-4 mr-1.5" />
+                                                      พิมพ์
+                                                  </button>
+                                              ) : (
+                                                  <span className="text-xs text-gray-400 italic pr-2">รอผลคะแนน</span>
+                                              )
+                                          ) : (
+                                              <button 
+                                                onClick={() => handlePrint(team)}
+                                                className="flex items-center px-3 py-1.5 bg-gray-800 text-white rounded-lg hover:bg-gray-900 transition-colors shadow-sm"
+                                              >
+                                                  <Printer className="w-4 h-4 mr-1.5" />
+                                                  พิมพ์
+                                              </button>
+                                          )}
                                       </div>
                                   </td>
                               </tr>
