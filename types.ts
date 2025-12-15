@@ -113,6 +113,31 @@ export interface Announcement {
   author?: string;
 }
 
+// Detailed Schedule Item for a Venue
+export interface VenueSchedule {
+    activityId: string; // ID of the Activity
+    activityName?: string; // Optional: Snapshot of name for easier display
+    building: string; // e.g. "อาคาร 5"
+    floor: string; // e.g. "ชั้น 2"
+    room: string; // e.g. "ห้อง 502"
+    date: string; // e.g. "2024-12-25" or "25 ธ.ค. 67"
+    timeRange: string; // e.g. "09:00 - 12:00"
+    note?: string; // e.g. "ให้นักเรียนเตรียมคอมพิวเตอร์มาเอง"
+}
+
+// Venue Interface
+export interface Venue {
+  id: string;
+  name: string;
+  description: string;
+  locationUrl: string; // Google Maps Link
+  facilities: string[]; // JSON string array e.g., ["Parking", "Canteen"]
+  imageUrl: string;
+  mapImageId?: string;
+  contactInfo?: string;
+  scheduledActivities: VenueSchedule[]; // JSON string array of schedules
+}
+
 // New Interface for Certificate Templates
 export interface CertificateSignatory {
   name: string;
@@ -152,5 +177,6 @@ export interface AppData {
   clusters: SchoolCluster[];
   files: FileLog[];
   announcements: Announcement[];
+  venues: Venue[]; // Added Venues
 }
 
