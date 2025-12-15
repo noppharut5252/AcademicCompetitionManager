@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { CertificateTemplate, AppData, User } from '../types';
-import { Save, X, Image as ImageIcon, Plus, Trash2, LayoutTemplate, PenTool, CheckCircle, Upload, Loader2, AlertCircle, Hash, Info, Type, BoxSelect } from 'lucide-react';
+import { Save, X, Image as ImageIcon, Plus, Trash2, LayoutTemplate, PenTool, CheckCircle, Upload, Loader2, AlertCircle, Hash, Info, Type, BoxSelect, ArrowUpFromLine, ArrowDownToLine, Scaling } from 'lucide-react';
 import { uploadImage, saveCertificateConfig } from '../services/api';
 import { resizeImage, fileToBase64 } from '../services/utils';
 
@@ -31,7 +31,10 @@ const DEFAULT_TEMPLATE: CertificateTemplate = {
     dateText: `ให้ไว้ ณ วันที่ ${new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric'})}`,
     showRank: true,
     serialFormat: '{activityId}-{year}-{run:4}',
-    serialStart: 1
+    serialStart: 1,
+    contentTop: 25,
+    footerBottom: 25,
+    logoHeight: 35
 };
 
 const CertificateConfigModal: React.FC<CertificateConfigModalProps> = ({ isOpen, onClose, data, onSave, initialTemplates, currentUser }) => {
@@ -400,6 +403,48 @@ const CertificateConfigModal: React.FC<CertificateConfigModalProps> = ({ isOpen,
                     </div>
 
                     <div className="space-y-6">
+                        {/* Layout Config */}
+                        <div className="bg-white p-3 rounded-lg border border-blue-200 shadow-sm">
+                            <h4 className="font-bold text-gray-800 border-b pb-2 mb-2 flex items-center text-sm">
+                                <Scaling className="w-4 h-4 mr-2 text-blue-500" /> การจัดวาง (Layout & Sizing)
+                            </h4>
+                            <div className="grid grid-cols-3 gap-3">
+                                <div>
+                                    <label className="block text-[10px] font-medium text-gray-600 mb-1 flex items-center" title="ระยะห่างจากขอบบนกระดาษถึงเนื้อหา">
+                                        <ArrowDownToLine className="w-3 h-3 mr-1"/> ขอบบน (mm)
+                                    </label>
+                                    <input 
+                                        type="number" 
+                                        className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                                        value={currentTemplate.contentTop || 25}
+                                        onChange={(e) => updateField('contentTop', parseInt(e.target.value))}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-medium text-gray-600 mb-1 flex items-center" title="ระยะห่างจากขอบล่างกระดาษถึงลายเซ็น">
+                                        <ArrowUpFromLine className="w-3 h-3 mr-1"/> ขอบล่าง (mm)
+                                    </label>
+                                    <input 
+                                        type="number" 
+                                        className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                                        value={currentTemplate.footerBottom || 25}
+                                        onChange={(e) => updateField('footerBottom', parseInt(e.target.value))}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-medium text-gray-600 mb-1 flex items-center" title="ความสูงของโลโก้">
+                                        <Scaling className="w-3 h-3 mr-1"/> สูงโลโก้ (mm)
+                                    </label>
+                                    <input 
+                                        type="number" 
+                                        className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                                        value={currentTemplate.logoHeight || 35}
+                                        onChange={(e) => updateField('logoHeight', parseInt(e.target.value))}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
                         {/* Serial Number Configuration */}
                         <div className="bg-white p-3 rounded-lg border border-orange-100 shadow-sm">
                             <h4 className="font-bold text-gray-800 border-b pb-2 mb-2 flex items-center text-sm">
