@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Team, AppData, AreaStageInfo, User } from '../types';
 import { X, User as UserIcon, Phone, School, FileText, Medal, Flag, LayoutGrid, Users, Hash, Trophy, Edit3, Save, Loader2, Camera, Upload, Clock, CheckCircle, AlertCircle, Info, ChevronDown, Plus, Trash2, History } from 'lucide-react';
 import { updateTeamDetails, uploadImage } from '../services/api';
@@ -15,7 +15,7 @@ interface TeamDetailModalProps {
   currentUser?: User | null;
 }
 
-const CLASS_OPTIONS = [
+const ALL_CLASS_OPTIONS = [
   "อนุบาล 1", "อนุบาล 2", "อนุบาล 3",
   "ป.1", "ป.2", "ป.3", "ป.4", "ป.5", "ป.6",
   "ม.1", "ม.2", "ม.3", "ม.4", "ม.5", "ม.6",
@@ -23,11 +23,33 @@ const CLASS_OPTIONS = [
   "ปวส.1", "ปวส.2"
 ];
 
+// Helper to filter levels based on activity config
+const getAvailableLevels = (levelConfig: string): string[] => {
+    try {
+        const levels = JSON.parse(levelConfig);
+        const searchStr = Array.isArray(levels) ? levels.join(' ').toLowerCase() : String(levels).toLowerCase();
+        const allowed: string[] = [];
+
+        // Check patterns
+        if (searchStr.includes('anuban') || searchStr.includes('อนุบาล')) allowed.push("อนุบาล 1", "อนุบาล 2", "อนุบาล 3");
+        if (searchStr.includes('p1-3') || searchStr.includes('g1-3') || searchStr.includes('grade 1-3') || searchStr.includes('ป.1-3')) allowed.push("ป.1", "ป.2", "ป.3");
+        if (searchStr.includes('p4-6') || searchStr.includes('g4-6') || searchStr.includes('grade 4-6') || searchStr.includes('ป.4-6')) allowed.push("ป.4", "ป.5", "ป.6");
+        if (searchStr.includes('m1-3') || searchStr.includes('g7-9') || searchStr.includes('grade 7-9') || searchStr.includes('ม.1-3')) allowed.push("ม.1", "ม.2", "ม.3");
+        if (searchStr.includes('m4-6') || searchStr.includes('g10-12') || searchStr.includes('grade 10-12') || searchStr.includes('ม.4-6')) allowed.push("ม.4", "ม.5", "ม.6");
+        if (searchStr.includes('vocational') || searchStr.includes('ปวช')) allowed.push("ปวช.1", "ปวช.2", "ปวช.3");
+        if (searchStr.includes('high vocational') || searchStr.includes('ปวส')) allowed.push("ปวส.1", "ปวส.2");
+
+        return allowed.length > 0 ? allowed : ALL_CLASS_OPTIONS;
+    } catch {
+        return ALL_CLASS_OPTIONS;
+    }
+};
+
 // Internal Toast Component for Modal
 const ModalToast = ({ message, type, isVisible }: { message: string, type: 'success' | 'error', isVisible: boolean }) => {
     if (!isVisible) return null;
     return (
-        <div className={`absolute top-4 left-1/2 transform -translate-x-1/2 z-[60] flex items-center px-4 py-3 rounded-xl shadow-lg animate-in slide-in-from-top-5 fade-in duration-300 ${type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>
+        <div className={`absolute top-4 left-1/2 transform -translate-x-1/2 z-[70] flex items-center px-4 py-3 rounded-xl shadow-lg animate-in slide-in-from-top-5 fade-in duration-300 ${type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>
             {type === 'success' ? <CheckCircle className="w-5 h-5 mr-2" /> : <AlertCircle className="w-5 h-5 mr-2" />}
             <span className="font-medium text-sm">{message}</span>
         </div>
@@ -112,6 +134,14 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
   // Fallback check: if team is officially flagged as Area, we also treat it as Area context if needed, but viewLevel is explicit.
   const isAreaContext = viewLevel === 'area';
 
+  const activity = data.activities.find(a => a.id === team.activityId);
+  const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
+  const cluster = data.clusters.find(c => c.ClusterID === school?.SchoolCluster);
+  const files = data.files.filter(f => f.TeamID === team.teamId);
+
+  // Dynamic Level Options
+  const levelOptions = useMemo(() => getAvailableLevels(activity?.levels || ''), [activity]);
+
   useEffect(() => {
       // Logic: If Area Context, load data from 'stageInfo'. If not, use standard columns.
       let nameToUse = team.teamName;
@@ -160,11 +190,6 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
         }
       } catch { setEditTeachers([]); setEditStudents([]); }
   }, [team, isAreaContext]);
-
-  const activity = data.activities.find(a => a.id === team.activityId);
-  const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
-  const cluster = data.clusters.find(c => c.ClusterID === school?.SchoolCluster);
-  const files = data.files.filter(f => f.TeamID === team.teamId);
 
   // Safe parsing for Stage Info (for display purposes)
   let areaInfo: AreaStageInfo | null = null;
@@ -721,7 +746,7 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
                                                     onChange={(e) => handleStudentChange(idx, 'class', e.target.value)}
                                                 >
                                                     <option value="">-- เลือกระดับชั้น --</option>
-                                                    {CLASS_OPTIONS.map(opt => (
+                                                    {levelOptions.map(opt => (
                                                         <option key={opt} value={opt}>{opt}</option>
                                                     ))}
                                                 </select>
