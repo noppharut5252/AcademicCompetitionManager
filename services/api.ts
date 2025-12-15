@@ -16,6 +16,10 @@ export const fetchData = async (): Promise<AppData> => {
     }
 
     const data = await response.json();
+    // Ensure venues array exists even if old backend script returns undefined
+    if (!data.venues) {
+        data.venues = [];
+    }
     return data;
   } catch (error) {
     console.warn("Fetching from live API failed, falling back to mock data.", error);
