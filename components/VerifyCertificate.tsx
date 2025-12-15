@@ -3,6 +3,8 @@ import React, { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { AppData, Team } from '../types';
 import { CheckCircle, XCircle, Award, School, LayoutGrid, Loader2, Trophy, ArrowLeft } from 'lucide-react';
+// @ts-ignore
+import confetti from 'canvas-confetti';
 
 interface VerifyCertificateProps {
   data: AppData;
@@ -23,6 +25,36 @@ const VerifyCertificate: React.FC<VerifyCertificateProps> = ({ data }) => {
       setLoading(false);
     }
   }, [data.teams, teamId]);
+
+  // Trigger confetti if winner
+  useEffect(() => {
+      if (!loading && team) {
+          const medal = (team.stageInfo ? JSON.parse(team.stageInfo).medal : team.medalOverride) || '';
+          const lowerMedal = medal.toLowerCase();
+          const isWinner = lowerMedal.includes('gold') || lowerMedal.includes('silver') || lowerMedal.includes('bronze');
+          
+          if (isWinner) {
+              const duration = 3000;
+              const animationEnd = Date.now() + duration;
+              const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 };
+
+              const randomInRange = (min: number, max: number) => Math.random() * (max - min) + min;
+
+              const interval: any = setInterval(function() {
+                const timeLeft = animationEnd - Date.now();
+
+                if (timeLeft <= 0) {
+                  return clearInterval(interval);
+                }
+
+                const particleCount = 50 * (timeLeft / duration);
+                // since particles fall down, start a bit higher than random
+                confetti(Object.assign({}, defaults, { particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } }));
+                confetti(Object.assign({}, defaults, { particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } }));
+              }, 250);
+          }
+      }
+  }, [loading, team]);
 
   if (loading) {
     return (
@@ -171,3 +203,4 @@ const VerifyCertificate: React.FC<VerifyCertificateProps> = ({ data }) => {
 };
 
 export default VerifyCertificate;
+
