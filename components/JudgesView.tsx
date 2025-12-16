@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useRef } from 'react';
 import { AppData, Judge, User, Team } from '../types';
-import { Search, Plus, Edit2, Trash2, Gavel, Mail, Phone, School, MapPin, Loader2, Save, X, LayoutGrid, AlertTriangle, CheckCircle, Users, Briefcase, ChevronDown, ChevronUp, AlertOctagon, UserCheck, Camera, Copy, Trophy } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, Gavel, Mail, Phone, School, MapPin, Loader2, Save, X, LayoutGrid, AlertTriangle, CheckCircle, Users, Briefcase, ChevronDown, ChevronUp, AlertOctagon, UserCheck, Camera, Copy, Trophy, Filter, Layers, Bookmark } from 'lucide-react';
 import SearchableSelect from './SearchableSelect';
 import ConfirmationModal from './ConfirmationModal';
 import { saveJudge, deleteJudge, uploadImage } from '../services/api';
@@ -20,8 +20,9 @@ interface ConflictData {
 
 const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'management' | 'directory'>('management');
-  const [viewScope, setViewScope] = useState<'cluster' | 'area'>('area'); // Default to District Level (Area) based on prompt context
+  const [viewScope, setViewScope] = useState<'cluster' | 'area'>('area'); 
   const [searchTerm, setSearchTerm] = useState('');
+  const [clusterFilter, setClusterFilter] = useState<string>(''); // New: Filter by Cluster
   
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -36,11 +37,15 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
 
   // Permissions
   const canManage = ['admin', 'area', 'group_admin'].includes(user?.level?.toLowerCase() || '');
-  
+  const isGroupAdmin = user?.level === 'group_admin';
+
   // --- Derived Data & Logic ---
 
   const checkConflict = (judge: Judge, competingSchoolNames: Set<string>): ConflictData => {
       const judgeSchool = judge.schoolName.trim().toLowerCase();
+      // Heuristic: If judgeSchool is empty, assume no conflict or check specifically
+      if (!judgeSchool) return { hasConflict: false, schoolName: '' };
+
       for (let school of competingSchoolNames) {
           if (judgeSchool === school.trim().toLowerCase()) {
               return { hasConflict: true, schoolName: school };
@@ -49,93 +54,151 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
       return { hasConflict: false, schoolName: '' };
   };
 
+  // Grouping Logic
   const activityGroups = useMemo(() => {
+      // Structure: Activity -> (Area Data OR Cluster Data Map)
       const groups: Record<string, { 
           activityName: string, 
-          judges: Judge[], 
-          competingSchools: Set<string>, 
-          teams: Team[],
-          conflicts: number 
+          areaJudges: Judge[],
+          areaSchools: Set<string>,
+          areaConflicts: number,
+          // Map of ClusterID -> Data
+          clusters: Record<string, {
+              judges: Judge[],
+              competingSchools: Set<string>,
+              conflicts: number
+          }>
       }> = {};
 
+      // 1. Initialize Groups
       data.activities.forEach(act => {
           groups[act.id] = {
               activityName: act.name,
-              judges: [],
-              competingSchools: new Set(),
-              teams: [],
-              conflicts: 0
+              areaJudges: [],
+              areaSchools: new Set(),
+              areaConflicts: 0,
+              clusters: {}
           };
+          
+          // Always initialize all known clusters to ensure they exist in the map
+          data.clusters.forEach(c => {
+              groups[act.id].clusters[c.ClusterID] = {
+                  judges: [],
+                  competingSchools: new Set(),
+                  conflicts: 0
+              };
+          });
       });
 
-      // Filter teams based on viewScope
-      // District Level: Only teams with Rank 1 AND Flag TRUE (RepresentativeOverride)
+      // 2. Map Teams to Schools (Area vs Cluster)
       data.teams.forEach(team => {
-          if (groups[team.activityId]) {
-              let isQualified = true;
-              
-              if (viewScope === 'area') {
-                  const rankOne = String(team.rank) === '1';
-                  const isRep = String(team.flag).toUpperCase() === 'TRUE';
-                  isQualified = rankOne && isRep;
-              }
+          if (!groups[team.activityId]) return;
+          
+          const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
+          const schoolName = school?.SchoolName || team.schoolId;
+          const clusterId = school?.SchoolCluster;
 
-              if (isQualified) {
-                  const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
-                  const schoolName = school?.SchoolName || team.schoolId;
-                  groups[team.activityId].competingSchools.add(schoolName);
-                  groups[team.activityId].teams.push(team);
-              }
+          // Area Logic: Qualified Teams only
+          const isQualified = String(team.rank) === '1' && String(team.flag).toUpperCase() === 'TRUE';
+          if (isQualified) {
+              groups[team.activityId].areaSchools.add(schoolName);
+          }
+
+          // Cluster Logic: All teams in that cluster
+          if (clusterId && groups[team.activityId].clusters[clusterId]) {
+              groups[team.activityId].clusters[clusterId].competingSchools.add(schoolName);
           }
       });
 
-      // Map Judges based on current viewScope
+      // 3. Map Judges
       data.judges.forEach(judge => {
-          // Strict filtering by scope
-          if (judge.stageScope === viewScope && groups[judge.activityId]) {
-              groups[judge.activityId].judges.push(judge);
-              const conflict = checkConflict(judge, groups[judge.activityId].competingSchools);
-              if (conflict.hasConflict) {
-                  groups[judge.activityId].conflicts++;
+          if (!groups[judge.activityId]) return;
+
+          // Robustness: Handle legacy data or missing scope
+          const rawScope = (judge.stageScope || '').toLowerCase().trim();
+          const jClusterKey = (judge.clusterKey || '').trim();
+          
+          // Determine effective scope: 
+          // If explicitly 'area', or empty scope but no cluster key => Area
+          // Otherwise => Cluster
+          const isArea = rawScope === 'area' || (rawScope === '' && !jClusterKey);
+          
+          if (isArea) {
+              groups[judge.activityId].areaJudges.push(judge);
+              const conflict = checkConflict(judge, groups[judge.activityId].areaSchools);
+              if (conflict.hasConflict) groups[judge.activityId].areaConflicts++;
+          } else {
+              // Cluster Scope
+              if (jClusterKey) {
+                  // Ensure cluster entry exists (creates entry if key is valid but somehow missed in init, or if key is non-standard)
+                  if (!groups[judge.activityId].clusters[jClusterKey]) {
+                      // Try to find if it matches case-insensitively with known clusters
+                      const matchedCluster = data.clusters.find(c => c.ClusterID.toLowerCase() === jClusterKey.toLowerCase());
+                      const effectiveKey = matchedCluster ? matchedCluster.ClusterID : jClusterKey;
+                      
+                      if (!groups[judge.activityId].clusters[effectiveKey]) {
+                           groups[judge.activityId].clusters[effectiveKey] = { judges: [], competingSchools: new Set(), conflicts: 0 };
+                      }
+                      groups[judge.activityId].clusters[effectiveKey].judges.push(judge);
+                      
+                      const clusterData = groups[judge.activityId].clusters[effectiveKey];
+                      const conflict = checkConflict(judge, clusterData.competingSchools);
+                      if (conflict.hasConflict) clusterData.conflicts++;
+                  } else {
+                      groups[judge.activityId].clusters[jClusterKey].judges.push(judge);
+                      
+                      const clusterData = groups[judge.activityId].clusters[jClusterKey];
+                      const conflict = checkConflict(judge, clusterData.competingSchools);
+                      if (conflict.hasConflict) clusterData.conflicts++;
+                  }
               }
           }
       });
 
       return groups;
-  }, [data.activities, data.teams, data.judges, data.schools, viewScope]);
+  }, [data.activities, data.teams, data.judges, data.schools, data.clusters]);
 
   const dashboardStats = useMemo(() => {
-      const scopedJudges = data.judges.filter(j => j.stageScope === viewScope);
-      const totalJudges = scopedJudges.length;
-      let externalCount = 0;
-      let conflictCount = 0;
+      let total = 0;
+      let external = 0;
+      let conflicts = 0;
       
-      scopedJudges.forEach(j => {
-          const isInternal = data.schools.some(s => s.SchoolID === j.schoolId);
-          if (!isInternal) externalCount++;
+      // Calculate based on current viewScope and filter
+      data.activities.forEach(act => {
+          const group = activityGroups[act.id];
+          
+          if (viewScope === 'area') {
+              total += group.areaJudges.length;
+              conflicts += group.areaConflicts;
+              group.areaJudges.forEach(j => {
+                  if (!data.schools.some(s => s.SchoolID === j.schoolId)) external++;
+              });
+          } else {
+              // Cluster Mode
+              Object.entries(group.clusters).forEach(([cId, cData]) => {
+                  if (clusterFilter && clusterFilter !== cId) return; // Skip if filtered
+                  
+                  total += cData.judges.length;
+                  conflicts += cData.conflicts;
+                  cData.judges.forEach(j => {
+                      if (!data.schools.some(s => s.SchoolID === j.schoolId)) external++;
+                  });
+              });
+          }
       });
 
-      Object.values(activityGroups).forEach(g => {
-          conflictCount += g.conflicts;
-      });
-
-      return {
-          total: totalJudges,
-          external: externalCount,
-          conflicts: conflictCount,
-          activitiesWithoutJudges: data.activities.length - Object.values(activityGroups).filter(g => g.judges.length > 0).length
-      };
-  }, [data.judges, activityGroups, viewScope]);
+      return { total, external, conflicts };
+  }, [activityGroups, viewScope, clusterFilter, data.schools, data.activities]);
 
   // For "Select from Cluster" feature
   const getClusterJudgesForActivity = (activityId: string) => {
-      // Find judges for this activity that are in 'cluster' scope
       return data.judges.filter(j => j.activityId === activityId && j.stageScope === 'cluster');
   };
 
   const filteredDirectory = useMemo(() => {
       return data.judges.filter(judge => {
           if (judge.stageScope !== viewScope) return false;
+          if (viewScope === 'cluster' && clusterFilter && judge.clusterKey !== clusterFilter) return false;
           
           const matchesSearch = 
             judge.judgeName.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -147,7 +210,16 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
           }
           return matchesSearch;
       });
-  }, [data.judges, searchTerm, user, viewScope]);
+  }, [data.judges, searchTerm, user, viewScope, clusterFilter]);
+
+  // Group filtered activities by category
+  const filteredActivities = useMemo(() => {
+      return data.activities.filter(act => act.name.toLowerCase().includes(searchTerm.toLowerCase()));
+  }, [data.activities, searchTerm]);
+
+  const categories = useMemo(() => {
+      return Array.from(new Set(filteredActivities.map(a => a.category))).sort();
+  }, [filteredActivities]);
 
   // --- Handlers ---
 
@@ -158,19 +230,35 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
       setIsModalOpen(true);
   };
 
-  const handleAdd = (preSelectedActivityId?: string) => {
+  const handleAdd = (preSelectedActivityId?: string, preSelectedCluster?: string) => {
       setIsExternal(false);
+      
+      let initialClusterKey = preSelectedCluster || '';
+      let initialClusterLabel = '';
+
+      // If user is group admin, auto-select their cluster
+      if (isGroupAdmin && !initialClusterKey) {
+          const userSchool = data.schools.find(s => s.SchoolID === user?.SchoolID);
+          initialClusterKey = userSchool?.SchoolCluster || '';
+      }
+      
+      // If we have a key, find label
+      if (initialClusterKey) {
+          const c = data.clusters.find(cl => cl.ClusterID === initialClusterKey);
+          initialClusterLabel = c?.ClusterName || '';
+      }
+
       setEditingJudge({
           activityId: preSelectedActivityId || '',
-          clusterKey: '',
-          clusterLabel: '',
+          clusterKey: initialClusterKey,
+          clusterLabel: initialClusterLabel,
           schoolId: '',
           schoolName: '',
           judgeName: '',
           role: 'กรรมการ',
           phone: '',
           email: '',
-          stageScope: viewScope, // Default to current view scope
+          stageScope: viewScope, 
           importedBy: user?.username || 'Admin',
           photoUrl: ''
       });
@@ -179,7 +267,6 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
 
   const handleImportFromCluster = (clusterJudge: Judge) => {
       if (!editingJudge) return;
-      // Copy details but keep current scope (which should be 'area')
       setEditingJudge({
           ...editingJudge,
           judgeName: clusterJudge.judgeName,
@@ -192,7 +279,6 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
           clusterKey: clusterJudge.clusterKey,
           clusterLabel: clusterJudge.clusterLabel
       });
-      // Detect if external based on ID
       const isInternal = data.schools.some(s => s.SchoolID === clusterJudge.schoolId);
       setIsExternal(!isInternal);
   };
@@ -236,14 +322,31 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
 
       if (isExternal) {
           schoolId = ''; 
+          // If external but in cluster mode, we need to ensure clusterKey is set from the form dropdown (if we add one) or context
+          if (viewScope === 'cluster' && !clusterKey && !isGroupAdmin) {
+              // If admin didn't select cluster, we might have an issue, but let's allow it or default
+          }
       } else {
           const school = data.schools.find(s => s.SchoolID === editingJudge.schoolId);
           if (school) {
               schoolName = school.SchoolName;
-              const cluster = data.clusters.find(c => c.ClusterID === school.SchoolCluster);
-              clusterKey = cluster?.ClusterID || '';
-              clusterLabel = cluster?.ClusterName || '';
+              
+              // Only override cluster info if not manually set/locked context
+              // IMPORTANT: In cluster mode, we allow "Cross-Cluster Judging" (Teacher from Cluster A judging Cluster B)
+              // So we ONLY default to school's cluster if clusterKey is currently EMPTY.
+              const schoolCluster = data.clusters.find(c => c.ClusterID === school.SchoolCluster);
+              
+              if (!clusterKey) { 
+                  clusterKey = schoolCluster?.ClusterID || '';
+                  clusterLabel = schoolCluster?.ClusterName || '';
+              }
           }
+      }
+      
+      // Ensure Label matches ID if user changed ID via dropdown
+      const selectedCluster = data.clusters.find(c => c.ClusterID === clusterKey);
+      if (selectedCluster) {
+          clusterLabel = selectedCluster.ClusterName;
       }
 
       const payload: Judge = {
@@ -294,7 +397,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
             {/* Scope Toggle */}
             <div className="flex bg-gray-100 p-1 rounded-lg">
                 <button
-                    onClick={() => setViewScope('cluster')}
+                    onClick={() => { setViewScope('cluster'); setClusterFilter(''); }}
                     className={`px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center ${viewScope === 'cluster' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                 >
                     <LayoutGrid className="w-4 h-4 mr-2" /> ระดับกลุ่มเครือข่าย
@@ -308,7 +411,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
             </div>
         </div>
 
-        {/* View Tabs */}
+        {/* View Tabs & Filters */}
         <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <div className="flex space-x-1 bg-gray-100 p-1 rounded-xl w-fit">
                 <button
@@ -332,7 +435,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
             </div>
             
             <button 
-                onClick={() => handleAdd()}
+                onClick={() => handleAdd(undefined, clusterFilter)}
                 className={`flex items-center px-4 py-2 text-white rounded-lg transition-colors shadow-sm font-medium text-sm ${viewScope === 'area' ? 'bg-purple-600 hover:bg-purple-700' : 'bg-blue-600 hover:bg-blue-700'}`}
             >
                 <Plus className="w-4 h-4 mr-2" /> เพิ่มกรรมการ ({viewScope === 'area' ? 'เขต' : 'กลุ่ม'})
@@ -341,7 +444,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
 
         {/* Dashboard Content */}
         {activeTab === 'dashboard' && (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
                     <div className="text-gray-500 text-xs font-bold uppercase mb-2">กรรมการทั้งหมด ({viewScope})</div>
                     <div className="text-3xl font-bold text-gray-800">{dashboardStats.total} <span className="text-sm font-normal text-gray-400">คน</span></div>
@@ -354,138 +457,209 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                     <div className="text-gray-500 text-xs font-bold uppercase mb-2">ข้อควรระวัง (Conflicts)</div>
                     <div className="text-3xl font-bold text-red-500">{dashboardStats.conflicts} <span className="text-sm font-normal text-gray-400">รายการ</span></div>
                 </div>
-                <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
-                    <div className="text-gray-500 text-xs font-bold uppercase mb-2">กิจกรรมที่ขาดกรรมการ</div>
-                    <div className="text-3xl font-bold text-orange-500">{dashboardStats.activitiesWithoutJudges} <span className="text-sm font-normal text-gray-400">รายการ</span></div>
-                </div>
             </div>
         )}
 
         {/* Management Content */}
         {activeTab === 'management' && (
             <div className="space-y-4">
-                <div className="relative max-w-md mb-4">
-                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-                    <input 
-                        type="text" 
-                        className="block w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:outline-none"
-                        placeholder="ค้นหากิจกรรม..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                    />
+                <div className="flex flex-col md:flex-row gap-4 mb-4">
+                    <div className="relative flex-1">
+                        <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                        <input 
+                            type="text" 
+                            className="block w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:outline-none"
+                            placeholder="ค้นหากิจกรรม..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                    </div>
+                    
+                    {/* Cluster Filter - Only show in Cluster Mode */}
+                    {viewScope === 'cluster' && !isGroupAdmin && (
+                        <div className="w-full md:w-64">
+                            <SearchableSelect 
+                                options={[{ label: 'ทุกกลุ่มเครือข่าย', value: '' }, ...data.clusters.map(c => ({ label: c.ClusterName, value: c.ClusterID }))]}
+                                value={clusterFilter}
+                                onChange={setClusterFilter}
+                                placeholder="กรองตามกลุ่มเครือข่าย"
+                                icon={<Filter className="w-4 h-4"/>}
+                            />
+                        </div>
+                    )}
                 </div>
 
-                {data.activities
-                    .filter(act => act.name.toLowerCase().includes(searchTerm.toLowerCase()))
-                    .map(act => {
-                        const group = activityGroups[act.id];
-                        const isOpen = expandedActivity === act.id;
-                        const hasJudges = group.judges.length > 0;
-                        const hasConflict = group.conflicts > 0;
+                <div className="space-y-8">
+                    {categories.map(category => (
+                        <div key={category} className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                            {/* Category Header */}
+                            <div className="flex items-center gap-2 mb-3 pb-2 border-b border-gray-200">
+                                <span className="px-3 py-1 bg-blue-50 text-blue-700 rounded-lg text-sm font-bold border border-blue-100 shadow-sm flex items-center">
+                                    <Layers className="w-4 h-4 mr-2" />
+                                    {category}
+                                </span>
+                                <span className="text-xs text-gray-400">
+                                    ({filteredActivities.filter(a => a.category === category).length} รายการ)
+                                </span>
+                            </div>
+                            
+                            <div className="space-y-4">
+                                {filteredActivities
+                                    .filter(a => a.category === category)
+                                    .map(act => {
+                                        const group = activityGroups[act.id];
+                                        const isOpen = expandedActivity === act.id;
+                                        
+                                        // Counts depends on scope
+                                        let judgeCount = 0;
+                                        let conflictCount = 0;
+                                        if (viewScope === 'area') {
+                                            judgeCount = group.areaJudges.length;
+                                            conflictCount = group.areaConflicts;
+                                        } else {
+                                            // Sum up visible clusters
+                                            Object.entries(group.clusters).forEach(([cId, cData]) => {
+                                                if (!clusterFilter || clusterFilter === cId) {
+                                                    judgeCount += cData.judges.length;
+                                                    conflictCount += cData.conflicts;
+                                                }
+                                            });
+                                        }
 
-                        return (
-                            <div key={act.id} className={`bg-white rounded-xl shadow-sm border transition-all ${hasConflict ? 'border-red-200' : 'border-gray-200'}`}>
-                                <div 
-                                    className={`p-4 flex flex-col md:flex-row items-start md:items-center justify-between cursor-pointer ${isOpen ? 'bg-gray-50 rounded-t-xl' : ''}`}
-                                    onClick={() => setExpandedActivity(isOpen ? null : act.id)}
-                                >
-                                    <div className="flex items-center flex-1">
-                                        <div className={`p-2 rounded-lg mr-3 ${hasJudges ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
-                                            <Gavel className="w-5 h-5" />
-                                        </div>
-                                        <div>
-                                            <h3 className="font-bold text-gray-800 text-sm md:text-base">{act.name}</h3>
-                                            <div className="flex items-center gap-3 text-xs text-gray-500 mt-1">
-                                                <span>กรรมการ ({viewScope === 'area' ? 'เขต' : 'กลุ่ม'}): <b>{group.judges.length}</b> คน</span>
-                                                <span>ทีมแข่ง: <b>{group.teams.length}</b> ทีม</span>
-                                                {hasConflict && (
-                                                    <span className="flex items-center text-red-600 font-bold bg-red-50 px-2 py-0.5 rounded">
-                                                        <AlertTriangle className="w-3 h-3 mr-1" /> พบความขัดแย้ง
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="mt-2 md:mt-0 flex items-center gap-2">
-                                        {isOpen ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
-                                    </div>
-                                </div>
+                                        const hasConflict = conflictCount > 0;
 
-                                {isOpen && (
-                                    <div className="p-4 border-t border-gray-100 grid grid-cols-1 md:grid-cols-3 gap-6 animate-in slide-in-from-top-2">
-                                        <div className="md:col-span-1 bg-gray-50 p-4 rounded-lg border border-gray-200">
-                                            <h4 className="text-xs font-bold text-gray-500 uppercase mb-3 flex items-center">
-                                                <School className="w-3 h-3 mr-1" /> โรงเรียนที่เข้าแข่งขัน ({viewScope === 'area' ? 'Qualified Only' : 'All'})
-                                            </h4>
-                                            <div className="flex flex-wrap gap-2">
-                                                {Array.from(group.competingSchools).length > 0 ? Array.from(group.competingSchools).map(school => (
-                                                    <span key={school} className="text-xs bg-white border border-gray-300 px-2 py-1 rounded text-gray-600">
-                                                        {school}
-                                                    </span>
-                                                )) : <span className="text-xs text-gray-400 italic">ไม่มีทีมเข้าแข่งขัน</span>}
-                                            </div>
-                                        </div>
-
-                                        <div className="md:col-span-2">
-                                            <div className="flex justify-between items-center mb-3">
-                                                <h4 className="text-xs font-bold text-gray-500 uppercase flex items-center">
-                                                    <UserCheck className="w-3 h-3 mr-1" /> รายชื่อกรรมการ
-                                                </h4>
-                                                <button 
-                                                    onClick={(e) => { e.stopPropagation(); handleAdd(act.id); }}
-                                                    className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded hover:bg-blue-100 font-medium flex items-center"
+                                        return (
+                                            <div key={act.id} className={`bg-white rounded-xl shadow-sm border transition-all ${hasConflict ? 'border-red-200' : 'border-gray-200'}`}>
+                                                <div 
+                                                    className={`p-4 flex flex-col md:flex-row items-start md:items-center justify-between cursor-pointer ${isOpen ? 'bg-gray-50 rounded-t-xl' : ''}`}
+                                                    onClick={() => setExpandedActivity(isOpen ? null : act.id)}
                                                 >
-                                                    <Plus className="w-3 h-3 mr-1" /> เพิ่ม
-                                                </button>
-                                            </div>
-                                            
-                                            <div className="space-y-2">
-                                                {group.judges.map(judge => {
-                                                    const conflict = checkConflict(judge, group.competingSchools);
-                                                    return (
-                                                        <div key={judge.id} className={`flex items-center justify-between p-3 rounded-lg border text-sm ${conflict.hasConflict ? 'bg-red-50 border-red-200' : 'bg-white border-gray-200'}`}>
-                                                            <div className="flex items-center">
-                                                                <img 
-                                                                    src={judge.photoUrl || "https://cdn-icons-png.flaticon.com/512/3135/3135768.png"} 
-                                                                    className="w-10 h-10 rounded-full object-cover border border-gray-200 mr-3 bg-gray-50"
-                                                                    alt="Judge"
-                                                                />
-                                                                <div>
-                                                                    <div className="font-bold text-gray-900 flex items-center">
-                                                                        {judge.judgeName}
-                                                                        <span className="ml-2 text-[10px] font-normal text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">{judge.role}</span>
-                                                                    </div>
-                                                                    <div className="text-xs text-gray-500 flex items-center mt-0.5">
-                                                                        <Briefcase className="w-3 h-3 mr-1" /> 
-                                                                        {judge.schoolName || 'ไม่ระบุสังกัด'}
-                                                                        {conflict.hasConflict && (
-                                                                            <span className="ml-2 text-red-600 font-bold flex items-center">
-                                                                                <AlertOctagon className="w-3 h-3 mr-1" /> ตรงกับทีมแข่ง
+                                                    <div className="flex items-center flex-1">
+                                                        <div className={`p-2 rounded-lg mr-3 ${judgeCount > 0 ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
+                                                            <Gavel className="w-5 h-5" />
+                                                        </div>
+                                                        <div>
+                                                            <h3 className="font-bold text-gray-800 text-sm md:text-base">{act.name}</h3>
+                                                            <div className="flex items-center gap-3 text-xs text-gray-500 mt-1">
+                                                                <span>กรรมการ ({viewScope === 'area' ? 'เขต' : 'กลุ่ม'}): <b>{judgeCount}</b> คน</span>
+                                                                {hasConflict && (
+                                                                    <span className="flex items-center text-red-600 font-bold bg-red-50 px-2 py-0.5 rounded">
+                                                                        <AlertTriangle className="w-3 h-3 mr-1" /> พบความขัดแย้ง
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="mt-2 md:mt-0 flex items-center gap-2">
+                                                        {isOpen ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
+                                                    </div>
+                                                </div>
+
+                                                {isOpen && (
+                                                    <div className="p-4 border-t border-gray-100 animate-in slide-in-from-top-2">
+                                                        {viewScope === 'area' ? (
+                                                            // --- AREA VIEW ---
+                                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                                                <div className="md:col-span-1 bg-gray-50 p-4 rounded-lg border border-gray-200">
+                                                                    <h4 className="text-xs font-bold text-gray-500 uppercase mb-3 flex items-center">
+                                                                        <School className="w-3 h-3 mr-1" /> โรงเรียนที่เข้าแข่งขัน (Qualified)
+                                                                    </h4>
+                                                                    <div className="flex flex-wrap gap-2">
+                                                                        {Array.from(group.areaSchools).length > 0 ? Array.from(group.areaSchools).map(school => (
+                                                                            <span key={school} className="text-xs bg-white border border-gray-300 px-2 py-1 rounded text-gray-600">
+                                                                                {school}
                                                                             </span>
-                                                                        )}
+                                                                        )) : <span className="text-xs text-gray-400 italic">ไม่มีทีมเข้าแข่งขัน</span>}
+                                                                    </div>
+                                                                </div>
+                                                                <div className="md:col-span-2">
+                                                                    <div className="flex justify-between items-center mb-3">
+                                                                        <h4 className="text-xs font-bold text-gray-500 uppercase flex items-center">
+                                                                            <UserCheck className="w-3 h-3 mr-1" /> รายชื่อกรรมการ (ระดับเขต)
+                                                                        </h4>
+                                                                        <button 
+                                                                            onClick={(e) => { e.stopPropagation(); handleAdd(act.id); }}
+                                                                            className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded hover:bg-blue-100 font-medium flex items-center"
+                                                                        >
+                                                                            <Plus className="w-3 h-3 mr-1" /> เพิ่ม
+                                                                        </button>
+                                                                    </div>
+                                                                    <div className="space-y-2">
+                                                                        {group.areaJudges.map(judge => renderJudgeRow(judge, group.areaSchools))}
+                                                                        {group.areaJudges.length === 0 && <div className="text-center py-6 text-gray-400 text-xs border-2 border-dashed rounded">ยังไม่มีกรรมการ</div>}
                                                                     </div>
                                                                 </div>
                                                             </div>
-                                                            <div className="flex items-center gap-1">
-                                                                <button onClick={() => handleEdit(judge)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"><Edit2 className="w-3.5 h-3.5" /></button>
-                                                                <button onClick={() => setConfirmDelete({ isOpen: true, id: judge.id })} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 className="w-3.5 h-3.5" /></button>
+                                                        ) : (
+                                                            // --- CLUSTER VIEW (Grouped) ---
+                                                            <div className="space-y-6">
+                                                                {data.clusters.map(cluster => {
+                                                                    if (clusterFilter && cluster.ClusterID !== clusterFilter) return null;
+                                                                    const cData = group.clusters[cluster.ClusterID];
+                                                                    
+                                                                    // Check logic: Ensure we display clusters that have data, or show empty state if user is filtering
+                                                                    // Note: group.clusters is pre-initialized, so cData always exists.
+                                                                    if (!cData) return null;
+                                                                    
+                                                                    // Only hide if absolutely no data AND no filter active (reduce noise)
+                                                                    if (!clusterFilter && cData.judges.length === 0 && cData.competingSchools.size === 0) return null;
+
+                                                                    return (
+                                                                        <div key={cluster.ClusterID} className="border border-blue-100 rounded-xl overflow-hidden">
+                                                                            <div className="bg-blue-50/50 px-4 py-2 border-b border-blue-100 flex justify-between items-center">
+                                                                                <span className="font-bold text-blue-800 text-sm flex items-center">
+                                                                                    <LayoutGrid className="w-3.5 h-3.5 mr-2" /> {cluster.ClusterName}
+                                                                                </span>
+                                                                                <button 
+                                                                                    onClick={(e) => { e.stopPropagation(); handleAdd(act.id, cluster.ClusterID); }}
+                                                                                    className="text-[10px] bg-white border border-blue-200 text-blue-600 px-2 py-1 rounded hover:bg-blue-50 flex items-center"
+                                                                                >
+                                                                                    <Plus className="w-3 h-3 mr-1" /> เพิ่มกรรมการ
+                                                                                </button>
+                                                                            </div>
+                                                                            <div className="p-3 grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                                                <div className="md:col-span-1 bg-white p-3 rounded-lg border border-gray-100">
+                                                                                    <h5 className="text-[10px] font-bold text-gray-400 uppercase mb-2 flex items-center">
+                                                                                        <School className="w-3 h-3 mr-1" /> ทีมที่เข้าแข่งขัน
+                                                                                    </h5>
+                                                                                    <div className="flex flex-wrap gap-1">
+                                                                                        {Array.from(cData.competingSchools).length > 0 ? Array.from(cData.competingSchools).map(s => (
+                                                                                            <span key={s} className="text-[10px] bg-gray-50 border border-gray-200 px-1.5 py-0.5 rounded text-gray-600">{s}</span>
+                                                                                        )) : <span className="text-[10px] text-gray-400 italic">ไม่มีทีม</span>}
+                                                                                    </div>
+                                                                                </div>
+                                                                                <div className="md:col-span-2">
+                                                                                    <h5 className="text-[10px] font-bold text-gray-400 uppercase mb-2 flex items-center">
+                                                                                        <UserCheck className="w-3 h-3 mr-1" /> รายชื่อกรรมการ ({cData.judges.length} คน)
+                                                                                    </h5>
+                                                                                    <div className="space-y-2">
+                                                                                        {cData.judges.map(j => renderJudgeRow(j, cData.competingSchools))}
+                                                                                        {cData.judges.length === 0 && <div className="text-xs text-gray-400 italic border-2 border-dashed border-gray-100 rounded-lg p-2 text-center">ยังไม่มีกรรมการในกลุ่มนี้</div>}
+                                                                                    </div>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                                {(Object.keys(group.clusters).length === 0 || (!clusterFilter && Object.values(group.clusters).every(c => c.judges.length === 0 && c.competingSchools.size === 0))) && (
+                                                                    <div className="text-center py-8 text-gray-400 text-xs">ไม่มีข้อมูลในระดับกลุ่มเครือข่ายสำหรับกิจกรรมนี้</div>
+                                                                )}
                                                             </div>
-                                                        </div>
-                                                    );
-                                                })}
-                                                {group.judges.length === 0 && (
-                                                    <div className="text-center py-6 border-2 border-dashed border-gray-200 rounded-lg text-gray-400 text-xs">
-                                                        ยังไม่ได้กำหนดกรรมการในระดับ{viewScope === 'area' ? 'เขต' : 'กลุ่ม'}
+                                                        )}
                                                     </div>
                                                 )}
                                             </div>
-                                        </div>
-                                    </div>
-                                )}
+                                        );
+                                    })
+                                }
                             </div>
-                        );
-                    })
-                }
+                        </div>
+                    ))}
+                    
+                    {filteredActivities.length === 0 && (
+                        <div className="text-center py-10 text-gray-400">ไม่พบกิจกรรมที่ค้นหา</div>
+                    )}
+                </div>
             </div>
         )}
 
@@ -684,16 +858,40 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                                 />
                             </div>
                         </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">รายการแข่งขัน *</label>
-                            <SearchableSelect 
-                                options={data.activities.map(a => ({ label: a.name, value: a.id }))}
-                                value={editingJudge.activityId || ''}
-                                onChange={val => setEditingJudge({ ...editingJudge, activityId: val })}
-                                placeholder="เลือกกิจกรรม..."
-                                icon={<Gavel className="w-4 h-4"/>}
-                            />
+                        
+                        <div className="grid grid-cols-1 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">รายการแข่งขัน *</label>
+                                <SearchableSelect 
+                                    options={data.activities.map(a => ({ label: a.name, value: a.id }))}
+                                    value={editingJudge.activityId || ''}
+                                    onChange={val => setEditingJudge({ ...editingJudge, activityId: val })}
+                                    placeholder="เลือกกิจกรรม..."
+                                    icon={<Gavel className="w-4 h-4"/>}
+                                />
+                            </div>
+                            
+                            {/* Cluster Selection - only show if editing scope is cluster */}
+                            {viewScope === 'cluster' && (
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">กลุ่มเครือข่าย *</label>
+                                    <SearchableSelect 
+                                        options={data.clusters.map(c => ({ label: c.ClusterName, value: c.ClusterID }))}
+                                        value={editingJudge.clusterKey || ''}
+                                        onChange={val => {
+                                            const c = data.clusters.find(cl => cl.ClusterID === val);
+                                            setEditingJudge({ ...editingJudge, clusterKey: val, clusterLabel: c?.ClusterName || '' })
+                                        }}
+                                        placeholder="เลือกกลุ่มเครือข่าย..."
+                                        disabled={isGroupAdmin} 
+                                        icon={<LayoutGrid className="w-4 h-4"/>}
+                                    />
+                                    {(!isExternal && !!editingJudge.schoolId && !editingJudge.clusterKey) && <p className="text-[10px] text-gray-400 mt-1">* ระบุอัตโนมัติตามโรงเรียน หากไม่ได้เลือก</p>}
+                                    {(!isExternal && !!editingJudge.schoolId) && <p className="text-[10px] text-blue-500 mt-1">* สามารถเปลี่ยนกลุ่มได้กรณีเป็นกรรมการต่างกลุ่ม (Cross-Cluster)</p>}
+                                </div>
+                            )}
                         </div>
+
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">บทบาท</label>
@@ -745,6 +943,41 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
         />
     </div>
   );
+
+  // Helper to render Judge Row
+  function renderJudgeRow(judge: Judge, contextSchools: Set<string>) {
+      const conflict = checkConflict(judge, contextSchools);
+      return (
+          <div key={judge.id} className={`flex items-center justify-between p-3 rounded-lg border text-sm ${conflict.hasConflict ? 'bg-red-50 border-red-200' : 'bg-white border-gray-200'}`}>
+              <div className="flex items-center">
+                  <img 
+                      src={judge.photoUrl || "https://cdn-icons-png.flaticon.com/512/3135/3135768.png"} 
+                      className="w-10 h-10 rounded-full object-cover border border-gray-200 mr-3 bg-gray-50"
+                      alt="Judge"
+                  />
+                  <div>
+                      <div className="font-bold text-gray-900 flex items-center">
+                          {judge.judgeName}
+                          <span className="ml-2 text-[10px] font-normal text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">{judge.role}</span>
+                      </div>
+                      <div className="text-xs text-gray-500 flex items-center mt-0.5">
+                          <Briefcase className="w-3 h-3 mr-1" /> 
+                          {judge.schoolName || 'ไม่ระบุสังกัด'}
+                          {conflict.hasConflict && (
+                              <span className="ml-2 text-red-600 font-bold flex items-center">
+                                  <AlertOctagon className="w-3 h-3 mr-1" /> ตรงกับทีมแข่ง
+                              </span>
+                          )}
+                      </div>
+                  </div>
+              </div>
+              <div className="flex items-center gap-1">
+                  <button onClick={() => handleEdit(judge)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"><Edit2 className="w-3.5 h-3.5" /></button>
+                  <button onClick={() => setConfirmDelete({ isOpen: true, id: judge.id })} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 className="w-3.5 h-3.5" /></button>
+              </div>
+          </div>
+      );
+  }
 };
 
 export default JudgesView;
