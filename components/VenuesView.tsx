@@ -681,4 +681,3 @@ const VenuesView: React.FC<VenuesViewProps> = ({ data, user }) => {
 };
 
 export default VenuesView;
-
