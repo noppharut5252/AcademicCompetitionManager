@@ -14,13 +14,14 @@ import JudgesView from './components/JudgesView'; // Import JudgesView
 import { AppData, User } from './types';
 import { fetchData, loginStandardUser, checkUserPermission } from './services/api';
 import { initLiff, loginLiff, LiffProfile } from './services/liff';
-import { Loader2, LogIn, User as UserIcon, Lock, Globe, AlertCircle } from 'lucide-react';
+import { Loader2, LogIn, User as UserIcon, Lock, Globe, AlertCircle, Sparkles } from 'lucide-react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 
 const App: React.FC = () => {
   const [data, setData] = useState<AppData | null>(null);
   const [loading, setLoading] = useState(false);
   const [liffChecking, setLiffChecking] = useState(true);
+  const [loadingText, setLoadingText] = useState('กำลังเริ่มต้นระบบ...');
   
   // Auth State
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -38,8 +39,8 @@ const App: React.FC = () => {
   // Initialize LIFF and Session on mount
   useEffect(() => {
     const initialize = async () => {
+      setLoadingText('กำลังเชื่อมต่อ LINE Service...');
       // 0. Always attempt to init LIFF to ensure SDK capabilities (Sharing) are ready
-      // This is non-blocking for local session check, but crucial for features.
       let liffProfile: LiffProfile | null = null;
       try {
           liffProfile = await initLiff();
@@ -47,6 +48,7 @@ const App: React.FC = () => {
           console.warn("LIFF init warning:", e);
       }
 
+      setLoadingText('ตรวจสอบข้อมูลผู้ใช้งาน...');
       // 1. Check Local Storage for existing session
       const savedUserStr = localStorage.getItem('comp_user');
       if (savedUserStr) {
@@ -103,12 +105,20 @@ const App: React.FC = () => {
 
   const fetchAppData = async (silent = false) => {
     if (!silent) setLoading(true);
+    setLoadingText('กำลังดาวน์โหลดข้อมูลการแข่งขัน...');
+    
+    // Artificial delay steps for UX feedback if it takes long
+    const timer1 = setTimeout(() => setLoadingText('กำลังประมวลผลข้อมูลทีม...'), 2000);
+    const timer2 = setTimeout(() => setLoadingText('กำลังเตรียมตารางสรุปผล...'), 4500);
+
     try {
       const result = await fetchData();
       setData(result);
     } catch (err) {
       setError('ไม่สามารถโหลดข้อมูลการแข่งขันได้');
     } finally {
+      clearTimeout(timer1);
+      clearTimeout(timer2);
       if (!silent) setLoading(false);
     }
   };
@@ -121,6 +131,7 @@ const App: React.FC = () => {
     e.preventDefault();
     setLoginError('');
     setIsLoggingIn(true);
+    setLoadingText('กำลังตรวจสอบรหัสผ่าน...');
     
     try {
         const user = await loginStandardUser(username, password);
@@ -152,75 +163,42 @@ const App: React.FC = () => {
       setIsAuthenticated(true);
   };
 
-  // Professional Skeleton Loader
-  const SkeletonLoader = () => (
-    <div className="space-y-6 animate-pulse p-1">
-       {/* Hero Skeleton */}
-       <div className="h-40 bg-gradient-to-r from-gray-200 to-gray-300 rounded-2xl shadow-sm relative overflow-hidden">
-          <div className="absolute inset-0 bg-white/20 skew-x-12 translate-x-full animate-[shimmer_1.5s_infinite]"></div>
-       </div>
-       
-       {/* Mobile Menu Skeleton */}
-       <div className="grid grid-cols-4 gap-4 md:hidden">
-          {[1,2,3,4,5,6,7,8].map(i => (
-             <div key={i} className="flex flex-col items-center gap-2">
-                <div className="w-14 h-14 bg-gray-200 rounded-2xl"></div>
-                <div className="w-12 h-3 bg-gray-200 rounded"></div>
-             </div>
-          ))}
-       </div>
-
-       {/* Stats Grid Skeleton */}
-       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-           {[1,2,3].map(i => (
-               <div key={i} className="h-32 bg-white rounded-xl border border-gray-100 p-4 shadow-sm flex flex-col justify-between">
-                   <div className="w-1/2 h-4 bg-gray-200 rounded"></div>
-                   <div className="w-3/4 h-8 bg-gray-200 rounded"></div>
-               </div>
-           ))}
-       </div>
-
-       {/* Content Split Skeleton */}
-       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-           <div className="lg:col-span-2 space-y-4">
-               <div className="w-1/3 h-6 bg-gray-200 rounded mb-4"></div>
-               {[1,2].map(i => (
-                   <div key={i} className="h-48 bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
-                       <div className="w-3/4 h-6 bg-gray-200 rounded mb-3"></div>
-                       <div className="w-full h-4 bg-gray-100 rounded mb-2"></div>
-                       <div className="w-full h-4 bg-gray-100 rounded mb-2"></div>
-                       <div className="w-2/3 h-4 bg-gray-100 rounded"></div>
-                   </div>
-               ))}
-           </div>
-           <div className="space-y-4">
-               <div className="w-1/2 h-6 bg-gray-200 rounded mb-4"></div>
-               {[1,2,3].map(i => (
-                   <div key={i} className="h-24 bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
-                       <div className="w-full h-4 bg-gray-200 rounded mb-2"></div>
-                       <div className="w-1/2 h-3 bg-gray-100 rounded"></div>
-                   </div>
-               ))}
-           </div>
-       </div>
-    </div>
-  );
-
-  // Custom Loading Indicator (Lightbulb GIF)
-  const CustomLoader = () => (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50">
-        <img 
-            src="https://raw.githubusercontent.com/infobwd/PenaltyPro2/refs/heads/main/lightbulb.gif" 
-            alt="Loading..." 
-            className="w-24 h-24 object-contain mb-4 drop-shadow-md"
-        />
-        <p className="text-gray-500 text-sm font-medium animate-pulse">กำลังโหลดข้อมูล...</p>
+  // Enhanced Loading Screen
+  const LoadingScreen = () => (
+      <div className="fixed inset-0 bg-gradient-to-br from-blue-50 to-indigo-50 flex flex-col items-center justify-center z-50">
+        <div className="bg-white p-8 rounded-3xl shadow-xl flex flex-col items-center max-w-sm w-full mx-4 relative overflow-hidden">
+            {/* Decorative background blob */}
+            <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 animate-[shimmer_2s_infinite]"></div>
+            
+            <div className="mb-6 relative">
+                <div className="absolute inset-0 bg-blue-100 rounded-full animate-ping opacity-20"></div>
+                <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center relative z-10 border border-blue-100 shadow-sm">
+                    <Sparkles className="w-10 h-10 text-blue-600 animate-pulse" />
+                </div>
+            </div>
+            
+            <h3 className="text-xl font-bold text-gray-800 mb-2">CompManager</h3>
+            <div className="flex items-center space-x-2 text-blue-600 mb-6 bg-blue-50 px-4 py-1.5 rounded-full">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span className="text-xs font-medium tracking-wide animate-pulse">{loadingText}</span>
+            </div>
+            
+            <p className="text-gray-400 text-xs text-center max-w-[200px]">
+                กำลังเชื่อมต่อกับฐานข้อมูล Google Sheets อาจใช้เวลาสักครู่...
+            </p>
+        </div>
+        <style>{`
+            @keyframes shimmer {
+                0% { transform: translateX(-100%); }
+                100% { transform: translateX(100%); }
+            }
+        `}</style>
       </div>
   );
 
-  // 1. Initial Loading (Checking LIFF)
-  if (liffChecking) {
-    return <CustomLoader />;
+  // 1. Initial Loading (Checking LIFF or Fetching Data)
+  if (liffChecking || loading) {
+    return <LoadingScreen />;
   }
 
   // 2. Registration Mode (Found LINE but no User)
@@ -356,11 +334,7 @@ const App: React.FC = () => {
   }
 
   // 4. Main App Content (Authenticated)
-  const renderLoadingOrError = () => {
-    if (loading) {
-      return <SkeletonLoader />;
-    }
-
+  const renderError = () => {
     if (error) {
       return (
         <div className="flex flex-col items-center justify-center h-[50vh] text-center px-4">
@@ -391,12 +365,12 @@ const App: React.FC = () => {
         {/* Public Route for Verification - Does not need Layout/Auth */}
         <Routes>
             <Route path="/verify" element={
-                data ? <VerifyCertificate data={data} /> : <CustomLoader />
+                data ? <VerifyCertificate data={data} /> : <LoadingScreen />
             } />
             <Route path="*" element={
                 // Pass data to Layout for global access (e.g., Scanner Modal)
                 <Layout userProfile={currentUser} data={data || undefined}>
-                    {renderLoadingOrError() || (data && (
+                    {renderError() || (data && (
                         <Routes>
                             <Route path="/" element={<Navigate to="/dashboard" replace />} />
                             <Route path="/dashboard" element={<Dashboard data={data} user={currentUser} />} />
