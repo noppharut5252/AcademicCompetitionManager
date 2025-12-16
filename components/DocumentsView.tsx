@@ -6,6 +6,8 @@ import CertificateConfigModal from './CertificateConfigModal';
 import { getCertificateConfig } from '../services/api';
 import { useSearchParams } from 'react-router-dom';
 import { shareIdCard } from '../services/liff';
+// @ts-ignore
+import QRCode from 'qrcode';
 
 interface DocumentsViewProps {
   data: AppData;
@@ -13,9 +15,19 @@ interface DocumentsViewProps {
   user?: User | null;
 }
 
-// --- Helper for QR Code URL ---
-const getQrCodeUrl = (text: string, size: number = 150) => {
-    return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(text)}&margin=10`;
+// --- Component to render QR Code Image safely ---
+const QRCodeImage = ({ text, size = 150, className }: { text: string, size?: number, className?: string }) => {
+    const [src, setSrc] = useState<string>('');
+
+    useEffect(() => {
+        if (!text) return;
+        QRCode.toDataURL(text, { width: size, margin: 1 })
+            .then((url: string) => setSrc(url))
+            .catch((err: any) => console.error("QR Error", err));
+    }, [text, size]);
+
+    if (!src) return <div className={`bg-gray-100 animate-pulse ${className}`} />;
+    return <img src={src} alt="QR Code" className={className} />;
 };
 
 // --- Single Expanded Digital ID Card (Full Screen Mode) ---
@@ -88,6 +100,8 @@ const ExpandedIdCard = ({
     const compDate = scheduleInfo ? scheduleInfo.date : 'TBA';
     const compLocation = scheduleInfo ? `${scheduleInfo.venueName} ${scheduleInfo.building || ''} ${scheduleInfo.room || ''}` : 'TBA';
     const compTime = scheduleInfo ? scheduleInfo.timeRange : '';
+
+    const qrUrl = `${window.location.origin}${window.location.pathname}#/idcards?id=${team.teamId}&level=${viewLevel}`;
 
     const toggleFullscreen = () => {
         if (!document.fullscreenElement) {
@@ -358,11 +372,7 @@ const ExpandedIdCard = ({
                 <div className="flex-1 flex flex-col items-center justify-center px-6 min-h-0">
                     <div className="bg-white p-2 rounded-2xl shadow-lg border-2 border-dashed border-gray-200 w-full max-w-[240px] aspect-square flex items-center justify-center relative overflow-hidden group">
                         <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 transform -translate-x-full group-hover:translate-x-full" style={{ transition: 'transform 1s' }}></div>
-                        <img 
-                            src={getQrCodeUrl(`${window.location.origin}${window.location.pathname}#/idcards?id=${team.teamId}&level=${viewLevel}`, 300)} 
-                            alt="QR" 
-                            className="w-full h-full object-contain mix-blend-multiply" 
-                        />
+                        <QRCodeImage text={qrUrl} size={300} className="w-full h-full object-contain mix-blend-multiply" />
                     </div>
                     <p className="text-[10px] text-gray-400 mt-2 font-mono">ID: {team.teamId}</p>
                 </div>
@@ -705,6 +715,17 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
       // Start Loading Overlay
       setIsGenerating(true);
       
+      // Generate QR Code base64 first using await
+      const verifyUrl = `${window.location.origin}${window.location.pathname}#/verify?id=${team.teamId}`;
+      const appUrl = `${window.location.origin}${window.location.pathname}#/idcards?id=${team.teamId}&level=${viewLevel}`;
+      
+      let qrCodeBase64 = '';
+      try {
+          qrCodeBase64 = await QRCode.toDataURL(type === 'certificate' ? verifyUrl : appUrl, { margin: 1, width: 300 });
+      } catch (e) {
+          console.error("QR Gen Error", e);
+      }
+
       // Delay slightly to allow UI update
       await new Promise(resolve => setTimeout(resolve, 500));
 
@@ -777,10 +798,6 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
                   logoHeight: 35
               } as CertificateTemplate;
           }
-
-          // Build Verification URL (To the app itself with hash router)
-          const verifyUrl = `${window.location.origin}${window.location.pathname}#/verify?id=${team.teamId}`;
-          const qrUrl = getQrCodeUrl(verifyUrl, 100);
 
           // Resolve Event Name
           let eventNameDisplay = template.eventName;
@@ -1082,7 +1099,7 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
                             </div>
                             
                             <div class="qr-verify">
-                                <img src="${qrUrl}" class="qr-img" />
+                                <img src="${qrCodeBase64}" class="qr-img" />
                                 <div class="qr-text">Scan for Verify</div>
                             </div>
                         </div>
@@ -1110,9 +1127,6 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
           for (let i = 0; i < allMembers.length; i += 4) {
               pages.push(allMembers.slice(i, i + 4));
           }
-          // IMPORTANT UPDATE: Generate Full URL for scanning into App with specific ID Cards path including LEVEL
-          const appUrl = `${window.location.origin}${window.location.pathname}#/idcards?id=${team.teamId}&level=${viewLevel}`;
-          const qrUrl = getQrCodeUrl(appUrl, 300); // Generate a larger QR source for better quality
           
           // Lookup Venue Info for Printing
           let scheduleText = 'สถานที่: ไม่ระบุ';
@@ -1196,7 +1210,7 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
                             </div>
                             <div class="footer">
                                 <div class="footer-text"><div style="font-size: 8pt; font-weight: bold; color: #555;">ID: ${team.teamId}</div><div style="font-size: 8pt; color: #888;">Scan for Check-in</div></div>
-                                <img src="${qrUrl}" class="qr-code" />
+                                <img src="${qrCodeBase64}" class="qr-code" />
                             </div>
                           </div>
                         `;
