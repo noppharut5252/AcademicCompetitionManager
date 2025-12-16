@@ -1,5 +1,5 @@
 
-import { AppData, User, Team, CertificateTemplate, Venue, Judge, JudgeConfig } from '../types';
+import { AppData, User, Team, CertificateTemplate, Venue, Judge, JudgeConfig, Announcement } from '../types';
 import { getMockData } from './mockData';
 
 const API_URL = "https://script.google.com/macros/s/AKfycbyYcf6m-3ypN3aX8F6prN0BLQcz0JyW0gj3Tq8dJyMs54gaTXSv_1uytthNu9H4CmMy/exec";
@@ -76,6 +76,25 @@ export const linkLineAccount = async (userId: string, lineId: string): Promise<b
         console.error("Link LINE failed", e);
         return false;
     }
+}
+
+// New API to verify and link based on Email or Phone (Last 5 digits)
+export const verifyAndLinkLine = async (lineId: string, key: string): Promise<{ success: boolean; user?: User; message?: string }> => {
+    try {
+        const response = await fetch(`${API_URL}?action=verifyAndLinkLine`, {
+            method: 'POST',
+            mode: 'cors',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify({ lineId, key })
+        });
+        if (!response.ok) return { success: false, message: 'Network Error' };
+        const result = await response.json();
+        if (result.status === 'success' && result.user) {
+            return { success: true, user: result.user };
+        } else {
+            return { success: false, message: result.message || 'Verification Failed' };
+        }
+    } catch (e: any) { return { success: false, message: e.toString() }; }
 }
 
 export const registerUser = async (user: Partial<User>): Promise<User | null> => {
@@ -203,6 +222,8 @@ export const uploadImage = async (base64Image: string, filename: string = 'uploa
     }
 }
 
+// --- Announcement API ---
+
 export const addAnnouncement = async (title: string, content: string, type: 'news' | 'manual', link: string = '', author: string = 'Admin'): Promise<boolean> => {
     try {
         const response = await fetch(`${API_URL}?action=addAnnouncement`, {
@@ -219,6 +240,32 @@ export const addAnnouncement = async (title: string, content: string, type: 'new
         console.error("Add Announcement failed", e);
         return false;
     }
+};
+
+export const updateAnnouncement = async (announcement: Partial<Announcement>): Promise<boolean> => {
+    try {
+        const response = await fetch(`${API_URL}?action=updateAnnouncement`, {
+            method: 'POST',
+            mode: 'cors',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify(announcement)
+        });
+        if (!response.ok) return false;
+        const result = await response.json();
+        return result.status === 'success';
+    } catch (e) { return false; }
+};
+
+export const deleteAnnouncement = async (id: string): Promise<boolean> => {
+    try {
+        const response = await fetch(`${API_URL}?action=deleteAnnouncement&id=${encodeURIComponent(id)}`, {
+            method: 'GET',
+            mode: 'cors'
+        });
+        if (!response.ok) return false;
+        const result = await response.json();
+        return result.status === 'success';
+    } catch (e) { return false; }
 };
 
 // --- Certificate Config API ---
