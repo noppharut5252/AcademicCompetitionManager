@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { AppData, Judge, User, Team } from '../types';
-import { Search, Plus, Edit2, Trash2, Gavel, Mail, Phone, School, MapPin, Loader2, Save, X, LayoutGrid, AlertTriangle, CheckCircle, Users, Briefcase, ChevronDown, ChevronUp, AlertOctagon, UserCheck, Camera, Copy, Trophy, Filter, Layers, ChevronRight, Hash, Eye, EyeOff, ChevronsUpDown, ChevronLeft, ListChecks, ArrowRight } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, Gavel, Mail, Phone, School, MapPin, Loader2, Save, X, LayoutGrid, AlertTriangle, CheckCircle, Users, Briefcase, ChevronDown, ChevronUp, AlertOctagon, UserCheck, Camera, Copy, Trophy, Filter, Layers, ChevronRight, Hash, Eye, EyeOff, ChevronsUpDown, ChevronLeft, ListChecks, ArrowRight, Import } from 'lucide-react';
 import SearchableSelect from './SearchableSelect';
 import ConfirmationModal from './ConfirmationModal';
 import { saveJudge, deleteJudge, uploadImage } from '../services/api';
@@ -88,7 +88,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
       return { hasConflict: false, schoolName: '' };
   };
 
-  // Grouping Logic... (Keep existing logic)
+  // Grouping Logic
   const activityGroups = useMemo(() => {
       const groups: Record<string, { 
           activityName: string, 
@@ -198,7 +198,27 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
   }, [activityGroups, viewScope, clusterFilter, data.activities]);
 
   const getClusterJudgesForActivity = (activityId: string) => {
-      return data.judges.filter(j => j.activityId === activityId && j.stageScope === 'cluster');
+      // Return unique judges by name
+      const candidates = data.judges.filter(j => j.activityId === activityId && j.stageScope === 'cluster');
+      const unique = new Map();
+      candidates.forEach(c => {
+          if (!unique.has(c.judgeName)) unique.set(c.judgeName, c);
+      });
+      return Array.from(unique.values());
+  };
+
+  const isConflictWithArea = (judgeSchool: string, activityId: string) => {
+      if (!judgeSchool || !activityId) return false;
+      const group = activityGroups[activityId];
+      if (!group) return false;
+      
+      const target = judgeSchool.trim().toLowerCase();
+      if (target === 'external' || target === '__external__') return false;
+
+      for (const s of group.areaSchools) {
+          if (s.trim().toLowerCase() === target) return true;
+      }
+      return false;
   };
 
   // --- Aggregated Directory Logic ---
@@ -490,10 +510,6 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
       try {
           // Loop through assignments and save each
           const promises = assignments.map(assign => {
-              // Logic: If updating existing judge, use existing ID. If creating new assignment, use generated ID logic.
-              // Note: Our backend uses ID = ActID + Name. So if we are adding new activities, it creates new rows.
-              // If we are editing and changing ActID, it might create a new row (and orphan old one if we don't handle delete).
-              // For simplicity in this multi-add flow, we treat each as a save/upsert.
               
               let clusterKey = assign.clusterKey;
               let clusterLabel = assign.clusterLabel;
@@ -629,7 +645,6 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
         {activeTab === 'management' && (
             <div className="space-y-4">
                {/* Search & Filters */}
-               {/* ... (Same as before) ... */}
                <div className="flex flex-col md:flex-row gap-4 mb-4">
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
@@ -969,6 +984,45 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                                         <UserCheck className="w-4 h-4 mr-2" /> ข้อมูลส่วนตัว
                                     </h4>
                                     <div className="space-y-4">
+                                        {/* Import Candidate Strip (Only in Area Mode and New Judge) */}
+                                        {!editingJudge.id && viewScope === 'area' && tempAssignment.activityId && (
+                                            <div className="p-3 bg-blue-50/50 rounded-lg border border-blue-100">
+                                                <h5 className="text-[10px] font-bold text-blue-800 mb-2 flex items-center uppercase tracking-wider">
+                                                    <Import className="w-3 h-3 mr-1" /> เลือกจากกรรมการระดับกลุ่มฯ
+                                                </h5>
+                                                {getClusterJudgesForActivity(tempAssignment.activityId).length > 0 ? (
+                                                    <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar snap-x px-1">
+                                                        {getClusterJudgesForActivity(tempAssignment.activityId).map(cj => {
+                                                            const hasConflict = isConflictWithArea(cj.schoolName, tempAssignment.activityId || '');
+                                                            return (
+                                                                <button
+                                                                    key={cj.id}
+                                                                    type="button"
+                                                                    onClick={() => handleImportFromCluster(cj)}
+                                                                    className={`flex flex-col items-center p-2 border rounded-lg min-w-[80px] max-w-[80px] snap-start transition-all relative group
+                                                                        ${hasConflict 
+                                                                            ? 'bg-red-50 border-red-200 hover:bg-red-100' 
+                                                                            : 'bg-white hover:bg-blue-50 hover:border-blue-300'
+                                                                        }`}
+                                                                >
+                                                                    {hasConflict && (
+                                                                        <div className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 shadow-sm z-10" title={`โรงเรียน ${cj.schoolName} เข้าแข่งขันระดับเขต`}>
+                                                                            <AlertOctagon className="w-3 h-3" />
+                                                                        </div>
+                                                                    )}
+                                                                    <img src={cj.photoUrl || "https://cdn-icons-png.flaticon.com/512/3135/3135768.png"} className="w-8 h-8 rounded-full mb-1 object-cover" />
+                                                                    <span className="text-[9px] font-medium truncate w-full text-center leading-tight text-gray-800">{cj.judgeName}</span>
+                                                                    <span className="text-[8px] text-gray-500 truncate w-full text-center">{cj.schoolName}</span>
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                ) : (
+                                                    <p className="text-[10px] text-gray-400 italic text-center py-2">ไม่มีข้อมูลกรรมการในระดับกลุ่มฯ</p>
+                                                )}
+                                            </div>
+                                        )}
+
                                         {/* Image Upload */}
                                         <div className="flex flex-col items-center justify-center mb-2">
                                             <div className="relative group">
@@ -991,21 +1045,6 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                                                     onChange={handleImageUpload}
                                                 />
                                             </div>
-                                            
-                                            {/* Import Button (Only if Adding New & Area Scope) */}
-                                            {!editingJudge.id && viewScope === 'area' && tempAssignment.activityId && (
-                                                <div className="mt-2 w-full text-center">
-                                                    <button 
-                                                        onClick={() => {
-                                                            // Trigger Import Logic... need activityId.
-                                                            // Simplified: Suggest importing if needed
-                                                        }}
-                                                        className="text-[10px] text-blue-600 hover:underline"
-                                                    >
-                                                        (เลือกจากข้อมูลเก่าได้ในหน้าจัดการ)
-                                                    </button>
-                                                </div>
-                                            )}
                                         </div>
 
                                         <div>
