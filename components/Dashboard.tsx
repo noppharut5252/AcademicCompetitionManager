@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { AppData, Announcement, User, AreaStageInfo } from '../types';
-import { Users, School, Trophy, Megaphone, Plus, Book, Calendar, ChevronRight, Gavel, MapPin, Award, FileText, Smartphone, Loader2, PieChart, CheckCircle, Clock } from 'lucide-react';
+import { Users, School, Trophy, Megaphone, Plus, Book, Calendar, ChevronRight, Gavel, MapPin, Award, FileText, Smartphone, Loader2, PieChart, CheckCircle, Clock, Star, Medal, TrendingUp } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart as RePieChart, Pie, Legend } from 'recharts';
 import StatCard from './StatCard';
 import { useNavigate } from 'react-router-dom';
@@ -95,6 +95,53 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
     return new Set(filteredTeams.map(t => t.activityId)).size;
    }, [filteredTeams]);
 
+   // --- New Analytics: Scoring Progress & Top Schools ---
+   const scoringProgress = useMemo(() => {
+       const total = filteredTeams.length;
+       const scored = filteredTeams.filter(t => {
+           if (viewLevel === 'area') {
+               const info = getAreaInfo(t);
+               return (info?.score || 0) > 0;
+           }
+           return t.score > 0;
+       }).length;
+       const percentage = total > 0 ? Math.round((scored / total) * 100) : 0;
+       return { total, scored, percentage };
+   }, [filteredTeams, viewLevel]);
+
+   const topSchools = useMemo(() => {
+       const stats: Record<string, { name: string, gold: number, totalScore: number }> = {};
+       
+       filteredTeams.forEach(t => {
+           // Normalize School Name (Handle ID vs Name)
+           const schoolObj = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
+           const sName = schoolObj?.SchoolName || t.schoolId;
+           
+           if (!stats[sName]) stats[sName] = { name: sName, gold: 0, totalScore: 0 };
+           
+           let score = 0;
+           let medal = '';
+
+           if (viewLevel === 'area') {
+               const info = getAreaInfo(t);
+               score = info?.score || 0;
+               medal = info?.medal || t.medalOverride;
+               if (!medal && score >= 80) medal = 'Gold';
+           } else {
+               score = t.score;
+               medal = t.medalOverride;
+               if (!medal && score >= 80) medal = 'Gold';
+           }
+
+           if (score > 0) stats[sName].totalScore += score;
+           if (medal?.includes('Gold')) stats[sName].gold += 1;
+       });
+
+       return Object.values(stats)
+           .sort((a, b) => b.gold - a.gold || b.totalScore - a.totalScore)
+           .slice(0, 5); // Top 5
+   }, [filteredTeams, viewLevel, data.schools]);
+
 
   const handleAddNews = async (e: React.FormEvent) => {
       e.preventDefault();
@@ -180,7 +227,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
           <QuickMenuItem icon={Trophy} label="รายการ" to="/activities" color="bg-orange-500" />
       </div>
 
-      {/* Stats Overview */}
+      {/* Stats Overview Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard 
             title={viewLevel === 'area' ? "ทีมระดับเขต (Area Teams)" : "ทีมทั้งหมด (All Teams)"}
@@ -189,17 +236,29 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
             colorClass="bg-blue-500"
             description={`ในรอบ${viewLevel === 'cluster' ? 'กลุ่มเครือข่าย' : 'เขตพื้นที่'}`} 
         />
+        
+        {/* Scoring Progress Card */}
+        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100 flex flex-col justify-between hover:shadow-md transition-shadow">
+            <div className="flex justify-between items-start mb-2">
+                <div>
+                    <p className="text-sm font-medium text-gray-500 mb-1">ความคืบหน้าการตัดสิน</p>
+                    <h3 className="text-2xl font-bold text-gray-900">{scoringProgress.percentage}%</h3>
+                </div>
+                <div className="p-3 rounded-lg bg-green-500">
+                    <TrendingUp className="w-6 h-6 text-white" />
+                </div>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2 mb-1">
+                <div className="bg-green-500 h-2 rounded-full transition-all duration-1000" style={{ width: `${scoringProgress.percentage}%` }}></div>
+            </div>
+            <p className="text-xs text-gray-400">บันทึกแล้ว {scoringProgress.scored} จาก {scoringProgress.total} ทีม</p>
+        </div>
+
         <StatCard 
             title="โรงเรียนที่เข้าร่วม" 
             value={uniqueSchoolCount} 
             icon={School} 
             colorClass="bg-indigo-500" 
-        />
-        <StatCard 
-            title="รายการแข่งขัน" 
-            value={uniqueActivityCount} 
-            icon={Trophy} 
-            colorClass="bg-amber-500" 
         />
         
         {/* Dynamic Chart Card */}
@@ -247,53 +306,101 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
-          {/* Main Column: News */}
+          {/* Main Column: News & Top Schools */}
           <div className="lg:col-span-2 space-y-6">
-              <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-bold text-gray-800 flex items-center">
-                      <Megaphone className="w-6 h-6 mr-2 text-orange-500" />
-                      ข่าวประชาสัมพันธ์
-                  </h2>
-                  {isAdmin && (
-                      <button 
-                        onClick={() => setShowAddNews(true)}
-                        className="flex items-center px-3 py-1.5 text-xs bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors font-medium"
-                      >
-                          <Plus className="w-4 h-4 mr-1" /> เพิ่มข่าว
-                      </button>
-                  )}
+              
+              {/* Top Schools Section */}
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                  <div className="p-5 border-b border-gray-100 flex items-center justify-between">
+                        <h2 className="text-lg font-bold text-gray-800 flex items-center">
+                            <Star className="w-5 h-5 mr-2 text-yellow-500 fill-current" />
+                            5 อันดับโรงเรียนยอดเยี่ยม ({viewLevel === 'cluster' ? 'กลุ่มฯ' : 'เขตฯ'})
+                        </h2>
+                        <span className="text-xs text-gray-400 bg-gray-50 px-2 py-1 rounded">เรียงตามจำนวนเหรียญทอง</span>
+                  </div>
+                  <div className="p-0">
+                      {topSchools.length > 0 ? (
+                          <table className="w-full">
+                              <tbody className="divide-y divide-gray-50">
+                                  {topSchools.map((school, idx) => (
+                                      <tr key={idx} className="hover:bg-gray-50/50 transition-colors">
+                                          <td className="pl-6 py-3 w-12 text-center">
+                                              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
+                                                  idx === 0 ? 'bg-yellow-100 text-yellow-700' :
+                                                  idx === 1 ? 'bg-gray-100 text-gray-700' :
+                                                  idx === 2 ? 'bg-orange-100 text-orange-700' :
+                                                  'bg-white text-gray-500 border border-gray-200'
+                                              }`}>
+                                                  {idx + 1}
+                                              </div>
+                                          </td>
+                                          <td className="px-4 py-3">
+                                              <div className="font-bold text-gray-800 text-sm">{school.name}</div>
+                                              <div className="text-xs text-gray-400">คะแนนรวม: {school.totalScore}</div>
+                                          </td>
+                                          <td className="pr-6 py-3 text-right">
+                                              <div className="inline-flex items-center px-3 py-1 bg-yellow-50 text-yellow-700 rounded-full text-xs font-bold border border-yellow-100">
+                                                  <Medal className="w-3 h-3 mr-1" /> {school.gold} ทอง
+                                              </div>
+                                          </td>
+                                      </tr>
+                                  ))}
+                              </tbody>
+                          </table>
+                      ) : (
+                          <div className="p-8 text-center text-gray-400 text-sm">ยังไม่มีข้อมูลผลการแข่งขัน</div>
+                      )}
+                  </div>
               </div>
 
-              <div className="space-y-4">
-                  {newsList.length > 0 ? (
-                      newsList.map((item) => (
-                          <div key={item.id} className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all relative overflow-hidden group">
-                              <div className="absolute top-0 left-0 w-1.5 h-full bg-orange-500"></div>
-                              <div className="flex justify-between items-start mb-2 pl-3">
-                                  <span className="text-xs text-gray-400 flex items-center bg-gray-50 px-2 py-1 rounded-full">
-                                      <Calendar className="w-3 h-3 mr-1" />
-                                      {new Date(item.date).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}
-                                  </span>
-                              </div>
-                              <div className="pl-3">
-                                  <h3 className="text-lg font-bold text-gray-900 mb-2 group-hover:text-blue-600 transition-colors">{item.title}</h3>
-                                  <p className="text-gray-600 text-sm leading-relaxed mb-3">
-                                      {item.content}
-                                  </p>
-                                  {item.link && (
-                                      <a href={item.link} target="_blank" rel="noreferrer" className="inline-flex items-center text-sm font-medium text-blue-600 hover:text-blue-800 mt-1">
-                                          อ่านเพิ่มเติม <ChevronRight className="w-4 h-4 ml-1" />
-                                      </a>
-                                  )}
-                              </div>
-                          </div>
-                      ))
-                  ) : (
-                      <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-gray-200 text-gray-400">
-                          <Megaphone className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                          ยังไม่มีข่าวประชาสัมพันธ์
-                      </div>
-                  )}
+              {/* News Section */}
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-xl font-bold text-gray-800 flex items-center">
+                        <Megaphone className="w-6 h-6 mr-2 text-orange-500" />
+                        ข่าวประชาสัมพันธ์
+                    </h2>
+                    {isAdmin && (
+                        <button 
+                            onClick={() => setShowAddNews(true)}
+                            className="flex items-center px-3 py-1.5 text-xs bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors font-medium"
+                        >
+                            <Plus className="w-4 h-4 mr-1" /> เพิ่มข่าว
+                        </button>
+                    )}
+                </div>
+
+                <div className="space-y-4">
+                    {newsList.length > 0 ? (
+                        newsList.map((item) => (
+                            <div key={item.id} className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all relative overflow-hidden group">
+                                <div className="absolute top-0 left-0 w-1.5 h-full bg-orange-500"></div>
+                                <div className="flex justify-between items-start mb-2 pl-3">
+                                    <span className="text-xs text-gray-400 flex items-center bg-gray-50 px-2 py-1 rounded-full">
+                                        <Calendar className="w-3 h-3 mr-1" />
+                                        {new Date(item.date).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}
+                                    </span>
+                                </div>
+                                <div className="pl-3">
+                                    <h3 className="text-lg font-bold text-gray-900 mb-2 group-hover:text-blue-600 transition-colors">{item.title}</h3>
+                                    <p className="text-gray-600 text-sm leading-relaxed mb-3">
+                                        {item.content}
+                                    </p>
+                                    {item.link && (
+                                        <a href={item.link} target="_blank" rel="noreferrer" className="inline-flex items-center text-sm font-medium text-blue-600 hover:text-blue-800 mt-1">
+                                            อ่านเพิ่มเติม <ChevronRight className="w-4 h-4 ml-1" />
+                                        </a>
+                                    )}
+                                </div>
+                            </div>
+                        ))
+                    ) : (
+                        <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-gray-200 text-gray-400">
+                            <Megaphone className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                            ยังไม่มีข่าวประชาสัมพันธ์
+                        </div>
+                    )}
+                </div>
               </div>
           </div>
 
