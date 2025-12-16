@@ -533,3 +533,146 @@ export const shareTop3Result = async (
         return { success: false, method: 'error' };
     }
 }
+
+export const shareVenue = async (venue: any): Promise<{ success: boolean; method: 'line' | 'share' | 'copy' | 'error' }> => {
+    await ensureLiffInitialized();
+    
+    // Construct App Link (Using Hash Router)
+    const appUrl = `${window.location.origin}${window.location.pathname}#/venues`;
+    const mapUrl = venue.locationUrl || '';
+    const imageUrl = venue.imageUrl || "https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=800&q=80";
+
+    // Text Summary for Fallback
+    const textSummary = `📍 สนามแข่งขัน: ${venue.name}\n${venue.description || ''}\n\n🗺️ แผนที่: ${mapUrl}\n📅 ดูตารางการแข่งขัน: ${appUrl}`;
+
+    // @ts-ignore
+    if (typeof liff !== 'undefined' && liff.isLoggedIn() && liff.isInClient() && liff.isApiAvailable('shareTargetPicker')) {
+        const flexMessage = {
+            type: "flex",
+            altText: `สนามแข่งขัน: ${venue.name}`,
+            contents: {
+                "type": "bubble",
+                "hero": {
+                  "type": "image",
+                  "url": imageUrl,
+                  "size": "full",
+                  "aspectRatio": "20:13",
+                  "aspectMode": "cover",
+                  "action": {
+                    "type": "uri",
+                    "uri": appUrl
+                  }
+                },
+                "body": {
+                  "type": "box",
+                  "layout": "vertical",
+                  "contents": [
+                    {
+                      "type": "text",
+                      "text": venue.name,
+                      "weight": "bold",
+                      "size": "xl",
+                      "wrap": true
+                    },
+                    {
+                      "type": "text",
+                      "text": venue.description || "รายละเอียดสนามแข่งขัน",
+                      "size": "sm",
+                      "color": "#666666",
+                      "wrap": true,
+                      "margin": "md"
+                    },
+                    {
+                      "type": "box",
+                      "layout": "vertical",
+                      "margin": "lg",
+                      "spacing": "sm",
+                      "contents": [
+                        {
+                          "type": "box",
+                          "layout": "baseline",
+                          "spacing": "sm",
+                          "contents": [
+                            {
+                              "type": "text",
+                              "text": "สถานที่",
+                              "color": "#aaaaaa",
+                              "size": "sm",
+                              "flex": 1
+                            },
+                            {
+                              "type": "text",
+                              "text": "คลิกดูแผนที่ GPS",
+                              "wrap": true,
+                              "color": "#666666",
+                              "size": "sm",
+                              "flex": 4,
+                              "action": { "type": "uri", "label": "Map", "uri": mapUrl || appUrl }
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "footer": {
+                  "type": "box",
+                  "layout": "vertical",
+                  "spacing": "sm",
+                  "contents": [
+                    {
+                      "type": "button",
+                      "style": "primary",
+                      "height": "sm",
+                      "action": {
+                        "type": "uri",
+                        "label": "ดูตารางแข่งขัน",
+                        "uri": appUrl
+                      },
+                      "color": "#2563EB"
+                    },
+                    mapUrl ? {
+                      "type": "button",
+                      "style": "secondary",
+                      "height": "sm",
+                      "action": {
+                        "type": "uri",
+                        "label": "นำทาง (Google Maps)",
+                        "uri": mapUrl
+                      }
+                    } : { "type": "spacer", "size": "xs" }
+                  ],
+                  "flex": 0
+                }
+              }
+        };
+
+        try {
+            // @ts-ignore
+            await liff.shareTargetPicker([flexMessage]);
+            return { success: true, method: 'line' };
+        } catch (error) {
+            console.error("LINE Share Venue failed", error);
+        }
+    }
+
+    // Fallbacks
+    if (navigator.share) {
+        try {
+            await navigator.share({
+                title: venue.name,
+                text: textSummary,
+                url: appUrl,
+            });
+            return { success: true, method: 'share' };
+        } catch (error) { console.log("Web Share cancelled"); }
+    }
+
+    try {
+        await navigator.clipboard.writeText(textSummary);
+        return { success: true, method: 'copy' };
+    } catch (err) {
+        return { success: false, method: 'error' };
+    }
+}
+
