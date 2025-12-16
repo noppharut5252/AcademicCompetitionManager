@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { LayoutDashboard, Users, Trophy, School, Settings, LogOut, Award, FileBadge, IdCard, LogIn, UserCircle, Edit3, ScanLine, X, Camera, Search, ChevronRight, LayoutGrid, RotateCcw, Loader2, Zap, MapPin, Gavel } from 'lucide-react';
+import { LayoutDashboard, Users, Trophy, School, Settings, LogOut, Award, FileBadge, IdCard, LogIn, UserCircle, Edit3, ScanLine, X, Camera, Search, ChevronRight, LayoutGrid, RotateCcw, Loader2, Zap, MapPin, Gavel, Megaphone } from 'lucide-react';
 import { logoutLiff } from '../services/liff';
 import { User, AppData } from '../types';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -14,7 +14,7 @@ interface LayoutProps {
   data?: AppData;
 }
 
-// --- Scanner Modal Component ---
+// ... (ScannerModal code remains unchanged) ...
 const ScannerModal = ({ 
     isOpen, 
     onClose, 
@@ -327,6 +327,7 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
 
   const userRole = userProfile?.level?.toLowerCase();
   const canScore = ['admin', 'area', 'group_admin', 'score'].includes(userRole);
+  const canManageAnnouncements = ['admin', 'area', 'group_admin'].includes(userRole);
   
   const menuItems = [
     { id: 'dashboard', label: 'หน้าหลัก', icon: LayoutDashboard },
@@ -338,6 +339,7 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
     { id: 'certificates', label: 'เกียรติบัตร', icon: FileBadge },
     { id: 'idcards', label: 'บัตร', icon: IdCard },
     { id: 'judges', label: 'ทำเนียบกรรมการ', icon: Gavel },
+    ...(canManageAnnouncements ? [{ id: 'announcements', label: 'ข่าว/คู่มือ', icon: Megaphone }] : []),
     { id: 'schools', label: 'โรงเรียน', icon: School },
     { id: 'settings', label: 'ตั้งค่า', icon: Settings },
   ];
@@ -494,7 +496,7 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
                     <Award className="w-6 h-6" />
                     <span className="text-[10px] font-medium">ผลรางวัล</span>
                 </button>
-                <button onClick={() => handleNav('venues')} className={`flex flex-col items-center justify-center w-full space-y-1 ${['venues', 'settings','certificates','idcards','profile','score', 'judges'].includes(activeTab) ? 'text-blue-600' : 'text-gray-400'}`}>
+                <button onClick={() => handleNav('venues')} className={`flex flex-col items-center justify-center w-full space-y-1 ${['venues', 'settings','certificates','idcards','profile','score', 'judges', 'announcements'].includes(activeTab) ? 'text-blue-600' : 'text-gray-400'}`}>
                     <MapPin className="w-6 h-6" />
                     <span className="text-[10px] font-medium">เมนูอื่นๆ</span>
                 </button>
