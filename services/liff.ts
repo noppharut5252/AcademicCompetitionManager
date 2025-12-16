@@ -663,4 +663,3 @@ export const shareSchedule = async (
         return { success: false, method: 'error' };
     }
 }
-
