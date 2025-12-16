@@ -172,6 +172,23 @@ export interface CertificateTemplate {
   logoHeight?: number;
 }
 
+// New Interface for Judges matching requested schema (12 Columns)
+export interface Judge {
+  id: string; // Virtual ID for React (ActivityID + JudgeName)
+  activityId: string;     // Col 0: ActivityID
+  clusterKey: string;     // Col 1: ClusterKey
+  clusterLabel: string;   // Col 2: ClusterLabel
+  schoolId: string;       // Col 3: SchoolID
+  schoolName: string;     // Col 4: SchoolName
+  judgeName: string;      // Col 5: JudgeName
+  role: string;           // Col 6: Role
+  phone: string;          // Col 7: Phone
+  email: string;          // Col 8: Email
+  importedBy: string;     // Col 9: ImportedBy
+  importedAt: string;     // Col 10: ImportedAt
+  stageScope: 'cluster' | 'area'; // Col 11: StageScope
+}
+
 export interface AppData {
   activities: Activity[];
   teams: Team[];
@@ -179,5 +196,7 @@ export interface AppData {
   clusters: SchoolCluster[];
   files: FileLog[];
   announcements: Announcement[];
-  venues: Venue[]; // Added Venues
+  venues: Venue[];
+  judges: Judge[];
 }
+
