@@ -59,6 +59,9 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
       role: 'กรรมการ',
       stageScope: 'area'
   });
+  
+  // Import Search State
+  const [importSearch, setImportSearch] = useState('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   
@@ -364,6 +367,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
       setIsExternal(false);
       setModalStep('form');
       setAssignments([]); // Clear assignments
+      setImportSearch(''); // Reset search
       
       let initialClusterKey = preSelectedCluster || '';
       let initialClusterLabel = '';
@@ -514,8 +518,8 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
               let clusterKey = assign.clusterKey;
               let clusterLabel = assign.clusterLabel;
 
-              // If internal and scope is cluster but no cluster selected, try to infer from school
-              if (!isExternal && assign.stageScope === 'cluster' && !clusterKey && schoolId) {
+              // Ensure Cluster Columns are filled for Internal Judges regardless of Scope
+              if (!isExternal && !clusterKey && schoolId) {
                    const s = data.schools.find(sc => sc.SchoolID === schoolId);
                    const c = data.clusters.find(cl => cl.ClusterID === s?.SchoolCluster);
                    if (c) {
@@ -530,8 +534,8 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                   activityId: assign.activityId,
                   role: assign.role,
                   stageScope: assign.stageScope,
-                  clusterKey,
-                  clusterLabel
+                  clusterKey: clusterKey || '',
+                  clusterLabel: clusterLabel || ''
               };
               
               return saveJudge(payload);
@@ -560,6 +564,13 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
   if (!canManage) {
       return <div className="text-center py-20 text-gray-500">คุณไม่มีสิทธิ์เข้าถึงหน้านี้</div>;
   }
+
+  // Candidates Calculation for Import
+  const candidates = tempAssignment.activityId ? getClusterJudgesForActivity(tempAssignment.activityId) : [];
+  const filteredCandidates = candidates.filter(c => 
+      c.judgeName.toLowerCase().includes(importSearch.toLowerCase()) || 
+      c.schoolName.toLowerCase().includes(importSearch.toLowerCase())
+  );
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20">
@@ -986,40 +997,62 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                                     <div className="space-y-4">
                                         {/* Import Candidate Strip (Only in Area Mode and New Judge) */}
                                         {!editingJudge.id && viewScope === 'area' && tempAssignment.activityId && (
-                                            <div className="p-3 bg-blue-50/50 rounded-lg border border-blue-100">
-                                                <h5 className="text-[10px] font-bold text-blue-800 mb-2 flex items-center uppercase tracking-wider">
-                                                    <Import className="w-3 h-3 mr-1" /> เลือกจากกรรมการระดับกลุ่มฯ
-                                                </h5>
-                                                {getClusterJudgesForActivity(tempAssignment.activityId).length > 0 ? (
-                                                    <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar snap-x px-1">
-                                                        {getClusterJudgesForActivity(tempAssignment.activityId).map(cj => {
+                                            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mb-4 shadow-sm">
+                                                <div className="bg-blue-50/50 px-3 py-2 border-b border-blue-100 flex justify-between items-center">
+                                                    <h5 className="text-[10px] font-bold text-blue-800 flex items-center">
+                                                        <Import className="w-3 h-3 mr-1" /> ดึงข้อมูลกรรมการเดิม (ระดับกลุ่มฯ)
+                                                    </h5>
+                                                    <span className="text-[10px] text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded-full">
+                                                        {candidates.length} คน
+                                                    </span>
+                                                </div>
+                                                
+                                                <div className="p-3">
+                                                    {/* Search Input */}
+                                                    <div className="relative mb-3">
+                                                        <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-gray-400" />
+                                                        <input 
+                                                            type="text"
+                                                            className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-1 focus:ring-blue-500 outline-none bg-gray-50 focus:bg-white transition-colors"
+                                                            placeholder="ค้นหาชื่อ หรือ โรงเรียน..."
+                                                            value={importSearch}
+                                                            onChange={(e) => setImportSearch(e.target.value)}
+                                                        />
+                                                    </div>
+
+                                                    {/* Candidate Grid */}
+                                                    <div className="grid grid-cols-2 gap-2 max-h-[180px] overflow-y-auto custom-scrollbar">
+                                                        {filteredCandidates.map(cj => {
                                                             const hasConflict = isConflictWithArea(cj.schoolName, tempAssignment.activityId || '');
                                                             return (
                                                                 <button
                                                                     key={cj.id}
                                                                     type="button"
                                                                     onClick={() => handleImportFromCluster(cj)}
-                                                                    className={`flex flex-col items-center p-2 border rounded-lg min-w-[80px] max-w-[80px] snap-start transition-all relative group
+                                                                    className={`flex items-start text-left p-2 rounded-lg border transition-all relative group
                                                                         ${hasConflict 
                                                                             ? 'bg-red-50 border-red-200 hover:bg-red-100' 
-                                                                            : 'bg-white hover:bg-blue-50 hover:border-blue-300'
+                                                                            : 'bg-white border-gray-100 hover:border-blue-300 hover:bg-blue-50'
                                                                         }`}
                                                                 >
-                                                                    {hasConflict && (
-                                                                        <div className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 shadow-sm z-10" title={`โรงเรียน ${cj.schoolName} เข้าแข่งขันระดับเขต`}>
-                                                                            <AlertOctagon className="w-3 h-3" />
-                                                                        </div>
-                                                                    )}
-                                                                    <img src={cj.photoUrl || "https://cdn-icons-png.flaticon.com/512/3135/3135768.png"} className="w-8 h-8 rounded-full mb-1 object-cover" />
-                                                                    <span className="text-[9px] font-medium truncate w-full text-center leading-tight text-gray-800">{cj.judgeName}</span>
-                                                                    <span className="text-[8px] text-gray-500 truncate w-full text-center">{cj.schoolName}</span>
+                                                                    <img src={cj.photoUrl || "https://cdn-icons-png.flaticon.com/512/3135/3135768.png"} className="w-8 h-8 rounded-full object-cover border border-gray-200 shrink-0 bg-white" />
+                                                                    <div className="ml-2 min-w-0 w-full">
+                                                                        <div className="text-[10px] font-bold text-gray-800 truncate leading-tight">{cj.judgeName}</div>
+                                                                        <div className="text-[9px] text-gray-500 truncate">{cj.schoolName}</div>
+                                                                        {hasConflict && (
+                                                                            <div className="text-[8px] text-red-600 font-bold flex items-center mt-0.5 bg-white/50 rounded px-1 w-fit">
+                                                                                <AlertTriangle className="w-2.5 h-2.5 mr-0.5" /> ตรงกับ รร.แข่ง
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
                                                                 </button>
-                                                            );
+                                                            )
                                                         })}
+                                                        {filteredCandidates.length === 0 && (
+                                                            <div className="col-span-2 text-center py-4 text-gray-400 text-xs italic">ไม่พบข้อมูลกรรมการ</div>
+                                                        )}
                                                     </div>
-                                                ) : (
-                                                    <p className="text-[10px] text-gray-400 italic text-center py-2">ไม่มีข้อมูลกรรมการในระดับกลุ่มฯ</p>
-                                                )}
+                                                </div>
                                             </div>
                                         )}
 
