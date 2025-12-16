@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { AppData, Judge, User, Team } from '../types';
-import { Search, Plus, Edit2, Trash2, Gavel, Mail, Phone, School, MapPin, Loader2, Save, X, LayoutGrid, AlertTriangle, CheckCircle, Users, Briefcase, ChevronDown, ChevronUp, AlertOctagon, UserCheck, Camera, Copy, Trophy, Filter, Layers, ChevronRight, Hash, Eye, EyeOff, ChevronsUpDown, ChevronLeft, ListChecks, ArrowRight, Import, AlertCircle } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, Gavel, Mail, Phone, School, MapPin, Loader2, Save, X, LayoutGrid, AlertTriangle, CheckCircle, Users, Briefcase, ChevronDown, ChevronUp, AlertOctagon, UserCheck, Camera, Copy, Trophy, Filter, Layers, ChevronRight, Hash, Eye, EyeOff, ChevronsUpDown, ChevronLeft, ListChecks, ArrowRight, Import, AlertCircle, Printer } from 'lucide-react';
 import SearchableSelect from './SearchableSelect';
 import ConfirmationModal from './ConfirmationModal';
 import { saveJudge, deleteJudge, uploadImage } from '../services/api';
@@ -82,6 +82,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
   const [modalStep, setModalStep] = useState<'form' | 'summary'>('form');
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isLoadingCandidates, setIsLoadingCandidates] = useState(false);
   
   // Toast State
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info', isVisible: boolean }>({ message: '', type: 'info', isVisible: false });
@@ -113,6 +114,15 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
   useEffect(() => {
       setDirPage(1);
   }, [searchTerm, clusterFilter, viewScope]);
+
+  // Simulate loading when activity changes in modal
+  useEffect(() => {
+      if (isModalOpen && tempAssignment.activityId) {
+          setIsLoadingCandidates(true);
+          const timer = setTimeout(() => setIsLoadingCandidates(false), 500);
+          return () => clearTimeout(timer);
+      }
+  }, [tempAssignment.activityId, isModalOpen]);
 
   // Helper to show toast
   const showToast = (message: string, type: 'success' | 'error' | 'info') => {
@@ -610,6 +620,77 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
       }
   };
 
+  const handlePrintJudges = () => {
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) return;
+
+      const date = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
+      const scopeTitle = viewScope === 'cluster' ? `ระดับกลุ่มเครือข่าย ${clusterFilter ? `(${data.clusters.find(c => c.ClusterID === clusterFilter)?.ClusterName})` : ''}` : 'ระดับเขตพื้นที่การศึกษา';
+
+      const htmlContent = `
+        <html>
+        <head>
+            <title>รายชื่อกรรมการตัดสิน - ${scopeTitle}</title>
+            <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600&display=swap" rel="stylesheet">
+            <style>
+                body { font-family: 'Sarabun', sans-serif; padding: 20px; font-size: 14px; }
+                h1, h2 { text-align: center; margin: 0; padding: 5px; }
+                .meta { text-align: center; margin-bottom: 20px; font-size: 12px; color: #666; }
+                table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+                th, td { border: 1px solid #ccc; padding: 8px; text-align: left; vertical-align: top; }
+                th { background-color: #f0f0f0; font-weight: bold; }
+                .text-center { text-align: center; }
+                @media print {
+                    button { display: none; }
+                    body { -webkit-print-color-adjust: exact; }
+                }
+            </style>
+        </head>
+        <body>
+            <h1>ทำเนียบกรรมการตัดสินการแข่งขัน</h1>
+            <h2>${scopeTitle}</h2>
+            <div class="meta">ข้อมูล ณ วันที่ ${date}</div>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 50px;" class="text-center">#</th>
+                        <th>ชื่อ-นามสกุล</th>
+                        <th>ตำแหน่ง/หน้าที่</th>
+                        <th>โรงเรียน/หน่วยงาน</th>
+                        <th>กิจกรรมที่ตัดสิน</th>
+                        <th>เบอร์โทร</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${aggregatedDirectory.map((item, idx) => `
+                        <tr>
+                            <td class="text-center">${idx + 1}</td>
+                            <td>${item.judge.judgeName}</td>
+                            <td>${item.judge.role}</td>
+                            <td>${item.judge.schoolName}</td>
+                            <td>
+                                <ul style="margin: 0; padding-left: 20px;">
+                                    ${item.activities.map(a => `<li>${a.name}</li>`).join('')}
+                                </ul>
+                            </td>
+                            <td>${item.judge.phone || '-'}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+            
+            <script>
+                window.onload = function() { window.print(); }
+            </script>
+        </body>
+        </html>
+      `;
+      
+      printWindow.document.write(htmlContent);
+      printWindow.document.close();
+  };
+
   if (!canManage) {
       return <div className="text-center py-20 text-gray-500">คุณไม่มีสิทธิ์เข้าถึงหน้านี้</div>;
   }
@@ -635,20 +716,22 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                 <p className="text-gray-500 text-sm mt-1">บริหารจัดการกรรมการตัดสินการแข่งขัน</p>
             </div>
             
-            {/* Scope Toggle */}
-            <div className="flex bg-gray-100 p-1 rounded-lg">
-                <button
-                    onClick={() => { setViewScope('cluster'); setClusterFilter(''); }}
-                    className={`px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center ${viewScope === 'cluster' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                >
-                    <LayoutGrid className="w-4 h-4 mr-2" /> ระดับกลุ่มเครือข่าย
-                </button>
-                <button
-                    onClick={() => setViewScope('area')}
-                    className={`px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center ${viewScope === 'area' ? 'bg-white text-purple-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                >
-                    <Trophy className="w-4 h-4 mr-2" /> ระดับเขตพื้นที่
-                </button>
+            <div className="flex gap-2">
+                {/* Scope Toggle */}
+                <div className="flex bg-gray-100 p-1 rounded-lg">
+                    <button
+                        onClick={() => { setViewScope('cluster'); setClusterFilter(''); }}
+                        className={`px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center ${viewScope === 'cluster' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                    >
+                        <LayoutGrid className="w-4 h-4 mr-2" /> ระดับกลุ่มเครือข่าย
+                    </button>
+                    <button
+                        onClick={() => setViewScope('area')}
+                        className={`px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center ${viewScope === 'area' ? 'bg-white text-purple-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                    >
+                        <Trophy className="w-4 h-4 mr-2" /> ระดับเขตพื้นที่
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -675,12 +758,20 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                 </button>
             </div>
             
-            <button 
-                onClick={() => handleAdd(undefined, clusterFilter)}
-                className={`flex items-center px-4 py-2 text-white rounded-lg transition-colors shadow-sm font-medium text-sm ${viewScope === 'area' ? 'bg-purple-600 hover:bg-purple-700' : 'bg-blue-600 hover:bg-blue-700'}`}
-            >
-                <Plus className="w-4 h-4 mr-2" /> เพิ่มกรรมการ ({viewScope === 'area' ? 'เขต' : 'กลุ่ม'})
-            </button>
+            <div className="flex items-center gap-2">
+                <button
+                    onClick={handlePrintJudges}
+                    className="flex items-center px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors shadow-sm font-medium text-sm"
+                >
+                    <Printer className="w-4 h-4 mr-2" /> พิมพ์ใบรายชื่อ
+                </button>
+                <button 
+                    onClick={() => handleAdd(undefined, clusterFilter)}
+                    className={`flex items-center px-4 py-2 text-white rounded-lg transition-colors shadow-sm font-medium text-sm ${viewScope === 'area' ? 'bg-purple-600 hover:bg-purple-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+                >
+                    <Plus className="w-4 h-4 mr-2" /> เพิ่มกรรมการ ({viewScope === 'area' ? 'เขต' : 'กลุ่ม'})
+                </button>
+            </div>
         </div>
 
         {/* Dashboard Content */}
@@ -1021,7 +1112,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
         {/* Enhanced Edit/Add Modal */}
         {isModalOpen && editingJudge && (
             <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
-                <div className={`bg-white rounded-xl shadow-xl w-full max-w-4xl overflow-hidden flex flex-col transition-all duration-300 relative ${modalStep === 'summary' ? 'max-h-[80vh]' : 'max-h-[90vh]'}`}>
+                <div className={`bg-white rounded-xl shadow-xl w-full max-w-7xl overflow-hidden flex flex-col transition-all duration-300 relative ${modalStep === 'summary' ? 'max-h-[80vh]' : 'max-h-[90vh]'}`}>
                     
                     {/* Loading Overlay inside Modal */}
                     {isSaving && (
@@ -1079,53 +1170,62 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                                                     </div>
 
                                                     {/* Candidate List (Vertical) - Improved Layout */}
-                                                    <div className="space-y-2 max-h-[250px] overflow-y-auto custom-scrollbar pr-1">
-                                                        {filteredCandidates.map(cj => {
-                                                            const hasConflict = isConflictWithArea(cj.schoolName, tempAssignment.activityId || '');
-                                                            return (
-                                                                <div
-                                                                    key={cj.id}
-                                                                    className={`flex items-center p-2 rounded-lg border transition-all relative group
-                                                                        ${hasConflict 
-                                                                            ? 'bg-red-50 border-red-200 hover:bg-red-100' 
-                                                                            : 'bg-white border-gray-100 hover:border-blue-300 hover:bg-blue-50 hover:shadow-sm'
-                                                                        }`}
-                                                                >
-                                                                    {/* Avatar */}
-                                                                    <div className="relative shrink-0 mr-3">
-                                                                        <img src={cj.photoUrl || "https://cdn-icons-png.flaticon.com/512/3135/3135768.png"} className="w-10 h-10 rounded-full object-cover border border-gray-200 bg-white" />
-                                                                        {hasConflict && (
-                                                                            <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-0.5 shadow-sm border border-red-100">
-                                                                                <AlertTriangle className="w-3 h-3 text-red-500" /> 
-                                                                            </div>
-                                                                        )}
-                                                                    </div>
-                                                                    
-                                                                    {/* Text Info */}
-                                                                    <div className="min-w-0 flex-1">
-                                                                        <div className="text-xs font-bold text-gray-800 truncate">{cj.judgeName}</div>
-                                                                        <div className="text-[10px] text-gray-500 truncate flex items-center">
-                                                                            <School className="w-3 h-3 mr-1 inline" /> {cj.schoolName}
-                                                                        </div>
-                                                                        <div className="text-[10px] text-blue-600 truncate mt-0.5">{cj.role}</div>
-                                                                    </div>
-
-                                                                    {/* Action Button */}
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => handleImportFromCluster(cj)}
-                                                                        className="ml-2 p-1.5 bg-white border border-gray-200 rounded-md text-gray-400 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition-colors shadow-sm group-hover:visible"
-                                                                        title="เลือกคนนี้"
-                                                                    >
-                                                                        <ArrowRight className="w-4 h-4" />
-                                                                    </button>
-                                                                </div>
-                                                            )
-                                                        })}
-                                                        {filteredCandidates.length === 0 && (
-                                                            <div className="text-center py-6 text-gray-400 text-xs italic border-2 border-dashed border-gray-100 rounded-lg">
-                                                                ไม่พบข้อมูลกรรมการ
+                                                    <div className="space-y-2 max-h-[350px] min-h-[100px] overflow-y-auto custom-scrollbar pr-1 relative">
+                                                        {isLoadingCandidates ? (
+                                                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 z-10">
+                                                                <Loader2 className="w-6 h-6 text-blue-500 animate-spin mb-2" />
+                                                                <span className="text-xs text-gray-500">กำลังโหลดรายชื่อ...</span>
                                                             </div>
+                                                        ) : (
+                                                            <>
+                                                                {filteredCandidates.map(cj => {
+                                                                    const hasConflict = isConflictWithArea(cj.schoolName, tempAssignment.activityId || '');
+                                                                    return (
+                                                                        <div
+                                                                            key={cj.id}
+                                                                            className={`flex items-center p-2 rounded-lg border transition-all relative group
+                                                                                ${hasConflict 
+                                                                                    ? 'bg-red-50 border-red-200 hover:bg-red-100' 
+                                                                                    : 'bg-white border-gray-100 hover:border-blue-300 hover:bg-blue-50 hover:shadow-sm'
+                                                                                }`}
+                                                                        >
+                                                                            {/* Avatar */}
+                                                                            <div className="relative shrink-0 mr-3">
+                                                                                <img src={cj.photoUrl || "https://cdn-icons-png.flaticon.com/512/3135/3135768.png"} className="w-10 h-10 rounded-full object-cover border border-gray-200 bg-white" />
+                                                                                {hasConflict && (
+                                                                                    <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-0.5 shadow-sm border border-red-100">
+                                                                                        <AlertTriangle className="w-3 h-3 text-red-500" /> 
+                                                                                    </div>
+                                                                                )}
+                                                                            </div>
+                                                                            
+                                                                            {/* Text Info */}
+                                                                            <div className="min-w-0 flex-1">
+                                                                                <div className="text-xs font-bold text-gray-800 truncate">{cj.judgeName}</div>
+                                                                                <div className="text-[10px] text-gray-500 truncate flex items-center">
+                                                                                    <School className="w-3 h-3 mr-1 inline" /> {cj.schoolName}
+                                                                                </div>
+                                                                                <div className="text-[10px] text-blue-600 truncate mt-0.5">{cj.role}</div>
+                                                                            </div>
+
+                                                                            {/* Action Button */}
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => handleImportFromCluster(cj)}
+                                                                                className="ml-2 p-1.5 bg-white border border-gray-200 rounded-md text-gray-400 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition-colors shadow-sm group-hover:visible"
+                                                                                title="เลือกคนนี้"
+                                                                            >
+                                                                                <ArrowRight className="w-4 h-4" />
+                                                                            </button>
+                                                                        </div>
+                                                                    )
+                                                                })}
+                                                                {filteredCandidates.length === 0 && (
+                                                                    <div className="text-center py-6 text-gray-400 text-xs italic border-2 border-dashed border-gray-100 rounded-lg">
+                                                                        ไม่พบข้อมูลกรรมการ
+                                                                    </div>
+                                                                )}
+                                                            </>
                                                         )}
                                                     </div>
                                                 </div>
