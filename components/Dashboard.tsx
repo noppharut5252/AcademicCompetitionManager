@@ -1,7 +1,7 @@
 
-import React, { useState, useMemo } from 'react';
-import { AppData, Announcement, User, AreaStageInfo, Team } from '../types';
-import { Users, School, Trophy, Megaphone, Plus, Book, Calendar, ChevronRight, FileText, Loader2, Star, Medal, TrendingUp, Activity, Timer, ArrowUpRight, Zap, Target, CheckCircle, PieChart as PieIcon, List, X, BarChart3 } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { AppData, Announcement, User, AreaStageInfo, Team, Venue } from '../types';
+import { Users, School, Trophy, Megaphone, Plus, Book, Calendar, ChevronRight, FileText, Loader2, Star, Medal, TrendingUp, Activity, Timer, ArrowUpRight, Zap, Target, CheckCircle, PieChart as PieIcon, List, X, BarChart3, MapPin, Navigation, Handshake, Briefcase } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import StatCard from './StatCard';
 import { useNavigate } from 'react-router-dom';
@@ -16,9 +16,27 @@ interface DashboardProps {
 const COLORS = ['#10B981', '#F59E0B', '#EF4444', '#6366F1'];
 const MEDAL_COLORS = { 'Gold': '#FFD700', 'Silver': '#C0C0C0', 'Bronze': '#CD7F32', 'Participant': '#94a3b8' };
 
+// --- Skeleton Component ---
+const DashboardSkeleton = () => (
+    <div className="space-y-6 animate-pulse p-4">
+        <div className="h-48 bg-gray-200 rounded-3xl"></div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[1, 2, 3, 4].map(i => <div key={i} className="h-32 bg-gray-200 rounded-2xl"></div>)}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 h-96 bg-gray-200 rounded-2xl"></div>
+            <div className="space-y-6">
+                <div className="h-40 bg-gray-200 rounded-2xl"></div>
+                <div className="h-40 bg-gray-200 rounded-2xl"></div>
+            </div>
+        </div>
+    </div>
+);
+
 const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
   const navigate = useNavigate();
   const [viewLevel, setViewLevel] = useState<'cluster' | 'area'>('cluster');
+  const [isLoading, setIsLoading] = useState(true); // Internal loading state for visual transition
   
   // Modal States
   const [showUnscoredModal, setShowUnscoredModal] = useState(false);
@@ -31,6 +49,12 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
   const [newType, setNewType] = useState<'news' | 'manual'>('news');
   const [newLink, setNewLink] = useState('');
   const [isAddingNews, setIsAddingNews] = useState(false);
+
+  // Simulate loading for Skeleton effect
+  useEffect(() => {
+      const timer = setTimeout(() => setIsLoading(false), 800);
+      return () => clearTimeout(timer);
+  }, []);
 
   // --- Helpers ---
   const getAreaInfo = (team: any): AreaStageInfo | null => {
@@ -170,7 +194,28 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
       return { topBySuccessRate, topByScore, topByGold, fullSuccessRate };
   }, [scopeTeams, viewLevel, data.schools]);
 
-  // 4. Unscored Teams Logic
+  // 4. Judge Cooperation Stats (New)
+  const judgeCooperation = useMemo(() => {
+      const stats: Record<string, { name: string, count: number, cluster: number, area: number }> = {};
+      
+      data.judges.forEach(j => {
+          // Skip external judges
+          if (j.schoolId === '__EXTERNAL__') return;
+          
+          const schoolName = j.schoolName || 'Unknown';
+          if (!stats[schoolName]) stats[schoolName] = { name: schoolName, count: 0, cluster: 0, area: 0 };
+          
+          stats[schoolName].count++;
+          if (j.stageScope === 'area') stats[schoolName].area++;
+          else stats[schoolName].cluster++;
+      });
+
+      return Object.values(stats)
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 5); // Top 5 Cooperative Schools
+  }, [data.judges]);
+
+  // 5. Unscored Teams Logic
   const unscoredTeams = useMemo(() => {
       return scopeTeams.filter(t => {
           if (viewLevel === 'area') {
@@ -181,7 +226,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
       });
   }, [scopeTeams, viewLevel]);
 
-  // 5. Latest Results Feed
+  // 6. Latest Results Feed
   const latestResults = useMemo(() => {
       const scored = scopeTeams.filter(t => {
           if (viewLevel === 'area') {
@@ -197,6 +242,11 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
           return dateB - dateA;
       }).slice(0, 6);
   }, [scopeTeams, viewLevel]);
+
+  // 7. Venue Highlights
+  const venueHighlights = useMemo(() => {
+      return data.venues.slice(0, 3);
+  }, [data.venues]);
 
   // Admin Actions
   const handleAddNews = async (e: React.FormEvent) => {
@@ -215,6 +265,8 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
   const isAdmin = user?.level === 'admin' || user?.level === 'area';
   const newsList = (data.announcements || []).filter(a => a.type !== 'manual');
   const manualList = (data.announcements || []).filter(a => a.type === 'manual');
+
+  if (isLoading) return <DashboardSkeleton />;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20 relative">
@@ -529,9 +581,64 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
               </div>
           </div>
 
-          {/* Right Column: News & Manuals */}
+          {/* Right Column: News & Manuals & New Blocks */}
           <div className="space-y-6">
-             <div className="flex items-center justify-between">
+             
+             {/* Judge Cooperation Stats (New) */}
+             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                 <div className="p-4 border-b border-gray-100 bg-emerald-50/50 flex items-center justify-between">
+                     <h3 className="text-sm font-bold text-emerald-800 flex items-center">
+                         <Handshake className="w-4 h-4 mr-2" /> ความร่วมมือ (กรรมการ)
+                     </h3>
+                 </div>
+                 <div className="p-3">
+                     {judgeCooperation.length > 0 ? (
+                         <div className="space-y-3">
+                             {judgeCooperation.map((s, idx) => (
+                                 <div key={idx} className="flex items-center justify-between text-sm">
+                                     <div className="flex items-center min-w-0">
+                                         <div className="w-5 h-5 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center text-xs font-bold mr-2 shrink-0">{idx + 1}</div>
+                                         <div className="truncate text-gray-700" title={s.name}>{s.name}</div>
+                                     </div>
+                                     <div className="font-bold text-emerald-600">{s.count} <span className="text-[10px] text-gray-400 font-normal">คน</span></div>
+                                 </div>
+                             ))}
+                         </div>
+                     ) : <div className="text-center text-xs text-gray-400 py-4">ยังไม่มีข้อมูล</div>}
+                 </div>
+             </div>
+
+             {/* Venue Highlights (New) */}
+             {venueHighlights.length > 0 && (
+                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                     <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+                         <h3 className="text-sm font-bold text-gray-800 flex items-center">
+                             <MapPin className="w-4 h-4 mr-2 text-blue-500" /> สถานที่แข่งขัน
+                         </h3>
+                         <button onClick={() => navigate('/venues')} className="text-xs text-blue-600 hover:underline">ดูทั้งหมด</button>
+                     </div>
+                     <div className="divide-y divide-gray-50">
+                         {venueHighlights.map(v => (
+                             <div key={v.id} className="p-3 hover:bg-gray-50 flex items-start gap-3">
+                                 <img src={v.imageUrl} className="w-12 h-12 rounded-lg object-cover bg-gray-200 shrink-0" alt="" />
+                                 <div className="min-w-0 flex-1">
+                                     <div className="font-bold text-sm text-gray-800 truncate">{v.name}</div>
+                                     <div className="text-xs text-gray-500 mt-0.5 flex items-center">
+                                         <Briefcase className="w-3 h-3 mr-1"/> {v.scheduledActivities?.length || 0} รายการ
+                                     </div>
+                                     {v.locationUrl && (
+                                         <a href={v.locationUrl} target="_blank" className="text-[10px] text-blue-500 flex items-center mt-1 hover:underline">
+                                             <Navigation className="w-3 h-3 mr-1"/> แผนที่
+                                         </a>
+                                     )}
+                                 </div>
+                             </div>
+                         ))}
+                     </div>
+                 </div>
+             )}
+
+             <div className="flex items-center justify-between mt-4">
                  <h2 className="text-lg font-bold text-gray-800 flex items-center">
                      <Megaphone className="w-5 h-5 mr-2 text-orange-500" /> ข่าวประชาสัมพันธ์
                  </h2>
