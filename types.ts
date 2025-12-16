@@ -174,7 +174,7 @@ export interface CertificateTemplate {
 
 // New Interface for Judges matching requested schema (12 Columns)
 export interface Judge {
-  id: string; // Virtual ID for React (ActivityID + JudgeName)
+  id: string; // Virtual ID for React (ActivityID + JudgeName + Scope)
   activityId: string;     // Col 0: ActivityID
   clusterKey: string;     // Col 1: ClusterKey
   clusterLabel: string;   // Col 2: ClusterLabel
@@ -188,6 +188,26 @@ export interface Judge {
   importedAt: string;     // Col 10: ImportedAt
   stageScope: 'cluster' | 'area'; // Col 11: StageScope
   photoUrl?: string;      // Col 12: Photo URL (New)
+  originalId?: string;    // Optional: To track original record for updates
+}
+
+// Official Judge Print Configuration
+export interface JudgeConfig {
+  id?: string; // Context ID (area or clusterID)
+  officeName: string;
+  commandNumber: string;
+  subject: string;
+  preamble: string;
+  signerName: string;
+  signerPosition: string;
+  dateText: string;
+  logoUrl?: string; // New: Custom Logo
+  margins?: {
+      top: number;
+      bottom: number;
+      left: number;
+      right: number;
+  };
 }
 
 export interface AppData {
@@ -200,5 +220,4 @@ export interface AppData {
   venues: Venue[];
   judges: Judge[];
 }
-
 
