@@ -16,60 +16,98 @@ interface DashboardProps {
 const COLORS = ['#10B981', '#F59E0B', '#EF4444', '#6366F1'];
 const MEDAL_COLORS = { 'Gold': '#FFD700', 'Silver': '#C0C0C0', 'Bronze': '#CD7F32', 'Participant': '#94a3b8' };
 
-// Mock Event Date (You can change this or pull from config)
-const EVENT_DATE = "2024-12-25T09:00:00";
-
 // --- Components ---
 
-const CountdownWidget = () => {
-    const [timeLeft, setTimeLeft] = useState(calculateTimeLeft());
-
-    function calculateTimeLeft() {
-        const difference = +new Date(EVENT_DATE) - +new Date();
-        let timeLeft = {};
-
-        if (difference > 0) {
-            timeLeft = {
-                days: Math.floor(difference / (1000 * 60 * 60 * 24)),
-                hours: Math.floor((difference / (1000 * 60 * 60)) % 24),
-                minutes: Math.floor((difference / 1000 / 60) % 60),
-                seconds: Math.floor((difference / 1000) % 60),
-            };
-        }
-        return timeLeft as any;
-    }
+const CountdownWidget = ({ data }: { data: AppData }) => {
+    const [timeLeft, setTimeLeft] = useState<{days: number, hours: number, minutes: number, seconds: number} | null>(null);
+    const [targetDate, setTargetDate] = useState<Date | null>(null);
+    const [eventLabel, setEventLabel] = useState<string>('ยังไม่มีกำหนดการ');
 
     useEffect(() => {
-        const timer = setInterval(() => {
-            setTimeLeft(calculateTimeLeft());
-        }, 1000);
-        return () => clearInterval(timer);
-    }, []);
+        // Find the earliest future scheduled activity
+        let earliest: number | null = null;
+        let foundLabel = 'ยังไม่มีกำหนดการ';
 
-    const timerComponents = Object.keys(timeLeft).length === 0 ? (
-        <span className="text-sm font-bold">เริ่มการแข่งขันแล้ว!</span>
-    ) : (
-        <div className="flex gap-2 text-center">
-            {Object.entries(timeLeft).map(([unit, value]: [string, any]) => (
-                <div key={unit} className="flex flex-col items-center bg-white/20 rounded p-1.5 min-w-[40px]">
-                    <span className="font-mono text-xl font-bold leading-none">{value}</span>
-                    <span className="text-[9px] uppercase opacity-80">{unit}</span>
-                </div>
-            ))}
-        </div>
-    );
+        // Check venue schedules
+        data.venues.forEach(v => {
+            v.scheduledActivities?.forEach(s => {
+                if (s.date) {
+                    // Try to parse YYYY-MM-DD or standard formats
+                    const d = new Date(s.date);
+                    if (!isNaN(d.getTime())) {
+                        const time = d.getTime();
+                        // Only count future events
+                        if (time > Date.now()) {
+                             if (earliest === null || time < earliest) {
+                                 earliest = time;
+                                 foundLabel = s.activityName || 'การแข่งขัน';
+                             }
+                        }
+                    }
+                }
+            });
+        });
+
+        if (earliest) {
+            setTargetDate(new Date(earliest));
+            setEventLabel('เริ่มการแข่งขันแรก');
+        } else {
+            // Fallback: If no schedule found or all passed, maybe use a default or show "Completed"
+            setTargetDate(null);
+            setEventLabel('สิ้นสุดการแข่งขัน');
+        }
+    }, [data]);
+
+    useEffect(() => {
+        if (!targetDate) return;
+
+        const timer = setInterval(() => {
+            const difference = targetDate.getTime() - new Date().getTime();
+            if (difference > 0) {
+                setTimeLeft({
+                    days: Math.floor(difference / (1000 * 60 * 60 * 24)),
+                    hours: Math.floor((difference / (1000 * 60 * 60)) % 24),
+                    minutes: Math.floor((difference / 1000 / 60) % 60),
+                    seconds: Math.floor((difference / 1000) % 60),
+                });
+            } else {
+                setTimeLeft(null);
+                setEventLabel('กำลังแข่งขัน');
+            }
+        }, 1000);
+
+        return () => clearInterval(timer);
+    }, [targetDate]);
+
+    const renderTime = () => {
+        if (!targetDate) return <span className="text-sm font-bold opacity-80">รอประกาศกำหนดการ</span>;
+        if (!timeLeft) return <span className="text-sm font-bold animate-pulse text-yellow-200">✨ ถึงเวลาแข่งขันแล้ว! ✨</span>;
+
+        return (
+            <div className="flex gap-2 text-center">
+                {Object.entries(timeLeft).map(([unit, value]: [string, any]) => (
+                    <div key={unit} className="flex flex-col items-center bg-white/20 rounded p-1.5 min-w-[40px]">
+                        <span className="font-mono text-xl font-bold leading-none">{value}</span>
+                        <span className="text-[9px] uppercase opacity-80">{unit}</span>
+                    </div>
+                ))}
+            </div>
+        );
+    };
 
     return (
         <div className="bg-gradient-to-r from-orange-500 to-red-500 rounded-xl p-4 text-white shadow-md relative overflow-hidden mb-6">
             <div className="absolute top-0 right-0 p-2 opacity-10"><Clock className="w-24 h-24" /></div>
             <div className="relative z-10 flex flex-col items-center justify-center">
                 <h3 className="text-sm font-bold uppercase tracking-widest mb-2 flex items-center">
-                    <Calendar className="w-4 h-4 mr-1.5" /> นับถอยหลังวันแข่งขัน
+                    <Calendar className="w-4 h-4 mr-1.5" /> {eventLabel}
                 </h3>
-                {timerComponents}
-                <div className="mt-2 text-xs opacity-90 bg-black/10 px-2 py-0.5 rounded-full">
-                    25 ธันวาคม 2567
-                </div>
+                {renderTime()}
+                {targetDate && (
+                    <div className="mt-2 text-xs opacity-90 bg-black/10 px-2 py-0.5 rounded-full">
+                        {targetDate.toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: '2-digit'})}
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -100,6 +138,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
   // Modal States
   const [showUnscoredModal, setShowUnscoredModal] = useState(false);
   const [showRankingModal, setShowRankingModal] = useState(false);
+  const [showIntegrityModal, setShowIntegrityModal] = useState(false); // New modal for integrity details
 
   // Admin News State
   const [showAddNews, setShowAddNews] = useState(false);
@@ -278,11 +317,14 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
       let targetTeams = scopeTeams;
       if (user?.level === 'school_admin') {
           targetTeams = scopeTeams.filter(t => t.schoolId === user.SchoolID);
+      } else if (user?.level === 'user') {
+          targetTeams = scopeTeams.filter(t => t.createdBy === user.userid);
       }
 
       let missingTeachers = 0;
       let missingStudents = 0;
       let pendingStatus = 0;
+      const problemTeams: { team: Team, issues: string[] }[] = [];
 
       targetTeams.forEach(t => {
           if (t.status === 'Rejected') return;
@@ -311,11 +353,22 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
               }
           } catch {}
 
-          if (activity.reqTeachers > 0 && teachersCount < activity.reqTeachers) missingTeachers++;
-          if (activity.reqStudents > 0 && studentsCount < activity.reqStudents) missingStudents++;
+          const issues = [];
+          if (activity.reqTeachers > 0 && teachersCount < activity.reqTeachers) {
+              missingTeachers++;
+              issues.push(`ขาดครู ${activity.reqTeachers - teachersCount} คน`);
+          }
+          if (activity.reqStudents > 0 && studentsCount < activity.reqStudents) {
+              missingStudents++;
+              issues.push(`ขาด นร. ${activity.reqStudents - studentsCount} คน`);
+          }
+
+          if (issues.length > 0) {
+              problemTeams.push({ team: t, issues });
+          }
       });
 
-      return { missingTeachers, missingStudents, pendingStatus, totalIssues: missingTeachers + missingStudents };
+      return { missingTeachers, missingStudents, pendingStatus, totalIssues: missingTeachers + missingStudents, problemTeams };
   }, [scopeTeams, data.activities, viewLevel, user]);
 
   // 6. Judge Cooperation Stats (Updated: Separate by Level & Count Activities)
@@ -743,22 +796,30 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
           <div className="space-y-6">
              
              {/* FEATURE 4: Countdown Timer */}
-             <CountdownWidget />
+             <CountdownWidget data={data} />
 
-             {/* FEATURE 2: Data Integrity Alerts */}
-             <div className="bg-white rounded-xl shadow-sm border border-red-100 overflow-hidden">
-                 <div className="p-4 border-b border-red-50 bg-red-50/30 flex items-center">
-                     <AlertTriangle className="w-4 h-4 mr-2 text-red-500" />
-                     <h3 className="text-sm font-bold text-red-800">แจ้งเตือนข้อมูลไม่สมบูรณ์</h3>
+             {/* FEATURE 2: Data Integrity Alerts (Interactive) */}
+             <div 
+                className="bg-white rounded-xl shadow-sm border border-red-100 overflow-hidden hover:shadow-md transition-shadow cursor-pointer group"
+                onClick={() => setShowIntegrityModal(true)}
+             >
+                 <div className="p-4 border-b border-red-50 bg-red-50/30 flex items-center justify-between">
+                     <div className="flex items-center">
+                        <AlertTriangle className="w-4 h-4 mr-2 text-red-500" />
+                        <h3 className="text-sm font-bold text-red-800">แจ้งเตือนข้อมูลไม่สมบูรณ์</h3>
+                     </div>
+                     <span className="text-xs text-red-400 opacity-0 group-hover:opacity-100 transition-opacity flex items-center">
+                         ดูรายละเอียด <ChevronRight className="w-3 h-3 ml-1" />
+                     </span>
                  </div>
                  <div className="p-4 grid grid-cols-2 gap-3">
-                     <div className="bg-red-50 p-2 rounded-lg text-center">
+                     <div className="bg-red-50 p-2 rounded-lg text-center border border-red-100 group-hover:bg-red-100 transition-colors">
                          <div className="text-xs text-red-600 mb-1">ขาดครู</div>
                          <div className="font-black text-xl text-red-700 flex items-center justify-center">
                              <UserX className="w-4 h-4 mr-1"/> {integrityStats.missingTeachers}
                          </div>
                      </div>
-                     <div className="bg-red-50 p-2 rounded-lg text-center">
+                     <div className="bg-red-50 p-2 rounded-lg text-center border border-red-100 group-hover:bg-red-100 transition-colors">
                          <div className="text-xs text-red-600 mb-1">ขาด นร.</div>
                          <div className="font-black text-xl text-red-700 flex items-center justify-center">
                              <GraduationCap className="w-4 h-4 mr-1"/> {integrityStats.missingStudents}
@@ -867,6 +928,68 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
              </div>
           </div>
       </div>
+
+      {/* Modal: Integrity Alerts Details */}
+      {showIntegrityModal && (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+              <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh]">
+                  <div className="p-4 border-b border-red-100 flex justify-between items-center bg-red-50">
+                      <div>
+                          <h3 className="font-bold text-red-800 flex items-center">
+                              <AlertTriangle className="w-5 h-5 mr-2" /> รายการที่ข้อมูลไม่สมบูรณ์
+                          </h3>
+                          <p className="text-xs text-red-600 mt-0.5">กรุณาแก้ไขข้อมูลให้ครบถ้วนตามเกณฑ์</p>
+                      </div>
+                      <button onClick={() => setShowIntegrityModal(false)} className="p-1.5 hover:bg-red-100 rounded-full text-red-700"><X className="w-5 h-5"/></button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-0">
+                      {integrityStats.problemTeams.length > 0 ? (
+                          <table className="w-full text-sm">
+                              <thead className="bg-gray-50 text-gray-500 font-medium border-b border-gray-100 sticky top-0 shadow-sm">
+                                  <tr>
+                                      <th className="px-4 py-3 text-left">ทีม</th>
+                                      <th className="px-4 py-3 text-left">โรงเรียน</th>
+                                      <th className="px-4 py-3 text-left w-40">ปัญหาที่พบ</th>
+                                  </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-50">
+                                  {integrityStats.problemTeams.map((item) => {
+                                      const schoolName = data.schools.find(s => s.SchoolID === item.team.schoolId || s.SchoolName === item.team.schoolId)?.SchoolName || item.team.schoolId;
+                                      return (
+                                          <tr key={item.team.teamId} className="hover:bg-red-50/30 transition-colors">
+                                              <td className="px-4 py-3 align-top">
+                                                  <div className="font-medium text-gray-900">{item.team.teamName}</div>
+                                                  <div className="text-xs text-gray-500 mt-0.5">{item.team.activityId}</div>
+                                              </td>
+                                              <td className="px-4 py-3 text-gray-600 align-top">{schoolName}</td>
+                                              <td className="px-4 py-3 align-top">
+                                                  <div className="flex flex-wrap gap-1">
+                                                      {item.issues.map((issue, idx) => (
+                                                          <span key={idx} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-red-100 text-red-700 border border-red-200">
+                                                              {issue}
+                                                          </span>
+                                                      ))}
+                                                  </div>
+                                              </td>
+                                          </tr>
+                                      );
+                                  })}
+                              </tbody>
+                          </table>
+                      ) : (
+                          <div className="p-10 text-center text-gray-400 flex flex-col items-center">
+                              <CheckCircle className="w-16 h-16 text-green-500 mb-3 opacity-50" />
+                              <p className="font-medium text-gray-600">ยอดเยี่ยม! ข้อมูลครบถ้วนสมบูรณ์</p>
+                              <p className="text-xs mt-1">ไม่พบทีมที่มีปัญหาขาดครูหรือนักเรียน</p>
+                          </div>
+                      )}
+                  </div>
+                  <div className="p-3 border-t border-gray-100 bg-gray-50 text-right text-xs text-gray-500">
+                      พบปัญหาทั้งหมด {integrityStats.totalIssues} รายการ
+                  </div>
+              </div>
+          </div>
+      )}
 
       {/* Modal: Unscored Teams */}
       {showUnscoredModal && (
