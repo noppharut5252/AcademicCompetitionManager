@@ -238,7 +238,7 @@ export const saveCertificateConfig = async (id: string, config: CertificateTempl
 
 // --- Judge Config API ---
 
-export const getJudgeConfig = async (): Promise<JudgeConfig | null> => {
+export const getJudgeConfig = async (): Promise<Record<string, JudgeConfig> | null> => {
     try {
         const response = await fetch(`${API_URL}?action=getJudgeConfig`, {
             method: 'GET',
@@ -258,7 +258,7 @@ export const saveJudgeConfig = async (config: JudgeConfig): Promise<boolean> => 
             method: 'POST',
             mode: 'cors',
             headers: { 'Content-Type': 'text/plain' },
-            body: JSON.stringify(config)
+            body: JSON.stringify({ id: config.id, config: config })
         });
         if (!response.ok) return false;
         const result = await response.json();
