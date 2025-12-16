@@ -1,11 +1,12 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { AppData, Judge, User, Team } from '../types';
-import { Search, Plus, Edit2, Trash2, Gavel, Mail, Phone, School, MapPin, Loader2, Save, X, LayoutGrid, AlertTriangle, CheckCircle, Users, Briefcase, ChevronDown, ChevronUp, AlertOctagon, UserCheck, Camera, Copy, Trophy, Filter, Layers, ChevronRight, Hash, Eye, EyeOff, ChevronsUpDown, ChevronLeft, ListChecks, ArrowRight, Import, AlertCircle, Printer } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, Gavel, Mail, Phone, School, MapPin, Loader2, Save, X, LayoutGrid, AlertTriangle, CheckCircle, Users, Briefcase, ChevronDown, ChevronUp, AlertOctagon, UserCheck, Camera, Copy, Trophy, Filter, Layers, ChevronRight, Hash, Eye, EyeOff, ChevronsUpDown, ChevronLeft, ListChecks, ArrowRight, Import, AlertCircle, Printer, FileText, Files } from 'lucide-react';
 import SearchableSelect from './SearchableSelect';
 import ConfirmationModal from './ConfirmationModal';
 import { saveJudge, deleteJudge, uploadImage } from '../services/api';
 import { resizeImage } from '../services/utils';
+import QRCode from 'qrcode';
 
 interface JudgesViewProps {
   data: AppData;
@@ -27,6 +28,24 @@ interface JudgeAssignment {
     clusterKey: string;
     clusterLabel: string;
 }
+
+// Helper to sort judges by role priority
+const sortJudgesByRole = (judges: Judge[]) => {
+    const getPriority = (role: string) => {
+        const r = role.trim();
+        if (r.includes('ประธาน')) return 1;
+        if (r === 'กรรมการ') return 2;
+        if (r.includes('เลขา')) return 3;
+        return 4; // Others
+    };
+
+    return [...judges].sort((a, b) => {
+        const pA = getPriority(a.role);
+        const pB = getPriority(b.role);
+        if (pA !== pB) return pA - pB;
+        return a.judgeName.localeCompare(b.judgeName);
+    });
+};
 
 // Internal Toast Component
 const Toast = ({ message, type, isVisible, onClose }: { message: string, type: 'success' | 'error' | 'info', isVisible: boolean, onClose: () => void }) => {
@@ -84,6 +103,10 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
   const [isUploading, setIsUploading] = useState(false);
   const [isLoadingCandidates, setIsLoadingCandidates] = useState(false);
   
+  // Print Modal State
+  const [showPrintModal, setShowPrintModal] = useState(false);
+  const [isGeneratingPrint, setIsGeneratingPrint] = useState(false);
+
   // Toast State
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info', isVisible: boolean }>({ message: '', type: 'info', isVisible: false });
 
@@ -104,6 +127,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [confirmDelete, setConfirmDelete] = useState<{ isOpen: boolean, id: string | null }>({ isOpen: false, id: null });
+  const [isDeleting, setIsDeleting] = useState(false);
   const [expandedActivity, setExpandedActivity] = useState<string | null>(null);
 
   // Permissions
@@ -613,19 +637,179 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
 
   const handleDelete = async () => {
       if (confirmDelete.id) {
+          setIsDeleting(true);
           await deleteJudge(confirmDelete.id);
+          setIsDeleting(false);
           setConfirmDelete({ isOpen: false, id: null });
           showToast('ลบข้อมูลเรียบร้อยแล้ว', 'success');
           onDataUpdate();
       }
   };
 
-  const handlePrintJudges = () => {
+  const handlePrintJudges = async (mode: 'continuous' | 'page-per-activity') => {
+      setIsGeneratingPrint(true);
+      setShowPrintModal(false);
+
+      // Delay to allow modal to close visually
+      await new Promise(resolve => setTimeout(resolve, 500));
+
       const printWindow = window.open('', '_blank');
-      if (!printWindow) return;
+      if (!printWindow) {
+          setIsGeneratingPrint(false);
+          alert('Pop-up ถูกบล็อก กรุณาอนุญาตให้เปิดหน้าต่างใหม่');
+          return;
+      }
 
       const date = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
       const scopeTitle = viewScope === 'cluster' ? `ระดับกลุ่มเครือข่าย ${clusterFilter ? `(${data.clusters.find(c => c.ClusterID === clusterFilter)?.ClusterName})` : ''}` : 'ระดับเขตพื้นที่การศึกษา';
+      
+      // Generate QR Code for this specific view/filter
+      let qrCodeBase64 = '';
+      try {
+          qrCodeBase64 = await QRCode.toDataURL(window.location.href, { margin: 1, width: 100 });
+      } catch (e) {
+          console.error("QR Error", e);
+      }
+
+      // 1. Organize data: Category -> Activity -> Judges (Sorted)
+      const categoryList = Array.from(new Set(data.activities.map(a => a.category))).sort();
+      let htmlBodyContent = '';
+
+      if (mode === 'continuous') {
+          // --- Continuous Mode (Original Logic) ---
+          htmlBodyContent += `
+            <h1 class="header-main">คำสั่งแต่งตั้งคณะกรรมการตัดสินการแข่งขัน</h1>
+            <h2 class="header-sub">${scopeTitle}</h2>
+            <div class="meta">ข้อมูล ณ วันที่ ${date}</div>
+          `;
+
+          categoryList.forEach(cat => {
+              const activities = data.activities.filter(a => a.category === cat);
+              let catContent = '';
+              let hasActivities = false;
+
+              activities.forEach(act => {
+                  let judges = [];
+                  if (viewScope === 'area') {
+                      judges = data.judges.filter(j => j.activityId === act.id && j.stageScope === 'area');
+                  } else {
+                      judges = data.judges.filter(j => j.activityId === act.id && j.stageScope !== 'area');
+                      if (clusterFilter) judges = judges.filter(j => j.clusterKey === clusterFilter);
+                  }
+
+                  if (judges.length > 0) {
+                      hasActivities = true;
+                      const sortedJudges = sortJudgesByRole(judges);
+                      catContent += `
+                        <tr class="activity-row">
+                            <td colspan="5">กิจกรรม: ${act.name}</td>
+                        </tr>
+                        ${sortedJudges.map((j, idx) => `
+                            <tr>
+                                <td class="text-center">${idx + 1}</td>
+                                <td>${j.judgeName}</td>
+                                <td>${j.role}</td>
+                                <td>${j.schoolName}</td>
+                                <td>${j.phone || ''}</td>
+                            </tr>
+                        `).join('')}
+                      `;
+                  }
+              });
+
+              if (hasActivities) {
+                  htmlBodyContent += `
+                    <div class="category-block">
+                        <div class="category-header">หมวดหมู่: ${cat}</div>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th style="width: 50px;" class="text-center">ที่</th>
+                                    <th style="width: 30%;">ชื่อ-สกุล</th>
+                                    <th style="width: 25%;">ตำแหน่ง</th>
+                                    <th>สังกัด / โรงเรียน</th>
+                                    <th>หมายเหตุ</th>
+                                </tr>
+                            </thead>
+                            <tbody>${catContent}</tbody>
+                        </table>
+                    </div>
+                  `;
+              }
+          });
+          
+          // Append QR Footer for continuous mode
+          htmlBodyContent += `
+            <div class="footer-qr">
+                <img src="${qrCodeBase64}" />
+                <span>สแกนเพื่อตรวจสอบรายชื่อล่าสุด</span>
+            </div>
+          `;
+
+      } else {
+          // --- Page Per Activity Mode ---
+          let pageCount = 0;
+          categoryList.forEach(cat => {
+              const activities = data.activities.filter(a => a.category === cat);
+              activities.forEach(act => {
+                  let judges = [];
+                  if (viewScope === 'area') {
+                      judges = data.judges.filter(j => j.activityId === act.id && j.stageScope === 'area');
+                  } else {
+                      judges = data.judges.filter(j => j.activityId === act.id && j.stageScope !== 'area');
+                      if (clusterFilter) judges = judges.filter(j => j.clusterKey === clusterFilter);
+                  }
+
+                  if (judges.length > 0) {
+                      const sortedJudges = sortJudgesByRole(judges);
+                      // Page Break logic: Add break before every page except the first one
+                      const breakClass = pageCount > 0 ? 'page-break' : '';
+                      
+                      htmlBodyContent += `
+                        <div class="activity-page ${breakClass}">
+                            <h1 class="header-main">คำสั่งแต่งตั้งคณะกรรมการตัดสินการแข่งขัน</h1>
+                            <h2 class="header-sub">${scopeTitle}</h2>
+                            <div class="meta">ข้อมูล ณ วันที่ ${date}</div>
+                            
+                            <div class="single-activity-info">
+                                <div><strong>หมวดหมู่:</strong> ${cat}</div>
+                                <div><strong>กิจกรรม:</strong> ${act.name}</div>
+                            </div>
+
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th style="width: 50px;" class="text-center">ที่</th>
+                                        <th style="width: 30%;">ชื่อ-สกุล</th>
+                                        <th style="width: 25%;">ตำแหน่ง</th>
+                                        <th>สังกัด / โรงเรียน</th>
+                                        <th>หมายเหตุ</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${sortedJudges.map((j, idx) => `
+                                        <tr>
+                                            <td class="text-center">${idx + 1}</td>
+                                            <td>${j.judgeName}</td>
+                                            <td>${j.role}</td>
+                                            <td>${j.schoolName}</td>
+                                            <td>${j.phone || ''}</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                            
+                            <div class="footer-qr absolute-bottom">
+                                <img src="${qrCodeBase64}" />
+                                <span>สแกนเพื่อตรวจสอบรายชื่อล่าสุด</span>
+                            </div>
+                        </div>
+                      `;
+                      pageCount++;
+                  }
+              });
+          });
+      }
 
       const htmlContent = `
         <html>
@@ -634,61 +818,52 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
             <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600&display=swap" rel="stylesheet">
             <style>
                 body { font-family: 'Sarabun', sans-serif; padding: 20px; font-size: 14px; }
-                h1, h2 { text-align: center; margin: 0; padding: 5px; }
+                h1.header-main { text-align: center; margin: 0; padding: 5px; font-size: 18px; }
+                h2.header-sub { text-align: center; margin: 0; padding: 5px; font-size: 16px; font-weight: normal; }
                 .meta { text-align: center; margin-bottom: 20px; font-size: 12px; color: #666; }
-                table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+                
+                .category-header { background-color: #e0f2fe; padding: 8px; font-weight: bold; font-size: 16px; margin-top: 15px; border: 1px solid #ccc; border-bottom: none; }
+                table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
                 th, td { border: 1px solid #ccc; padding: 8px; text-align: left; vertical-align: top; }
-                th { background-color: #f0f0f0; font-weight: bold; }
+                th { background-color: #f9fafb; font-weight: bold; }
                 .text-center { text-align: center; }
+                .activity-row { background-color: #f0fdf4; font-weight: bold; }
+                
+                .single-activity-info { margin-bottom: 15px; border: 1px solid #ddd; padding: 10px; background: #f9f9f9; border-radius: 4px; }
+                .footer-qr { display: flex; flex-direction: column; align-items: center; justify-content: center; margin-top: 20px; color: #666; font-size: 10px; }
+                .footer-qr img { width: 80px; height: 80px; margin-bottom: 5px; }
+                .absolute-bottom { margin-top: 30px; }
+
+                /* Floating Action Button for Preview */
+                .no-print { position: fixed; top: 20px; right: 20px; z-index: 1000; display: flex; gap: 10px; }
+                .btn-print { background: #2563eb; color: white; padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-family: 'Sarabun'; font-weight: bold; box-shadow: 0 2px 5px rgba(0,0,0,0.2); display: flex; align-items: center; }
+                .btn-print:hover { background: #1d4ed8; }
+                .btn-icon { margin-right: 5px; }
+
                 @media print {
-                    button { display: none; }
-                    body { -webkit-print-color-adjust: exact; }
+                    .no-print { display: none; }
+                    body { -webkit-print-color-adjust: exact; padding: 0; }
+                    .page-break { page-break-before: always; }
+                    /* Ensure footer stays at bottom if using page per activity? */
+                    /* .activity-page { height: 100vh; position: relative; } */
                 }
             </style>
         </head>
         <body>
-            <h1>ทำเนียบกรรมการตัดสินการแข่งขัน</h1>
-            <h2>${scopeTitle}</h2>
-            <div class="meta">ข้อมูล ณ วันที่ ${date}</div>
-            
-            <table>
-                <thead>
-                    <tr>
-                        <th style="width: 50px;" class="text-center">#</th>
-                        <th>ชื่อ-นามสกุล</th>
-                        <th>ตำแหน่ง/หน้าที่</th>
-                        <th>โรงเรียน/หน่วยงาน</th>
-                        <th>กิจกรรมที่ตัดสิน</th>
-                        <th>เบอร์โทร</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${aggregatedDirectory.map((item, idx) => `
-                        <tr>
-                            <td class="text-center">${idx + 1}</td>
-                            <td>${item.judge.judgeName}</td>
-                            <td>${item.judge.role}</td>
-                            <td>${item.judge.schoolName}</td>
-                            <td>
-                                <ul style="margin: 0; padding-left: 20px;">
-                                    ${item.activities.map(a => `<li>${a.name}</li>`).join('')}
-                                </ul>
-                            </td>
-                            <td>${item.judge.phone || '-'}</td>
-                        </tr>
-                    `).join('')}
-                </tbody>
-            </table>
-            
-            <script>
-                window.onload = function() { window.print(); }
-            </script>
+            <div class="no-print">
+                <button onclick="window.print()" class="btn-print">
+                    <svg class="btn-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                    พิมพ์ / บันทึก PDF
+                </button>
+            </div>
+            ${htmlBodyContent}
         </body>
         </html>
       `;
       
       printWindow.document.write(htmlContent);
       printWindow.document.close();
+      setIsGeneratingPrint(false);
   };
 
   if (!canManage) {
@@ -760,7 +935,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
             
             <div className="flex items-center gap-2">
                 <button
-                    onClick={handlePrintJudges}
+                    onClick={() => setShowPrintModal(true)}
                     className="flex items-center px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors shadow-sm font-medium text-sm"
                 >
                     <Printer className="w-4 h-4 mr-2" /> พิมพ์ใบรายชื่อ
@@ -773,6 +948,55 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                 </button>
             </div>
         </div>
+
+        {/* Print Option Modal */}
+        {showPrintModal && (
+            <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+                <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden">
+                    <div className="p-5 border-b border-gray-100 flex justify-between items-center">
+                        <h3 className="font-bold text-gray-800 flex items-center">
+                            <Printer className="w-5 h-5 mr-2 text-blue-600" /> ตัวเลือกการพิมพ์
+                        </h3>
+                        <button onClick={() => setShowPrintModal(false)} className="text-gray-400 hover:text-gray-600">
+                            <X className="w-5 h-5" />
+                        </button>
+                    </div>
+                    <div className="p-6 space-y-4">
+                        <button 
+                            onClick={() => handlePrintJudges('continuous')}
+                            className="w-full flex items-center p-4 rounded-xl border border-gray-200 hover:border-blue-500 hover:bg-blue-50 transition-all group text-left"
+                        >
+                            <div className="p-3 bg-gray-100 rounded-full group-hover:bg-blue-100 mr-4">
+                                <FileText className="w-6 h-6 text-gray-600 group-hover:text-blue-600" />
+                            </div>
+                            <div>
+                                <div className="font-bold text-gray-800 group-hover:text-blue-700">พิมพ์แบบรวม (Continuous)</div>
+                                <div className="text-xs text-gray-500 mt-1">ประหยัดกระดาษ รายชื่อเรียงต่อกันทุกกิจกรรม เหมาะสำหรับเก็บรวบรวม</div>
+                            </div>
+                        </button>
+
+                        <button 
+                            onClick={() => handlePrintJudges('page-per-activity')}
+                            className="w-full flex items-center p-4 rounded-xl border border-gray-200 hover:border-purple-500 hover:bg-purple-50 transition-all group text-left"
+                        >
+                            <div className="p-3 bg-gray-100 rounded-full group-hover:bg-purple-100 mr-4">
+                                <Files className="w-6 h-6 text-gray-600 group-hover:text-purple-600" />
+                            </div>
+                            <div>
+                                <div className="font-bold text-gray-800 group-hover:text-purple-700">แยกหน้าตามกิจกรรม (One Activity per Page)</div>
+                                <div className="text-xs text-gray-500 mt-1">ขึ้นหน้าใหม่ทุกกิจกรรม เหมาะสำหรับแจกจ่ายรายกิจกรรม</div>
+                            </div>
+                        </button>
+                    </div>
+                    {isGeneratingPrint && (
+                        <div className="absolute inset-0 bg-white/80 flex flex-col items-center justify-center z-10">
+                            <Loader2 className="w-8 h-8 text-blue-600 animate-spin mb-2" />
+                            <span className="text-sm font-medium text-gray-600">กำลังเตรียมเอกสาร...</span>
+                        </div>
+                    )}
+                </div>
+            </div>
+        )}
 
         {/* Dashboard Content */}
         {activeTab === 'dashboard' && (
@@ -938,7 +1162,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                                                                             <button onClick={(e) => { e.stopPropagation(); handleAdd(act.id); }} className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded hover:bg-blue-100 font-medium flex items-center"><Plus className="w-3 h-3 mr-1" /> เพิ่ม</button>
                                                                         </div>
                                                                         <div className="space-y-2">
-                                                                            {group.areaJudges.map(judge => renderJudgeRow(judge, group.areaSchools))}
+                                                                            {sortJudgesByRole(group.areaJudges).map(judge => renderJudgeRow(judge, group.areaSchools))}
                                                                             {group.areaJudges.length === 0 && <div className="text-center py-6 text-gray-400 text-xs border-2 border-dashed rounded">ยังไม่มีกรรมการ</div>}
                                                                         </div>
                                                                     </div>
@@ -978,7 +1202,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                                                                                         <div className="md:col-span-2">
                                                                                             <h5 className="text-[10px] font-bold text-gray-400 uppercase mb-2 flex items-center"><UserCheck className="w-3 h-3 mr-1" /> รายชื่อกรรมการ</h5>
                                                                                             <div className="space-y-2">
-                                                                                                {cData.judges.map(j => renderJudgeRow(j, cData.competingSchools))}
+                                                                                                {sortJudgesByRole(cData.judges).map(j => renderJudgeRow(j, cData.competingSchools))}
                                                                                                 {cData.judges.length === 0 && <div className="text-xs text-gray-400 italic border-2 border-dashed border-gray-100 rounded-lg p-2 text-center">ยังไม่มีกรรมการในกลุ่มนี้</div>}
                                                                                             </div>
                                                                                         </div>
@@ -1530,6 +1754,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
             confirmColor="red"
             onConfirm={handleDelete}
             onCancel={() => setConfirmDelete({ isOpen: false, id: null })}
+            isLoading={isDeleting}
         />
     </div>
   );
@@ -1553,6 +1778,12 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                       <div className="text-xs text-gray-500 flex items-center mt-0.5">
                           {judge.schoolId !== '__EXTERNAL__' ? <School className="w-3 h-3 mr-1" /> : <Briefcase className="w-3 h-3 mr-1 text-orange-400" />}
                           {judge.schoolName || 'ไม่ระบุสังกัด'}
+                          {/* Show Network/Cluster for context */}
+                          {judge.clusterLabel && (
+                              <span className="ml-2 text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 flex items-center">
+                                  <LayoutGrid className="w-3 h-3 mr-1" /> {judge.clusterLabel}
+                              </span>
+                          )}
                           {conflict.hasConflict && (
                               <span className="ml-2 text-red-600 font-bold flex items-center">
                                   <AlertOctagon className="w-3 h-3 mr-1" /> ตรงกับทีมแข่ง
