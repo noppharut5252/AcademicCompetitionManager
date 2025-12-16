@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { AppData, Judge, User, Team } from '../types';
-import { Search, Plus, Edit2, Trash2, Gavel, Mail, Phone, School, MapPin, Loader2, Save, X, LayoutGrid, AlertTriangle, CheckCircle, Users, Briefcase, ChevronDown, ChevronUp, AlertOctagon, UserCheck, Camera, Copy, Trophy, Filter, Layers, ChevronRight, Hash, Eye, EyeOff, ChevronsUpDown, ChevronLeft, ListChecks, ArrowRight, Import, AlertCircle, Printer, FileText, Files } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, Gavel, Mail, Phone, School, MapPin, Loader2, Save, X, LayoutGrid, AlertTriangle, CheckCircle, Users, Briefcase, ChevronDown, ChevronUp, AlertOctagon, UserCheck, Camera, Copy, Trophy, Filter, Layers, ChevronRight, Hash, Eye, EyeOff, ChevronsUpDown, ChevronLeft, ListChecks, ArrowRight, Import, AlertCircle, Printer, FileText, Files, Settings, ScrollText } from 'lucide-react';
 import SearchableSelect from './SearchableSelect';
 import ConfirmationModal from './ConfirmationModal';
 import { saveJudge, deleteJudge, uploadImage } from '../services/api';
@@ -106,6 +106,28 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
   // Print Modal State
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [isGeneratingPrint, setIsGeneratingPrint] = useState(false);
+  const [showOfficialSettings, setShowOfficialSettings] = useState(false);
+  const [officialConfig, setOfficialConfig] = useState({
+      officeName: 'ศูนย์เครือข่ายพัฒนาคุณภาพการศึกษา...',
+      commandNumber: '1/2567',
+      subject: 'แต่งตั้งคณะกรรมการตัดสินการแข่งขันงานศิลปหัตถกรรมนักเรียน ครั้งที่ 71',
+      preamble: 'ด้วยศูนย์เครือข่ายพัฒนาคุณภาพการศึกษา... ได้กำหนดจัดงานศิลปหัตถกรรมนักเรียน เพื่อคัดเลือกตัวแทนเข้าร่วมการแข่งขันในระดับเขตพื้นที่การศึกษา เพื่อให้การดำเนินงานเป็นไปด้วยความเรียบร้อยและบรรลุตามวัตถุประสงค์ จึงแต่งตั้งคณะกรรมการตัดสินการแข่งขัน ดังรายชื่อต่อไปนี้',
+      signerName: 'นายสมชาย ใจดี',
+      signerPosition: 'ประธานศูนย์เครือข่าย...',
+      dateText: `สั่ง ณ วันที่ ${new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}`
+  });
+
+  // Load official config from local storage
+  useEffect(() => {
+      const saved = localStorage.getItem('judge_official_config');
+      if (saved) {
+          try {
+              setOfficialConfig(JSON.parse(saved));
+          } catch (e) {
+              console.error("Failed to parse saved config");
+          }
+      }
+  }, []);
 
   // Toast State
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info', isVisible: boolean }>({ message: '', type: 'info', isVisible: false });
@@ -151,6 +173,12 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
   // Helper to show toast
   const showToast = (message: string, type: 'success' | 'error' | 'info') => {
       setToast({ message, type, isVisible: true });
+  };
+
+  const handleSaveOfficialConfig = () => {
+      localStorage.setItem('judge_official_config', JSON.stringify(officialConfig));
+      setShowOfficialSettings(false);
+      showToast('บันทึกการตั้งค่าเรียบร้อย', 'success');
   };
 
   // --- Derived Data & Logic ---
@@ -646,7 +674,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
       }
   };
 
-  const handlePrintJudges = async (mode: 'continuous' | 'page-per-activity') => {
+  const handlePrintJudges = async (mode: 'continuous' | 'page-per-activity' | 'official') => {
       setIsGeneratingPrint(true);
       setShowPrintModal(false);
 
@@ -675,7 +703,90 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
       const categoryList = Array.from(new Set(data.activities.map(a => a.category))).sort();
       let htmlBodyContent = '';
 
-      if (mode === 'continuous') {
+      if (mode === 'official') {
+          // --- Official Document Mode ---
+          let allJudgesContent = '';
+          categoryList.forEach(cat => {
+              const activities = data.activities.filter(a => a.category === cat);
+              activities.forEach(act => {
+                  let judges: Judge[] = [];
+                  let teamCount = 0;
+
+                  // Reuse activityGroups logic for counts
+                  const group = activityGroups[act.id];
+                  if (viewScope === 'area') {
+                      judges = group.areaJudges;
+                      teamCount = group.areaTeamCount;
+                  } else {
+                      if (clusterFilter) {
+                          judges = group.clusters[clusterFilter]?.judges || [];
+                          teamCount = group.clusters[clusterFilter]?.teamCount || 0;
+                      } else {
+                          // No cluster filter in cluster view -> likely printing for all clusters?
+                          // Logic for 'official' usually implies specific scope. 
+                          // If no filter, aggregate all cluster judges
+                          Object.values(group.clusters).forEach(c => {
+                              judges = [...judges, ...c.judges];
+                              teamCount += c.teamCount;
+                          });
+                      }
+                  }
+
+                  if (judges.length > 0) {
+                      const sortedJudges = sortJudgesByRole(judges);
+                      allJudgesContent += `
+                        <div style="margin-bottom: 10px; font-weight: bold; page-break-inside: avoid;">
+                            ${act.name} (จำนวน ${teamCount} ทีม)
+                        </div>
+                        <table class="official-table">
+                            <tbody>
+                                ${sortedJudges.map((j, idx) => `
+                                    <tr>
+                                        <td style="width: 50px; text-align: center; vertical-align: top;">${idx + 1}.</td>
+                                        <td style="width: 250px; vertical-align: top;">${j.judgeName}</td>
+                                        <td style="width: 200px; vertical-align: top;">${j.role}</td>
+                                        <td style="vertical-align: top;">${j.schoolName}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                        <br/>
+                      `;
+                  }
+              });
+          });
+
+          htmlBodyContent = `
+            <div class="garuda-container">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c9/Garuda_Phra_Khrut_Pha_Thira_Chao.svg/1200px-Garuda_Phra_Khrut_Pha_Thira_Chao.svg.png" class="garuda" />
+            </div>
+            <div class="official-header">
+                คำสั่ง ${officialConfig.officeName}<br/>
+                ที่ ${officialConfig.commandNumber}<br/>
+                เรื่อง ${officialConfig.subject}
+            </div>
+            <div class="divider"></div>
+            <div class="official-body">
+                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;${officialConfig.preamble}
+            </div>
+            <br/>
+            ${allJudgesContent}
+            <br/>
+            <div class="official-body">
+                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ทั้งนี้ ตั้งแต่บัดนี้เป็นต้นไป
+            </div>
+            <br/>
+            <div class="official-date">
+                ${officialConfig.dateText}
+            </div>
+            <br/><br/><br/>
+            <div class="official-sign">
+                (${officialConfig.signerName})<br/>
+                ${officialConfig.signerPosition}
+            </div>
+          `;
+
+      } else if (mode === 'continuous') {
           // --- Continuous Mode (Original Logic) ---
           htmlBodyContent += `
             <h1 class="header-main">คำสั่งแต่งตั้งคณะกรรมการตัดสินการแข่งขัน</h1>
@@ -817,15 +928,30 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
             <title>รายชื่อกรรมการตัดสิน - ${scopeTitle}</title>
             <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600&display=swap" rel="stylesheet">
             <style>
-                body { font-family: 'Sarabun', sans-serif; padding: 20px; font-size: 14px; }
+                body { font-family: 'Sarabun', sans-serif; padding: 20px; font-size: 14px; color: #000; }
+                
+                /* Standard Table Styles */
+                table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+                th, td { border: 1px solid #ccc; padding: 8px; text-align: left; vertical-align: top; }
+                th { background-color: #f9fafb; font-weight: bold; }
+                
+                /* Official Document Styles */
+                .garuda-container { text-align: center; margin-bottom: 20px; }
+                .garuda { width: 3cm; height: auto; }
+                .official-header { text-align: center; font-weight: bold; font-size: 16pt; line-height: 1.5; margin-bottom: 10px; }
+                .divider { border-bottom: 1px solid transparent; margin-bottom: 10px; }
+                .official-body { text-align: justify; font-size: 16px; line-height: 1.6; }
+                .official-table { width: 100%; border: none; margin-left: 20px; }
+                .official-table td { border: none; padding: 2px 5px; }
+                .official-date { text-align: center; margin-top: 20px; }
+                .official-sign { text-align: center; margin-top: 30px; font-weight: bold; margin-left: 50%; }
+
+                /* Common */
                 h1.header-main { text-align: center; margin: 0; padding: 5px; font-size: 18px; }
                 h2.header-sub { text-align: center; margin: 0; padding: 5px; font-size: 16px; font-weight: normal; }
                 .meta { text-align: center; margin-bottom: 20px; font-size: 12px; color: #666; }
                 
                 .category-header { background-color: #e0f2fe; padding: 8px; font-weight: bold; font-size: 16px; margin-top: 15px; border: 1px solid #ccc; border-bottom: none; }
-                table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
-                th, td { border: 1px solid #ccc; padding: 8px; text-align: left; vertical-align: top; }
-                th { background-color: #f9fafb; font-weight: bold; }
                 .text-center { text-align: center; }
                 .activity-row { background-color: #f0fdf4; font-weight: bold; }
                 
@@ -844,8 +970,6 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                     .no-print { display: none; }
                     body { -webkit-print-color-adjust: exact; padding: 0; }
                     .page-break { page-break-before: always; }
-                    /* Ensure footer stays at bottom if using page per activity? */
-                    /* .activity-page { height: 100vh; position: relative; } */
                 }
             </style>
         </head>
@@ -987,6 +1111,28 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                                 <div className="text-xs text-gray-500 mt-1">ขึ้นหน้าใหม่ทุกกิจกรรม เหมาะสำหรับแจกจ่ายรายกิจกรรม</div>
                             </div>
                         </button>
+
+                        <div className="relative">
+                            <button 
+                                onClick={() => handlePrintJudges('official')}
+                                className="w-full flex items-center p-4 rounded-xl border border-gray-200 hover:border-amber-500 hover:bg-amber-50 transition-all group text-left"
+                            >
+                                <div className="p-3 bg-gray-100 rounded-full group-hover:bg-amber-100 mr-4">
+                                    <ScrollText className="w-6 h-6 text-gray-600 group-hover:text-amber-600" />
+                                </div>
+                                <div>
+                                    <div className="font-bold text-gray-800 group-hover:text-amber-700">พิมพ์คำสั่งแต่งตั้ง (Official Order)</div>
+                                    <div className="text-xs text-gray-500 mt-1">รูปแบบหนังสือราชการ (ตราครุฑ) พร้อมจำนวนทีม</div>
+                                </div>
+                            </button>
+                            <button 
+                                onClick={(e) => { e.stopPropagation(); setShowOfficialSettings(true); }}
+                                className="absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-white border border-gray-200 text-gray-500 hover:text-blue-600 hover:border-blue-300 shadow-sm"
+                                title="ตั้งค่ารูปแบบคำสั่ง"
+                            >
+                                <Settings className="w-4 h-4" />
+                            </button>
+                        </div>
                     </div>
                     {isGeneratingPrint && (
                         <div className="absolute inset-0 bg-white/80 flex flex-col items-center justify-center z-10">
@@ -994,6 +1140,57 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                             <span className="text-sm font-medium text-gray-600">กำลังเตรียมเอกสาร...</span>
                         </div>
                     )}
+                </div>
+            </div>
+        )}
+
+        {/* Official Settings Modal */}
+        {showOfficialSettings && (
+            <div className="fixed inset-0 bg-black/60 z-[250] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+                <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[90vh]">
+                    <div className="p-4 border-b border-gray-100 bg-amber-50 flex justify-between items-center">
+                        <h3 className="font-bold text-amber-800 flex items-center">
+                            <Settings className="w-5 h-5 mr-2" /> ตั้งค่าหนังสือคำสั่งราชการ
+                        </h3>
+                        <button onClick={() => setShowOfficialSettings(false)} className="p-1 hover:bg-amber-100 rounded-full text-amber-800">
+                            <X className="w-5 h-5" />
+                        </button>
+                    </div>
+                    <div className="p-6 overflow-y-auto space-y-4">
+                        <div>
+                            <label className="block text-xs font-bold text-gray-700 mb-1">หัวข้อคำสั่ง (Office Name)</label>
+                            <input className="w-full border rounded p-2 text-sm" value={officialConfig.officeName} onChange={e => setOfficialConfig({...officialConfig, officeName: e.target.value})} placeholder="คำสั่ง ศูนย์เครือข่าย..." />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs font-bold text-gray-700 mb-1">เลขที่คำสั่ง (No.)</label>
+                                <input className="w-full border rounded p-2 text-sm" value={officialConfig.commandNumber} onChange={e => setOfficialConfig({...officialConfig, commandNumber: e.target.value})} placeholder="ที่ .../2567" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-700 mb-1">ข้อความวันที่ (Date)</label>
+                                <input className="w-full border rounded p-2 text-sm" value={officialConfig.dateText} onChange={e => setOfficialConfig({...officialConfig, dateText: e.target.value})} />
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-gray-700 mb-1">เรื่อง (Subject)</label>
+                            <input className="w-full border rounded p-2 text-sm" value={officialConfig.subject} onChange={e => setOfficialConfig({...officialConfig, subject: e.target.value})} />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-gray-700 mb-1">ข้อความเกริ่นนำ (Preamble)</label>
+                            <textarea className="w-full border rounded p-2 text-sm h-24" value={officialConfig.preamble} onChange={e => setOfficialConfig({...officialConfig, preamble: e.target.value})} />
+                        </div>
+                        <div className="bg-gray-50 p-3 rounded border border-gray-200">
+                            <h4 className="text-xs font-bold text-gray-500 mb-2 uppercase">ผู้ลงนาม (Signatory)</h4>
+                            <div className="space-y-2">
+                                <input className="w-full border rounded p-2 text-sm" value={officialConfig.signerName} onChange={e => setOfficialConfig({...officialConfig, signerName: e.target.value})} placeholder="ชื่อ-สกุล (ไม่ต้องมีวงเล็บ)" />
+                                <input className="w-full border rounded p-2 text-sm" value={officialConfig.signerPosition} onChange={e => setOfficialConfig({...officialConfig, signerPosition: e.target.value})} placeholder="ตำแหน่ง" />
+                            </div>
+                        </div>
+                    </div>
+                    <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-2">
+                        <button onClick={() => setShowOfficialSettings(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded text-sm">ยกเลิก</button>
+                        <button onClick={handleSaveOfficialConfig} className="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 font-medium">บันทึกการตั้งค่า</button>
+                    </div>
                 </div>
             </div>
         )}
@@ -1741,6 +1938,57 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                                 </button>
                             </>
                         )}
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* Official Settings Modal */}
+        {showOfficialSettings && (
+            <div className="fixed inset-0 bg-black/60 z-[250] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+                <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[90vh]">
+                    <div className="p-4 border-b border-gray-100 bg-amber-50 flex justify-between items-center">
+                        <h3 className="font-bold text-amber-800 flex items-center">
+                            <Settings className="w-5 h-5 mr-2" /> ตั้งค่าหนังสือคำสั่งราชการ
+                        </h3>
+                        <button onClick={() => setShowOfficialSettings(false)} className="p-1 hover:bg-amber-100 rounded-full text-amber-800">
+                            <X className="w-5 h-5" />
+                        </button>
+                    </div>
+                    <div className="p-6 overflow-y-auto space-y-4">
+                        <div>
+                            <label className="block text-xs font-bold text-gray-700 mb-1">หัวข้อคำสั่ง (Office Name)</label>
+                            <input className="w-full border rounded p-2 text-sm" value={officialConfig.officeName} onChange={e => setOfficialConfig({...officialConfig, officeName: e.target.value})} placeholder="คำสั่ง ศูนย์เครือข่าย..." />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs font-bold text-gray-700 mb-1">เลขที่คำสั่ง (No.)</label>
+                                <input className="w-full border rounded p-2 text-sm" value={officialConfig.commandNumber} onChange={e => setOfficialConfig({...officialConfig, commandNumber: e.target.value})} placeholder="ที่ .../2567" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-700 mb-1">ข้อความวันที่ (Date)</label>
+                                <input className="w-full border rounded p-2 text-sm" value={officialConfig.dateText} onChange={e => setOfficialConfig({...officialConfig, dateText: e.target.value})} />
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-gray-700 mb-1">เรื่อง (Subject)</label>
+                            <input className="w-full border rounded p-2 text-sm" value={officialConfig.subject} onChange={e => setOfficialConfig({...officialConfig, subject: e.target.value})} />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-gray-700 mb-1">ข้อความเกริ่นนำ (Preamble)</label>
+                            <textarea className="w-full border rounded p-2 text-sm h-24" value={officialConfig.preamble} onChange={e => setOfficialConfig({...officialConfig, preamble: e.target.value})} />
+                        </div>
+                        <div className="bg-gray-50 p-3 rounded border border-gray-200">
+                            <h4 className="text-xs font-bold text-gray-500 mb-2 uppercase">ผู้ลงนาม (Signatory)</h4>
+                            <div className="space-y-2">
+                                <input className="w-full border rounded p-2 text-sm" value={officialConfig.signerName} onChange={e => setOfficialConfig({...officialConfig, signerName: e.target.value})} placeholder="ชื่อ-สกุล (ไม่ต้องมีวงเล็บ)" />
+                                <input className="w-full border rounded p-2 text-sm" value={officialConfig.signerPosition} onChange={e => setOfficialConfig({...officialConfig, signerPosition: e.target.value})} placeholder="ตำแหน่ง" />
+                            </div>
+                        </div>
+                    </div>
+                    <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-2">
+                        <button onClick={() => setShowOfficialSettings(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded text-sm">ยกเลิก</button>
+                        <button onClick={handleSaveOfficialConfig} className="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 font-medium">บันทึกการตั้งค่า</button>
                     </div>
                 </div>
             </div>
