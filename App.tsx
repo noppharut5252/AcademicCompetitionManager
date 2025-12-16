@@ -152,35 +152,75 @@ const App: React.FC = () => {
       setIsAuthenticated(true);
   };
 
-  // Skeleton Loader Component
+  // Professional Skeleton Loader
   const SkeletonLoader = () => (
-    <div className="space-y-6 p-2">
+    <div className="space-y-6 animate-pulse p-1">
        {/* Hero Skeleton */}
-       <div className="h-32 bg-gray-200 rounded-2xl animate-pulse"></div>
+       <div className="h-40 bg-gradient-to-r from-gray-200 to-gray-300 rounded-2xl shadow-sm relative overflow-hidden">
+          <div className="absolute inset-0 bg-white/20 skew-x-12 translate-x-full animate-[shimmer_1.5s_infinite]"></div>
+       </div>
        
+       {/* Mobile Menu Skeleton */}
+       <div className="grid grid-cols-4 gap-4 md:hidden">
+          {[1,2,3,4,5,6,7,8].map(i => (
+             <div key={i} className="flex flex-col items-center gap-2">
+                <div className="w-14 h-14 bg-gray-200 rounded-2xl"></div>
+                <div className="w-12 h-3 bg-gray-200 rounded"></div>
+             </div>
+          ))}
+       </div>
+
+       {/* Stats Grid Skeleton */}
+       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+           {[1,2,3].map(i => (
+               <div key={i} className="h-32 bg-white rounded-xl border border-gray-100 p-4 shadow-sm flex flex-col justify-between">
+                   <div className="w-1/2 h-4 bg-gray-200 rounded"></div>
+                   <div className="w-3/4 h-8 bg-gray-200 rounded"></div>
+               </div>
+           ))}
+       </div>
+
+       {/* Content Split Skeleton */}
        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
            <div className="lg:col-span-2 space-y-4">
-               {/* News Skeletons */}
-               <div className="h-48 bg-gray-200 rounded-xl animate-pulse"></div>
-               <div className="h-48 bg-gray-200 rounded-xl animate-pulse"></div>
+               <div className="w-1/3 h-6 bg-gray-200 rounded mb-4"></div>
+               {[1,2].map(i => (
+                   <div key={i} className="h-48 bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
+                       <div className="w-3/4 h-6 bg-gray-200 rounded mb-3"></div>
+                       <div className="w-full h-4 bg-gray-100 rounded mb-2"></div>
+                       <div className="w-full h-4 bg-gray-100 rounded mb-2"></div>
+                       <div className="w-2/3 h-4 bg-gray-100 rounded"></div>
+                   </div>
+               ))}
            </div>
            <div className="space-y-4">
-               {/* Stat Skeletons */}
-               <div className="h-24 bg-gray-200 rounded-xl animate-pulse"></div>
-               <div className="h-24 bg-gray-200 rounded-xl animate-pulse"></div>
-               <div className="h-64 bg-gray-200 rounded-xl animate-pulse"></div>
+               <div className="w-1/2 h-6 bg-gray-200 rounded mb-4"></div>
+               {[1,2,3].map(i => (
+                   <div key={i} className="h-24 bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+                       <div className="w-full h-4 bg-gray-200 rounded mb-2"></div>
+                       <div className="w-1/2 h-3 bg-gray-100 rounded"></div>
+                   </div>
+               ))}
            </div>
        </div>
     </div>
   );
 
-  // 1. Initial Loading (Checking LIFF) - Full Page Spinner
-  if (liffChecking) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <Loader2 className="w-10 h-10 animate-spin text-blue-600" />
+  // Custom Loading Indicator (Lightbulb GIF)
+  const CustomLoader = () => (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50">
+        <img 
+            src="https://raw.githubusercontent.com/infobwd/PenaltyPro2/refs/heads/main/lightbulb.gif" 
+            alt="Loading..." 
+            className="w-24 h-24 object-contain mb-4 drop-shadow-md"
+        />
+        <p className="text-gray-500 text-sm font-medium animate-pulse">กำลังโหลดข้อมูล...</p>
       </div>
-    );
+  );
+
+  // 1. Initial Loading (Checking LIFF)
+  if (liffChecking) {
+    return <CustomLoader />;
   }
 
   // 2. Registration Mode (Found LINE but no User)
@@ -351,7 +391,7 @@ const App: React.FC = () => {
         {/* Public Route for Verification - Does not need Layout/Auth */}
         <Routes>
             <Route path="/verify" element={
-                data ? <VerifyCertificate data={data} /> : <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-blue-600" /></div>
+                data ? <VerifyCertificate data={data} /> : <CustomLoader />
             } />
             <Route path="*" element={
                 // Pass data to Layout for global access (e.g., Scanner Modal)
