@@ -6,7 +6,6 @@ import CertificateConfigModal from './CertificateConfigModal';
 import { getCertificateConfig } from '../services/api';
 import { useSearchParams } from 'react-router-dom';
 import { shareIdCard } from '../services/liff';
-// @ts-ignore
 import QRCode from 'qrcode';
 
 interface DocumentsViewProps {
@@ -21,9 +20,13 @@ const QRCodeImage = ({ text, size = 150, className }: { text: string, size?: num
 
     useEffect(() => {
         if (!text) return;
+        // Generate QR as Data URL
         QRCode.toDataURL(text, { width: size, margin: 1 })
-            .then((url: string) => setSrc(url))
-            .catch((err: any) => console.error("QR Error", err));
+            .then((url) => setSrc(url))
+            .catch((err) => {
+                console.error("QR Error", err);
+                setSrc(''); // Clear on error
+            });
     }, [text, size]);
 
     if (!src) return <div className={`bg-gray-100 animate-pulse ${className}`} />;
@@ -411,7 +414,17 @@ const ArrowLeftRightIcon = ({className}:{className?:string}) => (
 );
 
 // --- DigitalIdCard (Preview Card) ---
-const DigitalIdCard = ({ member, role, team, activity, schoolName, viewLevel, onClick }: { member: any, role: string, team: Team, activity: string, schoolName: string, viewLevel: 'cluster' | 'area', onClick: () => void }) => {
+interface DigitalIdCardProps {
+    member: any;
+    role: string;
+    team: Team;
+    activity: string;
+    schoolName: string;
+    viewLevel: 'cluster' | 'area';
+    onClick: () => void;
+}
+
+const DigitalIdCard: React.FC<DigitalIdCardProps> = ({ member, role, team, activity, schoolName, viewLevel, onClick }) => {
     const getPhotoUrl = (urlOrId: string) => {
         if (!urlOrId) return "https://cdn-icons-png.flaticon.com/512/3135/3135768.png";
         if (urlOrId.startsWith('http')) return urlOrId;
@@ -1538,3 +1551,4 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
 };
 
 export default DocumentsView;
+
