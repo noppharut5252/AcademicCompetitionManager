@@ -76,7 +76,8 @@ export const logoutLiff = async () => {
 // --- Helper: Check sharing capability ---
 const canUseShareTargetPicker = () => {
     // @ts-ignore
-    return typeof liff !== 'undefined' && liff.isLoggedIn() && liff.isInClient() && liff.isApiAvailable('shareTargetPicker');
+    // Removed liff.isInClient() to allow external browsers (Desktop/Mobile Web) if logged in
+    return typeof liff !== 'undefined' && liff.isLoggedIn() && liff.isApiAvailable('shareTargetPicker');
 };
 
 export const shareIdCard = async (
