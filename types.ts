@@ -187,6 +187,7 @@ export interface Judge {
   importedBy: string;     // Col 9: ImportedBy
   importedAt: string;     // Col 10: ImportedAt
   stageScope: 'cluster' | 'area'; // Col 11: StageScope
+  photoUrl?: string;      // Col 12: Photo URL (New)
 }
 
 export interface AppData {
