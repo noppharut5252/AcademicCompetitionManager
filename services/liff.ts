@@ -74,10 +74,10 @@ export const logoutLiff = async () => {
 };
 
 // --- Helper: Check sharing capability ---
-const canUseShareTargetPicker = () => {
+// Checks if the environment supports ShareTargetPicker (regardless of login status)
+const isShareTargetPickerSupported = () => {
     // @ts-ignore
-    // Allow sharing if logged in and API is available (removed isInClient check to support external browsers)
-    return typeof liff !== 'undefined' && liff.isLoggedIn() && liff.isApiAvailable('shareTargetPicker');
+    return typeof liff !== 'undefined' && liff.isApiAvailable('shareTargetPicker');
 };
 
 export const shareIdCard = async (
@@ -97,7 +97,15 @@ export const shareIdCard = async (
     const roleText = role === 'Teacher' ? 'ครูผู้ฝึกสอน (Trainer)' : 'ผู้เข้าแข่งขัน (Competitor)';
     const headerColor = role === 'Teacher' ? '#4F46E5' : '#10B981'; 
 
-    if (canUseShareTargetPicker()) {
+    // Prioritize ShareTargetPicker (Flex Message)
+    if (isShareTargetPickerSupported()) {
+        // @ts-ignore
+        if (!liff.isLoggedIn()) {
+            // @ts-ignore
+            liff.login({ redirectUri: window.location.href });
+            return { success: false, method: 'line' }; // Redirecting
+        }
+
         const flexMessage = {
             type: "flex",
             altText: `Digital ID: ${memberName}`,
@@ -243,7 +251,15 @@ export const shareScoreResult = async (
     const displayTeamName = (teamName && teamName.trim() !== '') ? teamName : schoolName || 'ไม่ระบุชื่อทีม';
     const textSummary = `🏆 ผลการแข่งขัน: ${activityName}\nทีม: ${displayTeamName}\nโรงเรียน: ${schoolName}\n\n⭐ คะแนน: ${score}\n🏅 รางวัล: ${medalThai}${rankText}`;
 
-    if (canUseShareTargetPicker()) {
+    // Prioritize ShareTargetPicker
+    if (isShareTargetPickerSupported()) {
+        // @ts-ignore
+        if (!liff.isLoggedIn()) {
+            // @ts-ignore
+            liff.login({ redirectUri: window.location.href });
+            return { success: false, method: 'line' };
+        }
+
         const medalColor = (medal === 'Gold') ? '#E6B800' : (medal === 'Silver') ? '#A0A0A0' : (medal === 'Bronze') ? '#CD7F32' : '#333333';
         
         const flexMessage = {
@@ -351,7 +367,14 @@ export const shareTop3Result = async (
         textSummary += `${w.rank}. ${displayTeam} (${w.score} คะแนน)\n`;
     });
 
-    if (canUseShareTargetPicker()) {
+    if (isShareTargetPickerSupported()) {
+        // @ts-ignore
+        if (!liff.isLoggedIn()) {
+            // @ts-ignore
+            liff.login({ redirectUri: window.location.href });
+            return { success: false, method: 'line' };
+        }
+
         const createRankRow = (winner: any) => {
              const color = winner.rank === 1 ? '#E6B800' : winner.rank === 2 ? '#A0A0A0' : '#CD7F32';
              const displayTeam = (winner.teamName && winner.teamName.trim() !== '') ? winner.teamName : winner.schoolName || 'ไม่ระบุชื่อทีม';
@@ -459,7 +482,14 @@ export const shareVenue = async (venue: any): Promise<{ success: boolean; method
     const imageUrl = venue.imageUrl || "https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=800&q=80";
     const textSummary = `📍 สนามแข่งขัน: ${venue.name}\n${venue.description || ''}\n\n🗺️ แผนที่: ${mapUrl}\n📅 ดูตารางการแข่งขัน: ${appUrl}`;
 
-    if (canUseShareTargetPicker()) {
+    if (isShareTargetPickerSupported()) {
+        // @ts-ignore
+        if (!liff.isLoggedIn()) {
+            // @ts-ignore
+            liff.login({ redirectUri: window.location.href });
+            return { success: false, method: 'line' };
+        }
+
         const flexMessage = {
             type: "flex",
             altText: `สนามแข่งขัน: ${venue.name}`,
@@ -556,7 +586,14 @@ export const shareSchedule = async (
     
     const textSummary = `📅 กำหนดการแข่งขัน\n${activityName}\n\n📍 สถานที่: ${venueName} ${displayRoom}\n🗓️ วันที่: ${displayDate}\n⏰ เวลา: ${displayTime}\n\nดูรายละเอียดเพิ่มเติม: ${appUrl}`;
 
-    if (canUseShareTargetPicker()) {
+    if (isShareTargetPickerSupported()) {
+        // @ts-ignore
+        if (!liff.isLoggedIn()) {
+            // @ts-ignore
+            liff.login({ redirectUri: window.location.href });
+            return { success: false, method: 'line' };
+        }
+
         const flexMessage = {
             type: "flex",
             altText: `กำหนดการ: ${activityName}`,
