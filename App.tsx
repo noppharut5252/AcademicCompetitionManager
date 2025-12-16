@@ -6,15 +6,16 @@ import TeamList from './components/TeamList';
 import ActivityList from './components/ActivityList';
 import ResultsView from './components/ResultsView';
 import DocumentsView from './components/DocumentsView';
-import ProfileView from './components/ProfileView'; // Import ProfileView
-import ScoreEntry from './components/ScoreEntry'; // Import ScoreEntry
-import VerifyCertificate from './components/VerifyCertificate'; // Import VerifyCertificate
-import VenuesView from './components/VenuesView'; // Import VenuesView
-import JudgesView from './components/JudgesView'; // Import JudgesView
+import ProfileView from './components/ProfileView'; 
+import ScoreEntry from './components/ScoreEntry'; 
+import VerifyCertificate from './components/VerifyCertificate'; 
+import VenuesView from './components/VenuesView'; 
+import JudgesView from './components/JudgesView'; 
+import AnnouncementManager from './components/AnnouncementManager'; 
 import { AppData, User } from './types';
-import { fetchData, loginStandardUser, checkUserPermission } from './services/api';
+import { fetchData, loginStandardUser, checkUserPermission, verifyAndLinkLine } from './services/api';
 import { initLiff, loginLiff, LiffProfile } from './services/liff';
-import { Loader2, LogIn, User as UserIcon, Lock, Globe, AlertCircle, Sparkles } from 'lucide-react';
+import { Loader2, LogIn, User as UserIcon, Lock, Globe, AlertCircle, Sparkles, Link as LinkIcon, UserPlus } from 'lucide-react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 
 const App: React.FC = () => {
@@ -28,6 +29,13 @@ const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | any | null>(null);
   const [isRegistering, setIsRegistering] = useState(false);
   
+  // Linking Account State
+  const [isLinkingMode, setIsLinkingMode] = useState(false);
+  const [pendingLiffProfile, setPendingLiffProfile] = useState<LiffProfile | null>(null);
+  const [linkInput, setLinkInput] = useState('');
+  const [linkError, setLinkError] = useState('');
+  const [isVerifyingLink, setIsVerifyingLink] = useState(false);
+
   // Login Form State
   const [loginMethod, setLoginMethod] = useState<'line' | 'standard'>('line');
   const [username, setUsername] = useState('');
@@ -64,7 +72,7 @@ const App: React.FC = () => {
           }
       }
 
-      // 2. If no session, use LIFF to check if user needs to login/register
+      // 2. If no session, use LIFF to check if user needs to login/register/link
       if (liffProfile) {
           setLoading(true);
           const dbUser = await checkUserPermission(liffProfile.userId);
@@ -77,23 +85,11 @@ const App: React.FC = () => {
              setIsAuthenticated(true);
              fetchAppData();
           } else {
-             // Failed: Not linked yet -> Go to Registration Flow
-             console.log("LINE connected but not linked. Redirecting to register.");
-             setCurrentUser({
-                 userid: '',
-                 username: '',
-                 name: '', // Will be filled in registration
-                 surname: '',
-                 SchoolID: '',
-                 level: 'user',
-                 email: liffProfile.email || '',
-                 avatarFileId: '',
-                 userline_id: liffProfile.userId,
-                 pictureUrl: liffProfile.pictureUrl,
-                 displayName: liffProfile.displayName
-             });
-             setIsRegistering(true);
-             fetchAppData(); // Need data for schools list in registration
+             // Failed: Not linked yet -> Go to Link/Register Flow
+             console.log("LINE connected but not linked. Prompting link or register.");
+             setPendingLiffProfile(liffProfile);
+             setIsLinkingMode(true);
+             fetchAppData(); // Pre-fetch data
           }
           setLoading(false);
       }
@@ -163,11 +159,56 @@ const App: React.FC = () => {
       setIsAuthenticated(true);
   };
 
+  // New: Handle Verify and Link
+  const handleVerifyLink = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!linkInput || !pendingLiffProfile) return;
+      
+      setIsVerifyingLink(true);
+      setLinkError('');
+      
+      try {
+          const result = await verifyAndLinkLine(pendingLiffProfile.userId, linkInput);
+          if (result.success && result.user) {
+              const fullUser = { ...result.user, pictureUrl: pendingLiffProfile.pictureUrl, displayName: pendingLiffProfile.displayName };
+              setCurrentUser(fullUser);
+              localStorage.setItem('comp_user', JSON.stringify(fullUser));
+              setIsLinkingMode(false);
+              setIsAuthenticated(true);
+          } else {
+              setLinkError(result.message || 'ไม่พบข้อมูลที่ตรงกัน');
+          }
+      } catch (err) {
+          setLinkError('เกิดข้อผิดพลาดในการเชื่อมต่อ');
+      } finally {
+          setIsVerifyingLink(false);
+      }
+  };
+
+  const switchToRegister = () => {
+      setIsLinkingMode(false);
+      if (pendingLiffProfile) {
+          setCurrentUser({
+             userid: '',
+             username: '',
+             name: '',
+             surname: '',
+             SchoolID: '',
+             level: 'user',
+             email: pendingLiffProfile.email || '',
+             avatarFileId: '',
+             userline_id: pendingLiffProfile.userId,
+             pictureUrl: pendingLiffProfile.pictureUrl,
+             displayName: pendingLiffProfile.displayName
+         });
+         setIsRegistering(true);
+      }
+  };
+
   // Enhanced Loading Screen
   const LoadingScreen = () => (
       <div className="fixed inset-0 bg-gradient-to-br from-blue-50 to-indigo-50 flex flex-col items-center justify-center z-50">
         <div className="bg-white p-8 rounded-3xl shadow-xl flex flex-col items-center max-w-sm w-full mx-4 relative overflow-hidden">
-            {/* Decorative background blob */}
             <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 animate-[shimmer_2s_infinite]"></div>
             
             <div className="mb-6 relative">
@@ -201,7 +242,77 @@ const App: React.FC = () => {
     return <LoadingScreen />;
   }
 
-  // 2. Registration Mode (Found LINE but no User)
+  // 2. Linking Mode (Found LINE but not in DB)
+  if (isLinkingMode && pendingLiffProfile) {
+      return (
+          <div className="min-h-screen bg-gray-50 flex flex-col justify-center px-4 font-kanit">
+              <div className="max-w-md w-full mx-auto bg-white rounded-2xl shadow-xl overflow-hidden animate-in fade-in zoom-in duration-300">
+                  <div className="bg-amber-500 p-6 text-center text-white relative overflow-hidden">
+                      <div className="absolute inset-0 bg-white/10 skew-y-6 transform origin-bottom-left"></div>
+                      <div className="relative z-10">
+                          <h1 className="text-xl font-bold">ไม่พบ LINE ID ในระบบ</h1>
+                          <p className="text-amber-100 text-sm mt-1">บัญชีนี้ยังไม่เคยลงทะเบียนมาก่อน</p>
+                      </div>
+                  </div>
+                  
+                  <div className="p-6 space-y-6">
+                      <div className="flex items-center gap-4 bg-gray-50 p-3 rounded-xl border border-gray-100">
+                          <img src={pendingLiffProfile.pictureUrl} className="w-12 h-12 rounded-full border-2 border-white shadow-sm" alt="Profile"/>
+                          <div>
+                              <div className="text-sm font-bold text-gray-800">{pendingLiffProfile.displayName}</div>
+                              <div className="text-xs text-gray-500">บัญชี LINE ปัจจุบัน</div>
+                          </div>
+                      </div>
+
+                      <form onSubmit={handleVerifyLink} className="space-y-3">
+                          <label className="block text-sm font-medium text-gray-700">
+                              หากคุณมีบัญชีผู้ใช้อยู่แล้ว กรุณายืนยันตัวตนเพื่อเชื่อมต่อ
+                          </label>
+                          <div className="relative">
+                              <input 
+                                  type="text" 
+                                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all"
+                                  placeholder="อีเมล หรือ เบอร์โทร (5 ตัวท้าย)"
+                                  value={linkInput}
+                                  onChange={(e) => setLinkInput(e.target.value)}
+                                  required
+                              />
+                              <LinkIcon className="absolute left-3 top-3.5 w-5 h-5 text-gray-400" />
+                          </div>
+                          
+                          {linkError && (
+                              <div className="text-red-500 text-xs bg-red-50 p-2 rounded-lg flex items-center">
+                                  <AlertCircle className="w-4 h-4 mr-1"/> {linkError}
+                              </div>
+                          )}
+
+                          <button 
+                              type="submit" 
+                              disabled={isVerifyingLink}
+                              className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 rounded-xl shadow-md transition-colors flex items-center justify-center disabled:opacity-70"
+                          >
+                              {isVerifyingLink ? <Loader2 className="w-5 h-5 animate-spin"/> : 'ตรวจสอบและเชื่อมต่อ'}
+                          </button>
+                      </form>
+
+                      <div className="relative py-2">
+                          <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200"></div></div>
+                          <div className="relative flex justify-center text-xs"><span className="px-2 bg-white text-gray-500">หรือ หากยังไม่มีบัญชี</span></div>
+                      </div>
+
+                      <button 
+                          onClick={switchToRegister}
+                          className="w-full border-2 border-blue-500 text-blue-600 font-bold py-3 rounded-xl hover:bg-blue-50 transition-colors flex items-center justify-center"
+                      >
+                          <UserPlus className="w-5 h-5 mr-2" /> ลงทะเบียนสมาชิกใหม่
+                      </button>
+                  </div>
+              </div>
+          </div>
+      );
+  }
+
+  // 3. Registration Mode
   if (isRegistering && data) {
       return (
         <div className="min-h-screen bg-gray-50 p-4 font-kanit">
@@ -223,8 +334,8 @@ const App: React.FC = () => {
       )
   }
 
-  // 3. Login Screen
-  if (!isAuthenticated && !isRegistering) {
+  // 4. Login Screen (Fallback / Standard Login)
+  if (!isAuthenticated && !isRegistering && !isLinkingMode) {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col justify-center px-4 font-kanit">
         <div className="max-w-md w-full mx-auto bg-white rounded-2xl shadow-xl overflow-hidden">
@@ -263,7 +374,7 @@ const App: React.FC = () => {
                             <span className="mr-2 font-bold">Log in with LINE</span>
                         </button>
                         <p className="text-xs text-gray-400 mt-4">
-                            * หากยังไม่มีบัญชี ระบบจะพาท่านไปยังหน้าลงทะเบียนอัตโนมัติ
+                            * ระบบจะตรวจสอบบัญชีอัตโนมัติ หากยังไม่เคยลงทะเบียน ระบบจะพาไปหน้าลงทะเบียน
                         </p>
                     </div>
                 ) : (
@@ -333,7 +444,7 @@ const App: React.FC = () => {
     );
   }
 
-  // 4. Main App Content (Authenticated)
+  // 5. Main App Content (Authenticated)
   const renderError = () => {
     if (error) {
       return (
@@ -382,6 +493,7 @@ const App: React.FC = () => {
                             <Route path="/results" element={<ResultsView data={data} />} />
                             <Route path="/certificates" element={<DocumentsView data={data} type="certificate" user={currentUser} />} />
                             <Route path="/idcards" element={<DocumentsView data={data} type="idcard" user={currentUser} />} />
+                            <Route path="/announcements" element={<AnnouncementManager data={data} user={currentUser} onDataUpdate={() => fetchAppData(true)} />} />
                             <Route path="/schools" element={<PlaceholderMenu title="ข้อมูลโรงเรียน" />} />
                             <Route path="/settings" element={<PlaceholderMenu title="ตั้งค่าระบบ" />} />
                             <Route 
