@@ -203,3 +203,4 @@ const VerifyCertificate: React.FC<VerifyCertificateProps> = ({ data }) => {
 };
 
 export default VerifyCertificate;
+
