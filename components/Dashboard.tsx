@@ -194,26 +194,30 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
       return { topBySuccessRate, topByScore, topByGold, fullSuccessRate };
   }, [scopeTeams, viewLevel, data.schools]);
 
-  // 4. Judge Cooperation Stats (New)
+  // 4. Judge Cooperation Stats (Updated: Separate by Level & Count Activities)
   const judgeCooperation = useMemo(() => {
-      const stats: Record<string, { name: string, count: number, cluster: number, area: number }> = {};
+      const stats: Record<string, { name: string, count: number }> = {};
       
       data.judges.forEach(j => {
+          // Filter by current view level
+          const isArea = j.stageScope === 'area';
+          if (viewLevel === 'area' && !isArea) return;
+          if (viewLevel === 'cluster' && isArea) return;
+
           // Skip external judges
           if (j.schoolId === '__EXTERNAL__') return;
           
           const schoolName = j.schoolName || 'Unknown';
-          if (!stats[schoolName]) stats[schoolName] = { name: schoolName, count: 0, cluster: 0, area: 0 };
+          if (!stats[schoolName]) stats[schoolName] = { name: schoolName, count: 0 };
           
+          // Count every assignment (which is a row in data.judges) as one activity cooperation
           stats[schoolName].count++;
-          if (j.stageScope === 'area') stats[schoolName].area++;
-          else stats[schoolName].cluster++;
       });
 
       return Object.values(stats)
           .sort((a, b) => b.count - a.count)
           .slice(0, 5); // Top 5 Cooperative Schools
-  }, [data.judges]);
+  }, [data.judges, viewLevel]);
 
   // 5. Unscored Teams Logic
   const unscoredTeams = useMemo(() => {
@@ -584,11 +588,11 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
           {/* Right Column: News & Manuals & New Blocks */}
           <div className="space-y-6">
              
-             {/* Judge Cooperation Stats (New) */}
+             {/* Judge Cooperation Stats (Updated Logic) */}
              <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                  <div className="p-4 border-b border-gray-100 bg-emerald-50/50 flex items-center justify-between">
                      <h3 className="text-sm font-bold text-emerald-800 flex items-center">
-                         <Handshake className="w-4 h-4 mr-2" /> ความร่วมมือ (กรรมการ)
+                         <Handshake className="w-4 h-4 mr-2" /> ความร่วมมือ (กรรมการ) - {viewLevel === 'area' ? 'ระดับเขต' : 'ระดับกลุ่ม'}
                      </h3>
                  </div>
                  <div className="p-3">
@@ -600,7 +604,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
                                          <div className="w-5 h-5 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center text-xs font-bold mr-2 shrink-0">{idx + 1}</div>
                                          <div className="truncate text-gray-700" title={s.name}>{s.name}</div>
                                      </div>
-                                     <div className="font-bold text-emerald-600">{s.count} <span className="text-[10px] text-gray-400 font-normal">คน</span></div>
+                                     <div className="font-bold text-emerald-600">{s.count} <span className="text-[10px] text-gray-400 font-normal">รายการ</span></div>
                                  </div>
                              ))}
                          </div>
