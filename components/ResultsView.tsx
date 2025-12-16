@@ -1,7 +1,7 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { AppData, Team, AreaStageInfo } from '../types';
-import { Award, Search, Medal, Star, Trophy, LayoutGrid, Crown, School, CheckCircle, BarChart3, Flag, Loader2 } from 'lucide-react';
+import { Award, Search, Medal, Star, Trophy, LayoutGrid, Crown, School, CheckCircle, BarChart3 } from 'lucide-react';
 
 interface ResultsViewProps {
   data: AppData;
@@ -9,28 +9,9 @@ interface ResultsViewProps {
 
 type Stage = 'cluster' | 'area';
 
-const ResultsSkeleton = () => (
-    <div className="space-y-6 animate-pulse p-4">
-        <div className="h-24 bg-gray-200 rounded-xl"></div>
-        <div className="h-16 bg-gray-200 rounded-xl"></div>
-        <div className="space-y-4">
-            {[1, 2, 3, 4, 5].map(i => (
-                <div key={i} className="h-32 bg-gray-200 rounded-xl"></div>
-            ))}
-        </div>
-    </div>
-);
-
 const ResultsView: React.FC<ResultsViewProps> = ({ data }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [stage, setStage] = useState<Stage>('cluster');
-  const [isLoading, setIsLoading] = useState(true);
-
-  // Simulate loading on mount
-  useEffect(() => {
-      const timer = setTimeout(() => setIsLoading(false), 800);
-      return () => clearTimeout(timer);
-  }, []);
 
   const getAreaInfo = (team: Team): AreaStageInfo | null => {
       try {
@@ -118,8 +99,6 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data }) => {
       return 'bg-blue-50 text-blue-700 border-blue-100';
   };
 
-  if (isLoading) return <ResultsSkeleton />;
-
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       
@@ -200,15 +179,11 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data }) => {
               let score = 0;
               let medalText = "";
               let rank = "";
-              let isQualifiedForArea = false;
               
               if (stage === 'cluster') {
                   score = team.score;
                   medalText = getMedalColor(team.score, team.medalOverride);
                   rank = team.rank;
-                  if (String(team.rank) === '1' && String(team.flag).toUpperCase() === 'TRUE') {
-                      isQualifiedForArea = true;
-                  }
               } else {
                   const areaInfo = getAreaInfo(team);
                   score = areaInfo?.score || 0;
@@ -224,15 +199,9 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data }) => {
                       <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${cleanMedal === 'เหรียญทอง' ? 'bg-yellow-400' : cleanMedal === 'เหรียญเงิน' ? 'bg-gray-400' : cleanMedal === 'เหรียญทองแดง' ? 'bg-orange-400' : 'bg-blue-400'}`}></div>
                       
                       <div className="flex justify-between items-start mb-2 pl-2">
-                          <div className="flex-1 mr-2">
-                              <div className="font-bold text-gray-900 text-lg line-clamp-1">{team.teamName}</div>
-                              <div className="text-xs text-gray-500 font-medium flex items-center mt-0.5">
-                                  <School className="w-3 h-3 mr-1 text-gray-400" />
-                                  {school?.SchoolName}
-                              </div>
-                          </div>
+                          <div className="font-bold text-gray-900 text-lg line-clamp-1">{team.teamName}</div>
                           {rank && (
-                              <div className="bg-gray-900 text-white text-xs font-bold px-2 py-1 rounded shadow-sm shrink-0">
+                              <div className="bg-gray-900 text-white text-xs font-bold px-2 py-1 rounded shadow-sm">
                                   #{rank}
                               </div>
                           )}
@@ -243,6 +212,10 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data }) => {
                               <Crown className="w-3 h-3 mr-1 text-gray-400" />
                               {activity?.name || team.activityId}
                           </div>
+                          <div className="text-xs text-gray-500 flex items-center">
+                              <School className="w-3 h-3 mr-1 text-gray-400" />
+                              {school?.SchoolName}
+                          </div>
                       </div>
 
                       <div className="flex justify-between items-center bg-gray-50 rounded-lg p-2 pl-3 ml-2 border border-gray-100">
@@ -250,16 +223,9 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data }) => {
                               <div className="text-[10px] text-gray-400 uppercase font-bold">คะแนน</div>
                               <div className="text-lg font-black text-gray-800">{score}</div>
                           </div>
-                          <div className="flex items-center gap-2">
-                              {isQualifiedForArea && stage === 'cluster' && (
-                                  <div className="px-2 py-1 rounded bg-purple-100 text-purple-700 text-[10px] font-bold border border-purple-200 flex items-center" title="ได้เป็นตัวแทนไปแข่งระดับเขต">
-                                      <Flag className="w-3 h-3 mr-1" /> ตัวแทนเขต
-                                  </div>
-                              )}
-                              <div className={`px-3 py-1 rounded-full text-xs font-bold border ${badgeClass} flex items-center`}>
-                                  {getMedalIcon(medalText)}
-                                  <span className="ml-1.5">{cleanMedal}</span>
-                              </div>
+                          <div className={`px-3 py-1 rounded-full text-xs font-bold border ${badgeClass} flex items-center`}>
+                              {getMedalIcon(medalText)}
+                              <span className="ml-1.5">{cleanMedal}</span>
                           </div>
                       </div>
                   </div>
@@ -278,7 +244,7 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data }) => {
                 <thead className={stage === 'cluster' ? 'bg-blue-50' : 'bg-purple-50'}>
                     <tr>
                         <th className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider ${stage === 'cluster' ? 'text-blue-800' : 'text-purple-800'}`}>อันดับ</th>
-                        <th className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider ${stage === 'cluster' ? 'text-blue-800' : 'text-purple-800'}`}>ทีม / โรงเรียน</th>
+                        <th className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider ${stage === 'cluster' ? 'text-blue-800' : 'text-purple-800'}`}>ทีม</th>
                         <th className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider ${stage === 'cluster' ? 'text-blue-800' : 'text-purple-800'}`}>รายการแข่งขัน</th>
                         <th className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider ${stage === 'cluster' ? 'text-blue-800' : 'text-purple-800'}`}>คะแนน ({stage === 'cluster' ? 'Cluster' : 'Area'})</th>
                         <th className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider ${stage === 'cluster' ? 'text-blue-800' : 'text-purple-800'}`}>รางวัล/สถานะ</th>
@@ -291,14 +257,10 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data }) => {
                         
                         let score = 0;
                         let medalText = "";
-                        let isQualifiedForArea = false;
                         
                         if (stage === 'cluster') {
                             score = team.score;
                             medalText = getMedalColor(team.score, team.medalOverride);
-                            if (String(team.rank) === '1' && String(team.flag).toUpperCase() === 'TRUE') {
-                                isQualifiedForArea = true;
-                            }
                         } else {
                             const areaInfo = getAreaInfo(team);
                             score = areaInfo?.score || 0;
@@ -311,11 +273,8 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data }) => {
                                     {index + 1}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap">
-                                    <div className="text-sm font-bold text-gray-900">{team.teamName}</div>
-                                    <div className="text-xs text-gray-500 mt-0.5 flex items-center">
-                                        <School className="w-3 h-3 mr-1"/>
-                                        {school?.SchoolName}
-                                    </div>
+                                    <div className="text-sm font-medium text-gray-900">{team.teamName}</div>
+                                    <div className="text-xs text-gray-500">{school?.SchoolName}</div>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                                     {activity?.name || team.activityId}
@@ -324,18 +283,11 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data }) => {
                                     {score}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap">
-                                    <div className="flex items-center gap-2">
-                                        <span className="flex items-center text-sm text-gray-700">
-                                            {stage === 'area' && <Trophy className="w-4 h-4 text-purple-500 mr-2"/>}
-                                            {stage === 'cluster' && getMedalIcon(medalText)}
-                                            <span className="ml-2">{medalText}</span>
-                                        </span>
-                                        {isQualifiedForArea && stage === 'cluster' && (
-                                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-purple-100 text-purple-700 border border-purple-200 ml-2" title="ตัวแทนไปแข่งระดับเขต">
-                                                <Flag className="w-3 h-3 mr-1" /> ไปเขต
-                                            </span>
-                                        )}
-                                    </div>
+                                    <span className="flex items-center text-sm text-gray-700">
+                                        {stage === 'area' && <Trophy className="w-4 h-4 text-purple-500 mr-2"/>}
+                                        {stage === 'cluster' && getMedalIcon(medalText)}
+                                        <span className="ml-2">{medalText}</span>
+                                    </span>
                                 </td>
                             </tr>
                         );
