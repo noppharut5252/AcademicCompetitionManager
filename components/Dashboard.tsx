@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { AppData, Announcement, User, AreaStageInfo, Team, Venue } from '../types';
-import { Users, School, Trophy, Megaphone, Plus, Book, Calendar, ChevronRight, FileText, Loader2, Star, Medal, TrendingUp, Activity, Timer, ArrowUpRight, Zap, Target, CheckCircle, PieChart as PieIcon, List, X, BarChart3, MapPin, Navigation, Handshake, Briefcase } from 'lucide-react';
+import { AppData, Announcement, User, AreaStageInfo, Team, Venue, Activity as ActivityType } from '../types';
+import { Users, School, Trophy, Megaphone, Plus, Book, Calendar, ChevronRight, FileText, Loader2, Star, Medal, TrendingUp, Activity, Timer, ArrowUpRight, Zap, Target, CheckCircle, PieChart as PieIcon, List, X, BarChart3, MapPin, Navigation, Handshake, Briefcase, UserX, GraduationCap, AlertTriangle, Clock } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import StatCard from './StatCard';
 import { useNavigate } from 'react-router-dom';
@@ -15,6 +15,65 @@ interface DashboardProps {
 
 const COLORS = ['#10B981', '#F59E0B', '#EF4444', '#6366F1'];
 const MEDAL_COLORS = { 'Gold': '#FFD700', 'Silver': '#C0C0C0', 'Bronze': '#CD7F32', 'Participant': '#94a3b8' };
+
+// Mock Event Date (You can change this or pull from config)
+const EVENT_DATE = "2024-12-25T09:00:00";
+
+// --- Components ---
+
+const CountdownWidget = () => {
+    const [timeLeft, setTimeLeft] = useState(calculateTimeLeft());
+
+    function calculateTimeLeft() {
+        const difference = +new Date(EVENT_DATE) - +new Date();
+        let timeLeft = {};
+
+        if (difference > 0) {
+            timeLeft = {
+                days: Math.floor(difference / (1000 * 60 * 60 * 24)),
+                hours: Math.floor((difference / (1000 * 60 * 60)) % 24),
+                minutes: Math.floor((difference / 1000 / 60) % 60),
+                seconds: Math.floor((difference / 1000) % 60),
+            };
+        }
+        return timeLeft as any;
+    }
+
+    useEffect(() => {
+        const timer = setInterval(() => {
+            setTimeLeft(calculateTimeLeft());
+        }, 1000);
+        return () => clearInterval(timer);
+    }, []);
+
+    const timerComponents = Object.keys(timeLeft).length === 0 ? (
+        <span className="text-sm font-bold">เริ่มการแข่งขันแล้ว!</span>
+    ) : (
+        <div className="flex gap-2 text-center">
+            {Object.entries(timeLeft).map(([unit, value]: [string, any]) => (
+                <div key={unit} className="flex flex-col items-center bg-white/20 rounded p-1.5 min-w-[40px]">
+                    <span className="font-mono text-xl font-bold leading-none">{value}</span>
+                    <span className="text-[9px] uppercase opacity-80">{unit}</span>
+                </div>
+            ))}
+        </div>
+    );
+
+    return (
+        <div className="bg-gradient-to-r from-orange-500 to-red-500 rounded-xl p-4 text-white shadow-md relative overflow-hidden mb-6">
+            <div className="absolute top-0 right-0 p-2 opacity-10"><Clock className="w-24 h-24" /></div>
+            <div className="relative z-10 flex flex-col items-center justify-center">
+                <h3 className="text-sm font-bold uppercase tracking-widest mb-2 flex items-center">
+                    <Calendar className="w-4 h-4 mr-1.5" /> นับถอยหลังวันแข่งขัน
+                </h3>
+                {timerComponents}
+                <div className="mt-2 text-xs opacity-90 bg-black/10 px-2 py-0.5 rounded-full">
+                    25 ธันวาคม 2567
+                </div>
+            </div>
+        </div>
+    );
+};
 
 // --- Skeleton Component ---
 const DashboardSkeleton = () => (
@@ -140,7 +199,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
       };
   }, [scopeTeams, viewLevel, data.activities]);
 
-  // 3. Leaderboards Logic
+  // 3. Leaderboards Logic (Reused for My School Rank)
   const leaderboards = useMemo(() => {
       const schoolStats: Record<string, { 
           name: string, 
@@ -191,10 +250,75 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
           .sort((a, b) => b.goldCount - a.goldCount || b.totalScore - a.totalScore)
           .slice(0, 5);
 
-      return { topBySuccessRate, topByScore, topByGold, fullSuccessRate };
+      return { topBySuccessRate, topByScore, topByGold, fullSuccessRate, allSchoolStats: schoolsArray };
   }, [scopeTeams, viewLevel, data.schools]);
 
-  // 4. Judge Cooperation Stats (Updated: Separate by Level & Count Activities)
+  // 4. FEATURE 3: My School Performance Logic
+  const mySchoolStats = useMemo(() => {
+      if (!user || user.level === 'admin' || user.level === 'area') return null;
+      
+      const userSchool = data.schools.find(s => s.SchoolID === user.SchoolID);
+      const schoolName = userSchool?.SchoolName;
+      if (!schoolName) return null;
+
+      // Find in pre-calculated stats
+      const myStats = leaderboards.allSchoolStats.find(s => s.name === schoolName);
+      if (!myStats) return { name: schoolName, totalEntries: 0, goldCount: 0, rank: '-' };
+
+      // Calculate Rank based on Total Score
+      const sortedByScore = [...leaderboards.allSchoolStats].sort((a, b) => b.totalScore - a.totalScore);
+      const rank = sortedByScore.findIndex(s => s.name === schoolName) + 1;
+
+      return { ...myStats, rank };
+  }, [user, leaderboards.allSchoolStats, data.schools]);
+
+  // 5. FEATURE 2: Data Integrity Logic (Missing Data Alerts)
+  const integrityStats = useMemo(() => {
+      // Only relevant for Admin/GroupAdmin or users checking their own scope
+      let targetTeams = scopeTeams;
+      if (user?.level === 'school_admin') {
+          targetTeams = scopeTeams.filter(t => t.schoolId === user.SchoolID);
+      }
+
+      let missingTeachers = 0;
+      let missingStudents = 0;
+      let pendingStatus = 0;
+
+      targetTeams.forEach(t => {
+          if (t.status === 'Rejected') return;
+          if (t.status === 'Pending') pendingStatus++;
+
+          const activity = data.activities.find(a => a.id === t.activityId);
+          if (!activity) return;
+
+          // Parse Members
+          let teachersCount = 0;
+          let studentsCount = 0;
+          try {
+              let raw = t.members;
+              // If area view, check stageInfo members first
+              if (viewLevel === 'area') {
+                  const info = getAreaInfo(t);
+                  if (info?.members) raw = info.members;
+              }
+
+              const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+              if (Array.isArray(parsed)) {
+                  studentsCount = parsed.length;
+              } else if (parsed && typeof parsed === 'object') {
+                  teachersCount = Array.isArray(parsed.teachers) ? parsed.teachers.length : 0;
+                  studentsCount = Array.isArray(parsed.students) ? parsed.students.length : 0;
+              }
+          } catch {}
+
+          if (activity.reqTeachers > 0 && teachersCount < activity.reqTeachers) missingTeachers++;
+          if (activity.reqStudents > 0 && studentsCount < activity.reqStudents) missingStudents++;
+      });
+
+      return { missingTeachers, missingStudents, pendingStatus, totalIssues: missingTeachers + missingStudents };
+  }, [scopeTeams, data.activities, viewLevel, user]);
+
+  // 6. Judge Cooperation Stats (Updated: Separate by Level & Count Activities)
   const judgeCooperation = useMemo(() => {
       const stats: Record<string, { name: string, count: number }> = {};
       
@@ -219,7 +343,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
           .slice(0, 5); // Top 5 Cooperative Schools
   }, [data.judges, viewLevel]);
 
-  // 5. Unscored Teams Logic
+  // 7. Unscored Teams Logic
   const unscoredTeams = useMemo(() => {
       return scopeTeams.filter(t => {
           if (viewLevel === 'area') {
@@ -230,7 +354,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
       });
   }, [scopeTeams, viewLevel]);
 
-  // 6. Latest Results Feed
+  // 8. Latest Results Feed
   const latestResults = useMemo(() => {
       const scored = scopeTeams.filter(t => {
           if (viewLevel === 'area') {
@@ -247,7 +371,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
       }).slice(0, 6);
   }, [scopeTeams, viewLevel]);
 
-  // 7. Venue Highlights
+  // 9. Venue Highlights
   const venueHighlights = useMemo(() => {
       return data.venues.slice(0, 3);
   }, [data.venues]);
@@ -356,6 +480,36 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
           {/* Main Column */}
           <div className="lg:col-span-2 space-y-6">
               
+              {/* FEATURE 3: My School Performance Card */}
+              {mySchoolStats && (
+                  <div className="bg-white rounded-2xl shadow-sm border border-blue-100 overflow-hidden relative">
+                      <div className="absolute top-0 right-0 p-4 opacity-5"><School className="w-32 h-32 text-blue-600" /></div>
+                      <div className="p-5 flex flex-col sm:flex-row items-center sm:items-start gap-4">
+                          <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center shrink-0 border-2 border-blue-100 shadow-sm">
+                              <School className="w-8 h-8 text-blue-600" />
+                          </div>
+                          <div className="flex-1 text-center sm:text-left z-10">
+                              <h2 className="text-lg font-bold text-gray-900">{mySchoolStats.name}</h2>
+                              <p className="text-xs text-gray-500 mb-3">สรุปผลงานโรงเรียนของคุณ (Your School Performance)</p>
+                              <div className="flex flex-wrap gap-4 justify-center sm:justify-start">
+                                  <div className="bg-gray-50 px-3 py-2 rounded-lg border border-gray-100">
+                                      <div className="text-xs text-gray-500 font-bold uppercase">ส่งแข่ง</div>
+                                      <div className="text-xl font-black text-gray-800">{mySchoolStats.totalEntries} <span className="text-[10px] font-normal">ทีม</span></div>
+                                  </div>
+                                  <div className="bg-yellow-50 px-3 py-2 rounded-lg border border-yellow-100">
+                                      <div className="text-xs text-yellow-700 font-bold uppercase">เหรียญทอง</div>
+                                      <div className="text-xl font-black text-yellow-600">{mySchoolStats.goldCount} <span className="text-[10px] font-normal">เหรียญ</span></div>
+                                  </div>
+                                  <div className="bg-blue-50 px-3 py-2 rounded-lg border border-blue-100">
+                                      <div className="text-xs text-blue-700 font-bold uppercase">ลำดับรวม</div>
+                                      <div className="text-xl font-black text-blue-600">#{mySchoolStats.rank}</div>
+                                  </div>
+                              </div>
+                          </div>
+                      </div>
+                  </div>
+              )}
+
               {/* AREA VIEW: Medal Chart & Category Analytics */}
               {viewLevel === 'area' && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -588,7 +742,37 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
           {/* Right Column: News & Manuals & New Blocks */}
           <div className="space-y-6">
              
-             {/* Judge Cooperation Stats (Updated Logic) */}
+             {/* FEATURE 4: Countdown Timer */}
+             <CountdownWidget />
+
+             {/* FEATURE 2: Data Integrity Alerts */}
+             <div className="bg-white rounded-xl shadow-sm border border-red-100 overflow-hidden">
+                 <div className="p-4 border-b border-red-50 bg-red-50/30 flex items-center">
+                     <AlertTriangle className="w-4 h-4 mr-2 text-red-500" />
+                     <h3 className="text-sm font-bold text-red-800">แจ้งเตือนข้อมูลไม่สมบูรณ์</h3>
+                 </div>
+                 <div className="p-4 grid grid-cols-2 gap-3">
+                     <div className="bg-red-50 p-2 rounded-lg text-center">
+                         <div className="text-xs text-red-600 mb-1">ขาดครู</div>
+                         <div className="font-black text-xl text-red-700 flex items-center justify-center">
+                             <UserX className="w-4 h-4 mr-1"/> {integrityStats.missingTeachers}
+                         </div>
+                     </div>
+                     <div className="bg-red-50 p-2 rounded-lg text-center">
+                         <div className="text-xs text-red-600 mb-1">ขาด นร.</div>
+                         <div className="font-black text-xl text-red-700 flex items-center justify-center">
+                             <GraduationCap className="w-4 h-4 mr-1"/> {integrityStats.missingStudents}
+                         </div>
+                     </div>
+                     {integrityStats.totalIssues === 0 && (
+                         <div className="col-span-2 text-center text-xs text-green-600 py-2 flex items-center justify-center">
+                             <CheckCircle className="w-3 h-3 mr-1" /> ข้อมูลครบถ้วนสมบูรณ์
+                         </div>
+                     )}
+                 </div>
+             </div>
+
+             {/* Judge Cooperation Stats */}
              <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                  <div className="p-4 border-b border-gray-100 bg-emerald-50/50 flex items-center justify-between">
                      <h3 className="text-sm font-bold text-emerald-800 flex items-center">
@@ -612,7 +796,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
                  </div>
              </div>
 
-             {/* Venue Highlights (New) */}
+             {/* Venue Highlights */}
              {venueHighlights.length > 0 && (
                  <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                      <div className="p-4 border-b border-gray-100 flex items-center justify-between">
