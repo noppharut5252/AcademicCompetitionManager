@@ -190,6 +190,23 @@ export interface Judge {
   photoUrl?: string;      // Col 12: Photo URL (New)
 }
 
+// Official Judge Print Configuration
+export interface JudgeConfig {
+  officeName: string;
+  commandNumber: string;
+  subject: string;
+  preamble: string;
+  signerName: string;
+  signerPosition: string;
+  dateText: string;
+  margins?: {
+      top: number;
+      bottom: number;
+      left: number;
+      right: number;
+  };
+}
+
 export interface AppData {
   activities: Activity[];
   teams: Team[];
