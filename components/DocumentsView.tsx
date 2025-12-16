@@ -26,7 +26,8 @@ const ExpandedIdCard = ({
     activity, 
     schoolName, 
     viewLevel, 
-    onClose 
+    onClose,
+    data
 }: { 
     members: any[], 
     initialIndex: number, 
@@ -34,7 +35,8 @@ const ExpandedIdCard = ({
     activity: string, 
     schoolName: string, 
     viewLevel: 'cluster' | 'area', 
-    onClose: () => void 
+    onClose: () => void,
+    data: AppData
 }) => {
     const cardRef = useRef<HTMLDivElement>(null);
     const [currentIndex, setCurrentIndex] = useState(initialIndex);
@@ -69,10 +71,23 @@ const ExpandedIdCard = ({
         : 'bg-gradient-to-br from-blue-900 via-blue-800 to-slate-900';
     const levelText = isArea ? 'DISTRICT LEVEL' : 'CLUSTER LEVEL';
 
-    // Mock Date/Time for status (Use current time for demo as "Verification Time")
+    // Mock Date/Time for status (Verification Time)
     const now = new Date();
-    const dateStr = now.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' });
     const timeStr = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+
+    // Lookup Venue Schedule
+    const scheduleInfo = useMemo(() => {
+        if (!data || !data.venues) return null;
+        for (const v of data.venues) {
+            const s = v.scheduledActivities?.find(act => act.activityId === team.activityId);
+            if (s) return { venueName: v.name, ...s };
+        }
+        return null;
+    }, [data, team.activityId]);
+
+    const compDate = scheduleInfo ? scheduleInfo.date : 'TBA';
+    const compLocation = scheduleInfo ? `${scheduleInfo.venueName} ${scheduleInfo.building || ''} ${scheduleInfo.room || ''}` : 'TBA';
+    const compTime = scheduleInfo ? scheduleInfo.timeRange : '';
 
     const toggleFullscreen = () => {
         if (!document.fullscreenElement) {
@@ -327,17 +342,14 @@ const ExpandedIdCard = ({
                                 </div>
                             </div>
                             <div className="text-right">
-                                <p className="text-[10px] text-gray-400 font-bold uppercase">Time</p>
+                                <p className="text-[10px] text-gray-400 font-bold uppercase">Check-in Time</p>
                                 <p className="text-xs font-bold text-gray-700">{timeStr}</p>
                             </div>
                         </div>
-                        <div className="bg-white p-2 rounded-lg shadow-sm border border-gray-100">
-                            <p className="text-[10px] text-gray-400 font-bold uppercase mb-1">Venue</p>
-                            <p className="text-xs font-medium text-gray-800 line-clamp-1">TBD</p>
-                        </div>
-                        <div className="bg-white p-2 rounded-lg shadow-sm border border-gray-100">
-                            <p className="text-[10px] text-gray-400 font-bold uppercase mb-1">Date</p>
-                            <p className="text-xs font-medium text-gray-800">{dateStr}</p>
+                        <div className="bg-white p-2 rounded-lg shadow-sm border border-gray-100 col-span-2">
+                            <p className="text-[10px] text-gray-400 font-bold uppercase mb-1 flex items-center"><MapPin className="w-3 h-3 mr-1"/>Venue & Schedule</p>
+                            <p className="text-xs font-bold text-gray-800 line-clamp-2 leading-tight mb-1">{compLocation}</p>
+                            <p className="text-xs text-gray-500 flex items-center"><Calendar className="w-3 h-3 mr-1"/> {compDate} {compTime ? `• ${compTime}` : ''}</p>
                         </div>
                     </div>
                 </div>
@@ -502,7 +514,8 @@ const DigitalIdModal = ({ team, data, onClose, viewLevel }: { team: Team, data: 
                     activity={activity} 
                     schoolName={school} 
                     viewLevel={viewLevel} 
-                    onClose={() => setExpandedIndex(null)} 
+                    onClose={() => setExpandedIndex(null)}
+                    data={data} 
                 />
             )}
 
@@ -1101,6 +1114,20 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
           const appUrl = `${window.location.origin}${window.location.pathname}#/idcards?id=${team.teamId}&level=${viewLevel}`;
           const qrUrl = getQrCodeUrl(appUrl, 300); // Generate a larger QR source for better quality
           
+          // Lookup Venue Info for Printing
+          let scheduleText = 'สถานที่: ไม่ระบุ';
+          let dateText = 'วันที่: ไม่ระบุ';
+          if (data.venues) {
+                for (const v of data.venues) {
+                    const s = v.scheduledActivities?.find(act => act.activityId === team.activityId);
+                    if (s) {
+                        scheduleText = `สถานที่: ${v.name} ${s.room || ''}`;
+                        dateText = `วันที่: ${s.date} (${s.timeRange || ''})`;
+                        break;
+                    }
+                }
+          }
+
           const headerColor = viewLevel === 'area' ? 'linear-gradient(135deg, #6b21a8 0%, #a855f7 100%)' : 'linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)'; 
           const htmlContent = `
             <html>
@@ -1127,6 +1154,7 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
                   .team { font-size: 9pt; color: #777; margin-bottom: 10px; }
                   .activity-box { width: 100%; border-top: 1px dashed #ddd; padding-top: 8px; margin-top: auto; }
                   .activity-name { font-size: 10pt; color: #333; font-weight: 600; }
+                  .info-row { font-size: 9pt; color: #666; margin-top: 4px; display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
                   .footer { display: flex; justify-content: space-between; align-items: center; padding: 8px 15px; background: #f9fafb; border-top: 1px solid #eee; }
                   .footer-text { text-align: left; }
                   /* INCREASED QR SIZE HERE */
@@ -1156,7 +1184,15 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
                               <div class="name">${fullName}</div>
                               <div class="school">${schoolName}</div>
                               <div class="team">ทีม: ${team.teamName}</div>
-                              <div class="activity-box"><div class="activity-name">${activity}</div></div>
+                              <div class="activity-box">
+                                <div class="activity-name">${activity}</div>
+                                <div class="info-row">
+                                    <span>${dateText}</span>
+                                </div>
+                                <div class="info-row">
+                                    <span>${scheduleText}</span>
+                                </div>
+                              </div>
                             </div>
                             <div class="footer">
                                 <div class="footer-text"><div style="font-size: 8pt; font-weight: bold; color: #555;">ID: ${team.teamId}</div><div style="font-size: 8pt; color: #888;">Scan for Check-in</div></div>
@@ -1488,3 +1524,4 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
 };
 
 export default DocumentsView;
+
