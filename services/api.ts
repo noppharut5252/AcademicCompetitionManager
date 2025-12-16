@@ -1,5 +1,5 @@
 
-import { AppData, User, Team, CertificateTemplate, Venue, Judge } from '../types';
+import { AppData, User, Team, CertificateTemplate, Venue, Judge, JudgeConfig } from '../types';
 import { getMockData } from './mockData';
 
 const API_URL = "https://script.google.com/macros/s/AKfycbyYcf6m-3ypN3aX8F6prN0BLQcz0JyW0gj3Tq8dJyMs54gaTXSv_1uytthNu9H4CmMy/exec";
@@ -232,6 +232,39 @@ export const saveCertificateConfig = async (id: string, config: CertificateTempl
         return result.status === 'success';
     } catch (e) {
         console.error("Failed to save Cert Config", e);
+        return false;
+    }
+};
+
+// --- Judge Config API ---
+
+export const getJudgeConfig = async (): Promise<Record<string, JudgeConfig> | null> => {
+    try {
+        const response = await fetch(`${API_URL}?action=getJudgeConfig`, {
+            method: 'GET',
+            mode: 'cors'
+        });
+        if (!response.ok) return null;
+        return await response.json();
+    } catch (e) {
+        console.error("Failed to get Judge Config", e);
+        return null;
+    }
+};
+
+export const saveJudgeConfig = async (config: JudgeConfig): Promise<boolean> => {
+    try {
+        const response = await fetch(`${API_URL}?action=saveJudgeConfig`, {
+            method: 'POST',
+            mode: 'cors',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify({ id: config.id, config: config })
+        });
+        if (!response.ok) return false;
+        const result = await response.json();
+        return result.status === 'success';
+    } catch (e) {
+        console.error("Failed to save Judge Config", e);
         return false;
     }
 };
