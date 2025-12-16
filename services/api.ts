@@ -1,5 +1,5 @@
 
-import { AppData, User, Team, CertificateTemplate, Venue } from '../types';
+import { AppData, User, Team, CertificateTemplate, Venue, Judge } from '../types';
 import { getMockData } from './mockData';
 
 const API_URL = "https://script.google.com/macros/s/AKfycbyYcf6m-3ypN3aX8F6prN0BLQcz0JyW0gj3Tq8dJyMs54gaTXSv_1uytthNu9H4CmMy/exec";
@@ -16,10 +16,9 @@ export const fetchData = async (): Promise<AppData> => {
     }
 
     const data = await response.json();
-    // Ensure venues array exists even if old backend script returns undefined
-    if (!data.venues) {
-        data.venues = [];
-    }
+    // Ensure arrays exist
+    if (!data.venues) data.venues = [];
+    if (!data.judges) data.judges = [];
     return data;
   } catch (error) {
     console.warn("Fetching from live API failed, falling back to mock data.", error);
@@ -271,6 +270,40 @@ export const deleteVenue = async (venueId: string): Promise<boolean> => {
     }
 };
 
+// --- Judges API ---
+
+export const saveJudge = async (judge: Judge): Promise<boolean> => {
+    try {
+        const response = await fetch(`${API_URL}?action=saveJudge`, {
+            method: 'POST',
+            mode: 'cors',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify(judge)
+        });
+        if (!response.ok) return false;
+        const result = await response.json();
+        return result.status === 'success';
+    } catch (e) {
+        console.error("Failed to save Judge", e);
+        return false;
+    }
+};
+
+export const deleteJudge = async (judgeId: string): Promise<boolean> => {
+    try {
+        const response = await fetch(`${API_URL}?action=deleteJudge&id=${encodeURIComponent(judgeId)}`, {
+            method: 'GET',
+            mode: 'cors'
+        });
+        if (!response.ok) return false;
+        const result = await response.json();
+        return result.status === 'success';
+    } catch (e) {
+        console.error("Failed to delete Judge", e);
+        return false;
+    }
+};
+
 export const getTeamCountByStatus = (data: AppData) => {
   const counts: Record<string, number> = {};
   data.teams.forEach(team => {
@@ -287,3 +320,4 @@ export const getTeamsByActivity = (data: AppData) => {
   });
   return Object.keys(counts).map(key => ({ name: key, value: counts[key] }));
 };
+
