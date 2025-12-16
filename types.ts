@@ -123,6 +123,8 @@ export interface VenueSchedule {
     date: string; // e.g. "2024-12-25" or "25 ธ.ค. 67"
     timeRange: string; // e.g. "09:00 - 12:00"
     note?: string; // e.g. "ให้นักเรียนเตรียมคอมพิวเตอร์มาเอง"
+    level?: 'cluster' | 'area'; // New: Competition Level
+    imageUrl?: string; // New: Room/Activity specific image
 }
 
 // Venue Interface
@@ -179,3 +181,4 @@ export interface AppData {
   announcements: Announcement[];
   venues: Venue[]; // Added Venues
 }
+
