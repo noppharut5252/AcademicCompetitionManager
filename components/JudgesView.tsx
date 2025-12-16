@@ -1,7 +1,7 @@
 
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { AppData, Judge, User, Team } from '../types';
-import { Search, Plus, Edit2, Trash2, Gavel, Mail, Phone, School, MapPin, Loader2, Save, X, LayoutGrid, AlertTriangle, CheckCircle, Users, Briefcase, ChevronDown, ChevronUp, AlertOctagon, UserCheck, Camera, Copy, Trophy, Filter, Layers, ChevronRight, Hash, Eye, EyeOff } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, Gavel, Mail, Phone, School, MapPin, Loader2, Save, X, LayoutGrid, AlertTriangle, CheckCircle, Users, Briefcase, ChevronDown, ChevronUp, AlertOctagon, UserCheck, Camera, Copy, Trophy, Filter, Layers, ChevronRight, Hash, Eye, EyeOff, ChevronsUpDown, ChevronLeft } from 'lucide-react';
 import SearchableSelect from './SearchableSelect';
 import ConfirmationModal from './ConfirmationModal';
 import { saveJudge, deleteJudge, uploadImage } from '../services/api';
@@ -25,9 +25,14 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
   const [clusterFilter, setClusterFilter] = useState<string>('');
   
   // New UI States
-  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
-  const [collapsedClusters, setCollapsedClusters] = useState<Set<string>>(new Set()); // For inside activity view
+  // Default empty set = all collapsed.
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [collapsedClusters, setCollapsedClusters] = useState<Set<string>>(new Set()); 
   const [quickFilter, setQuickFilter] = useState<'all' | 'external' | 'conflict' | 'missing'>('all');
+
+  // Pagination for Directory
+  const [dirPage, setDirPage] = useState(1);
+  const [dirPerPage, setDirPerPage] = useState(20);
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -44,9 +49,16 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
   const canManage = ['admin', 'area', 'group_admin'].includes(user?.level?.toLowerCase() || '');
   const isGroupAdmin = user?.level === 'group_admin';
 
+  // Reset pagination when filter changes
+  useEffect(() => {
+      setDirPage(1);
+  }, [searchTerm, clusterFilter, viewScope]);
+
   // --- Derived Data & Logic ---
 
   const checkConflict = (judge: Judge, competingSchoolNames: Set<string>): ConflictData => {
+      // External judges typically don't have a conflict unless their "schoolName" text happens to match a school
+      // But generally conflict check is more relevant for internal teachers.
       const judgeSchool = judge.schoolName.trim().toLowerCase();
       if (!judgeSchool) return { hasConflict: false, schoolName: '' };
 
@@ -162,7 +174,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
               total += group.areaJudges.length;
               conflicts += group.areaConflicts;
               group.areaJudges.forEach(j => {
-                  if (!data.schools.some(s => s.SchoolID === j.schoolId)) external++;
+                  if (j.schoolId === '__EXTERNAL__') external++;
               });
           } else {
               Object.entries(group.clusters).forEach(([cId, cData]) => {
@@ -170,32 +182,39 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                   total += cData.judges.length;
                   conflicts += cData.conflicts;
                   cData.judges.forEach(j => {
-                      if (!data.schools.some(s => s.SchoolID === j.schoolId)) external++;
+                      if (j.schoolId === '__EXTERNAL__') external++;
                   });
               });
           }
       });
 
       return { total, external, conflicts };
-  }, [activityGroups, viewScope, clusterFilter, data.schools, data.activities]);
+  }, [activityGroups, viewScope, clusterFilter, data.activities]);
 
   const getClusterJudgesForActivity = (activityId: string) => {
       return data.judges.filter(j => j.activityId === activityId && j.stageScope === 'cluster');
   };
 
-  // --- Aggregated Directory Logic ---
+  // --- Aggregated Directory Logic (Improved) ---
   const aggregatedDirectory = useMemo(() => {
       // Map: JudgeUniqueKey -> { details, activities: [] }
       const map = new Map<string, { judge: Judge, activities: { name: string, role: string, scope: string }[] }>();
 
       data.judges.forEach(judge => {
-          // Strict Filter
+          // Strict Scope Filter
           const scope = judge.stageScope || 'cluster';
           if (viewScope === 'area' && scope !== 'area') return;
           if (viewScope === 'cluster' && scope === 'area') return; // Hide area judges in cluster view
           
-          // Cluster Filter
-          if (viewScope === 'cluster' && clusterFilter && judge.clusterKey !== clusterFilter) return;
+          // Cluster Filter (Robust Comparison)
+          if (viewScope === 'cluster' && clusterFilter) {
+              const jKey = String(judge.clusterKey || '').trim();
+              const fKey = String(clusterFilter).trim();
+              
+              // Only filter if keys don't match (case-insensitive for safety)
+              if (jKey.toLowerCase() !== fKey.toLowerCase()) return;
+          }
+
           if (isGroupAdmin) {
               const userSchool = data.schools.find(s => s.SchoolID === user?.SchoolID);
               if (userSchool && judge.clusterKey !== userSchool.SchoolCluster) return;
@@ -216,21 +235,54 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
           });
       });
 
-      // Convert to Array & Filter Search
-      return Array.from(map.values()).filter(item => {
+      // Convert to Array & Filter Search (Performed on aggregated data for better UX)
+      let results = Array.from(map.values());
+      
+      if (searchTerm) {
           const searchLower = searchTerm.toLowerCase();
-          return item.judge.judgeName.toLowerCase().includes(searchLower) ||
-                 item.judge.schoolName.toLowerCase().includes(searchLower) ||
-                 item.activities.some(a => a.name.toLowerCase().includes(searchLower));
-      }).sort((a, b) => a.judge.judgeName.localeCompare(b.judge.judgeName));
+          results = results.filter(item => 
+              item.judge.judgeName.toLowerCase().includes(searchLower) ||
+              item.judge.schoolName.toLowerCase().includes(searchLower) ||
+              item.activities.some(a => a.name.toLowerCase().includes(searchLower))
+          );
+      }
 
-  }, [data.judges, data.activities, viewScope, clusterFilter, searchTerm, user, isGroupAdmin]);
+      return results.sort((a, b) => a.judge.judgeName.localeCompare(b.judge.judgeName));
 
+  }, [data.judges, data.activities, viewScope, clusterFilter, searchTerm, user, isGroupAdmin, data.schools]);
+
+  // Directory Pagination
+  const totalDirPages = Math.ceil(aggregatedDirectory.length / dirPerPage);
+  const paginatedDirectory = aggregatedDirectory.slice(
+      (dirPage - 1) * dirPerPage,
+      dirPage * dirPerPage
+  );
 
   // Filtered Activities for Management View
   const filteredActivities = useMemo(() => {
       let acts = data.activities.filter(act => act.name.toLowerCase().includes(searchTerm.toLowerCase()));
       
+      // Relevance Filter: Show only activities that have Teams OR Judges in the current scope
+      acts = acts.filter(act => {
+          const group = activityGroups[act.id];
+          if (!group) return false;
+
+          if (viewScope === 'area') {
+              // Show if there are teams qualified OR judges assigned
+              return group.areaTeamCount > 0 || group.areaJudges.length > 0;
+          } else {
+              // Cluster Scope
+              if (clusterFilter) {
+                  const cData = group.clusters[clusterFilter];
+                  // Show if specific cluster has teams OR judges
+                  return cData && (cData.teamCount > 0 || cData.judges.length > 0);
+              } else {
+                  // Show if ANY cluster has teams OR judges
+                  return Object.values(group.clusters).some(c => c.teamCount > 0 || c.judges.length > 0);
+              }
+          }
+      });
+
       // Quick Filters Logic
       if (quickFilter !== 'all') {
           acts = acts.filter(act => {
@@ -239,20 +291,22 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
 
               if (viewScope === 'area') {
                   if (quickFilter === 'conflict') hasMatch = group.areaConflicts > 0;
-                  if (quickFilter === 'external') hasMatch = group.areaJudges.some(j => !data.schools.some(s => s.SchoolID === j.schoolId));
-                  if (quickFilter === 'missing') hasMatch = group.areaJudges.length === 0;
+                  if (quickFilter === 'external') hasMatch = group.areaJudges.some(j => j.schoolId === '__EXTERNAL__');
+                  if (quickFilter === 'missing') hasMatch = group.areaJudges.length === 0; // Relevance already ensures teams>0 if judges=0
               } else {
                   // Cluster Check
                   const clusters = Object.values(group.clusters);
-                  if (quickFilter === 'conflict') hasMatch = clusters.some(c => c.conflicts > 0);
-                  if (quickFilter === 'external') hasMatch = clusters.some(c => c.judges.some(j => !data.schools.some(s => s.SchoolID === j.schoolId)));
-                  if (quickFilter === 'missing') hasMatch = clusters.some(c => c.judges.length === 0 && c.competingSchools.size > 0); // Missing only if there are teams
+                  const relevantClusters = clusterFilter ? [group.clusters[clusterFilter]].filter(Boolean) : clusters;
+                  
+                  if (quickFilter === 'conflict') hasMatch = relevantClusters.some(c => c.conflicts > 0);
+                  if (quickFilter === 'external') hasMatch = relevantClusters.some(c => c.judges.some(j => j.schoolId === '__EXTERNAL__'));
+                  if (quickFilter === 'missing') hasMatch = relevantClusters.some(c => c.judges.length === 0 && c.competingSchools.size > 0); 
               }
               return hasMatch;
           });
       }
       return acts;
-  }, [data.activities, searchTerm, quickFilter, activityGroups, viewScope, data.schools]);
+  }, [data.activities, searchTerm, quickFilter, activityGroups, viewScope, data.schools, clusterFilter]);
 
   const categories = useMemo(() => {
       return Array.from(new Set(filteredActivities.map(a => a.category))).sort();
@@ -260,9 +314,32 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
 
   // --- Handlers ---
 
+  const toggleCategory = (cat: string) => {
+      const newSet = new Set(expandedCategories);
+      if (newSet.has(cat)) newSet.delete(cat);
+      else newSet.add(cat);
+      setExpandedCategories(newSet);
+  };
+
+  const toggleAllCategories = () => {
+      if (expandedCategories.size > 0) {
+          setExpandedCategories(new Set()); // Collapse All
+      } else {
+          setExpandedCategories(new Set(categories)); // Expand All
+      }
+  };
+
+  const toggleCluster = (activityId: string, clusterId: string) => {
+      const key = `${activityId}-${clusterId}`;
+      const newSet = new Set(collapsedClusters);
+      if (newSet.has(key)) newSet.delete(key);
+      else newSet.add(key);
+      setCollapsedClusters(newSet);
+  };
+
   const handleEdit = (judge: Judge) => {
-      const isInternal = data.schools.some(s => s.SchoolID === judge.schoolId);
-      setIsExternal(!isInternal && !!judge.schoolName);
+      // Logic for External Check: If schoolId is explicit __EXTERNAL__, then it is external.
+      setIsExternal(judge.schoolId === '__EXTERNAL__');
       setEditingJudge({ ...judge });
       setIsModalOpen(true);
   };
@@ -314,8 +391,8 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
           clusterKey: clusterJudge.clusterKey,
           clusterLabel: clusterJudge.clusterLabel
       });
-      const isInternal = data.schools.some(s => s.SchoolID === clusterJudge.schoolId);
-      setIsExternal(!isInternal);
+      // Logic for imported external judges
+      setIsExternal(clusterJudge.schoolId === '__EXTERNAL__');
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -356,21 +433,16 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
       let schoolId = editingJudge.schoolId || '';
 
       if (isExternal) {
-          schoolId = ''; 
-          // If external but in cluster mode, we need to ensure clusterKey is set from the form dropdown (if we add one) or context
-          if (viewScope === 'cluster' && !clusterKey && !isGroupAdmin) {
-              // If admin didn't select cluster, we might have an issue, but let's allow it or default
-          }
+          schoolId = '__EXTERNAL__'; // Enforce special ID
+          // If viewing cluster scope, and clusterKey is empty (e.g. newly added external judge), 
+          // we might need to rely on the `clusterFilter` or user selection if implemented.
+          // The modal input handles cluster selection for cluster scope even for external judges.
       } else {
+          // Internal Logic
           const school = data.schools.find(s => s.SchoolID === editingJudge.schoolId);
           if (school) {
               schoolName = school.SchoolName;
-              
-              // Only override cluster info if not manually set/locked context
-              // IMPORTANT: In cluster mode, we allow "Cross-Cluster Judging" (Teacher from Cluster A judging Cluster B)
-              // So we ONLY default to school's cluster if clusterKey is currently EMPTY.
               const schoolCluster = data.clusters.find(c => c.ClusterID === school.SchoolCluster);
-              
               if (!clusterKey) { 
                   clusterKey = schoolCluster?.ClusterID || '';
                   clusterLabel = schoolCluster?.ClusterName || '';
@@ -378,7 +450,6 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
           }
       }
       
-      // Ensure Label matches ID if user changed ID via dropdown
       const selectedCluster = data.clusters.find(c => c.ClusterID === clusterKey);
       if (selectedCluster) {
           clusterLabel = selectedCluster.ClusterName;
@@ -410,21 +481,6 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
           setConfirmDelete({ isOpen: false, id: null });
           onDataUpdate();
       }
-  };
-
-  const toggleCategory = (cat: string) => {
-      const newSet = new Set(collapsedCategories);
-      if (newSet.has(cat)) newSet.delete(cat);
-      else newSet.add(cat);
-      setCollapsedCategories(newSet);
-  };
-
-  const toggleCluster = (activityId: string, clusterId: string) => {
-      const key = `${activityId}-${clusterId}`;
-      const newSet = new Set(collapsedClusters);
-      if (newSet.has(key)) newSet.delete(key);
-      else newSet.add(key);
-      setCollapsedClusters(newSet);
   };
 
   if (!canManage) {
@@ -540,17 +596,29 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                     )}
                 </div>
 
-                {/* Quick Filters */}
-                <div className="flex gap-2 pb-2 overflow-x-auto no-scrollbar">
-                    <button onClick={() => setQuickFilter('all')} className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all border whitespace-nowrap ${quickFilter === 'all' ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>ทั้งหมด</button>
-                    <button onClick={() => setQuickFilter('external')} className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all border whitespace-nowrap ${quickFilter === 'external' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-blue-600 border-blue-100 hover:bg-blue-50'}`}>กรรมการภายนอก</button>
-                    <button onClick={() => setQuickFilter('conflict')} className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all border whitespace-nowrap ${quickFilter === 'conflict' ? 'bg-red-600 text-white border-red-600' : 'bg-white text-red-600 border-red-100 hover:bg-red-50'}`}>มีข้อขัดแย้ง (Conflict)</button>
-                    <button onClick={() => setQuickFilter('missing')} className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all border whitespace-nowrap ${quickFilter === 'missing' ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-orange-500 border-orange-100 hover:bg-orange-50'}`}>ยังไม่มีกรรมการ</button>
+                {/* Quick Filters & Actions */}
+                <div className="flex justify-between items-center pb-2">
+                    <div className="flex gap-2 overflow-x-auto no-scrollbar">
+                        <button onClick={() => setQuickFilter('all')} className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all border whitespace-nowrap ${quickFilter === 'all' ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>ทั้งหมด</button>
+                        <button onClick={() => setQuickFilter('external')} className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all border whitespace-nowrap ${quickFilter === 'external' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-blue-600 border-blue-100 hover:bg-blue-50'}`}>กรรมการภายนอก</button>
+                        <button onClick={() => setQuickFilter('conflict')} className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all border whitespace-nowrap ${quickFilter === 'conflict' ? 'bg-red-600 text-white border-red-600' : 'bg-white text-red-600 border-red-100 hover:bg-red-50'}`}>มีข้อขัดแย้ง (Conflict)</button>
+                        <button onClick={() => setQuickFilter('missing')} className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all border whitespace-nowrap ${quickFilter === 'missing' ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-orange-500 border-orange-100 hover:bg-orange-50'}`}>ยังไม่มีกรรมการ</button>
+                    </div>
+                    
+                    {/* Expand/Collapse All */}
+                    <button 
+                        onClick={toggleAllCategories} 
+                        className="text-xs text-blue-600 font-medium hover:underline whitespace-nowrap ml-4 flex items-center"
+                    >
+                        <ChevronsUpDown className="w-3 h-3 mr-1" />
+                        {expandedCategories.size > 0 ? 'ย่อทั้งหมด' : 'ขยายทั้งหมด'}
+                    </button>
                 </div>
 
                 <div className="space-y-6">
                     {categories.map(category => {
-                        const isCollapsed = collapsedCategories.has(category);
+                        // Logic: Expand if in set OR if user is searching (show matches)
+                        const isExpanded = expandedCategories.has(category) || searchTerm !== '';
                         const categoryActivities = filteredActivities.filter(a => a.category === category);
                         
                         if (categoryActivities.length === 0) return null;
@@ -571,10 +639,10 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                                             ({categoryActivities.length} รายการ)
                                         </span>
                                     </div>
-                                    {isCollapsed ? <ChevronRight className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                                    {isExpanded ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
                                 </div>
                                 
-                                {!isCollapsed && (
+                                {isExpanded && (
                                     <div className="p-4 space-y-4 bg-white/50">
                                         {categoryActivities.map(act => {
                                             const group = activityGroups[act.id];
@@ -656,6 +724,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                                                                             <button 
                                                                                 onClick={(e) => { e.stopPropagation(); handleAdd(act.id); }}
                                                                                 className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded hover:bg-blue-100 font-medium flex items-center"
+                                                                                title="เพิ่มกรรมการ"
                                                                             >
                                                                                 <Plus className="w-3 h-3 mr-1" /> เพิ่ม
                                                                             </button>
@@ -754,7 +823,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
             </div>
         )}
 
-        {/* Directory Content (Aggregated) */}
+        {/* Directory Content (Aggregated & Paginated) */}
         {activeTab === 'directory' && (
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="p-4 border-b border-gray-100 bg-gray-50 flex flex-col md:flex-row gap-4 items-center">
@@ -770,7 +839,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                     </div>
                     {/* Cluster Filter in Directory */}
                     {viewScope === 'cluster' && !isGroupAdmin && (
-                        <div className="w-full md:w-auto min-w-[250px]">
+                        <div className="w-full md:w-auto min-w-[300px]">
                             <SearchableSelect 
                                 options={[{ label: 'ทุกกลุ่มเครือข่าย', value: '' }, ...data.clusters.map(c => ({ label: c.ClusterName, value: c.ClusterID }))]}
                                 value={clusterFilter}
@@ -792,10 +861,8 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200 bg-white">
-                            {aggregatedDirectory.map((item, idx) => {
-                                // item contains { judge: Judge, activities: [] }
+                            {paginatedDirectory.map((item, idx) => {
                                 const { judge, activities } = item;
-                                
                                 return (
                                     <tr key={`${judge.judgeName}_${idx}`} className="hover:bg-gray-50 group">
                                         <td className="px-6 py-4 whitespace-nowrap align-top">
@@ -825,7 +892,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap align-top">
                                             <div className="text-sm text-gray-900 flex items-center mb-1">
-                                                {data.schools.some(s => s.SchoolID === judge.schoolId) ? <School className="w-3 h-3 mr-1.5 text-gray-400"/> : <Briefcase className="w-3 h-3 mr-1.5 text-orange-400"/>}
+                                                {judge.schoolId !== '__EXTERNAL__' ? <School className="w-3 h-3 mr-1.5 text-gray-400"/> : <Briefcase className="w-3 h-3 mr-1.5 text-orange-400"/>}
                                                 <span className="truncate max-w-[150px]">{judge.schoolName}</span>
                                             </div>
                                             <div className="text-xs text-gray-500 flex items-center">
@@ -833,9 +900,6 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium align-top">
-                                            {/* In Aggregated View, Editing is tricky because one row represents multiple entries. 
-                                                We'll simplify by allowing Edit on the primary entry (or showing a note). 
-                                                For now, we just link to the first one found for editing profile details. */}
                                             <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                                 <button onClick={() => handleEdit(judge)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded" title="แก้ไขข้อมูลหลัก"><Edit2 className="w-4 h-4"/></button>
                                             </div>
@@ -843,7 +907,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                                     </tr>
                                 );
                             })}
-                            {aggregatedDirectory.length === 0 && (
+                            {paginatedDirectory.length === 0 && (
                                 <tr>
                                     <td colSpan={4} className="px-6 py-12 text-center text-gray-400">
                                         ไม่พบข้อมูลกรรมการ
@@ -853,6 +917,59 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                         </tbody>
                     </table>
                 </div>
+                
+                {/* Pagination Controls */}
+                {totalDirPages > 1 && (
+                    <div className="bg-gray-50 px-4 py-3 flex items-center justify-between border-t border-gray-200">
+                        <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                            <div>
+                                <p className="text-sm text-gray-700">
+                                    แสดง <span className="font-medium">{(dirPage - 1) * dirPerPage + 1}</span> ถึง <span className="font-medium">{Math.min(dirPage * dirPerPage, aggregatedDirectory.length)}</span> จาก <span className="font-medium">{aggregatedDirectory.length}</span> รายการ
+                                </p>
+                            </div>
+                            <div>
+                                <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                                    <button
+                                        onClick={() => setDirPage(Math.max(1, dirPage - 1))}
+                                        disabled={dirPage === 1}
+                                        className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                                    >
+                                        <span className="sr-only">Previous</span>
+                                        <ChevronLeft className="h-5 w-5" aria-hidden="true" />
+                                    </button>
+                                    <button
+                                        onClick={() => setDirPage(Math.min(totalDirPages, dirPage + 1))}
+                                        disabled={dirPage === totalDirPages}
+                                        className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                                    >
+                                        <span className="sr-only">Next</span>
+                                        <ChevronRight className="h-5 w-5" aria-hidden="true" />
+                                    </button>
+                                </nav>
+                            </div>
+                        </div>
+                        {/* Mobile Pagination */}
+                        <div className="flex justify-between w-full sm:hidden">
+                             <button
+                                onClick={() => setDirPage(Math.max(1, dirPage - 1))}
+                                disabled={dirPage === 1}
+                                className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                            >
+                                ก่อนหน้า
+                            </button>
+                            <span className="text-sm text-gray-600 flex items-center">
+                                หน้า {dirPage} / {totalDirPages}
+                            </span>
+                            <button
+                                onClick={() => setDirPage(Math.min(totalDirPages, dirPage + 1))}
+                                disabled={dirPage === totalDirPages}
+                                className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                            >
+                                ถัดไป
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
         )}
 
@@ -1090,7 +1207,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                           <span className="ml-2 text-[10px] font-normal text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">{judge.role}</span>
                       </div>
                       <div className="text-xs text-gray-500 flex items-center mt-0.5">
-                          <Briefcase className="w-3 h-3 mr-1" /> 
+                          {judge.schoolId !== '__EXTERNAL__' ? <School className="w-3 h-3 mr-1" /> : <Briefcase className="w-3 h-3 mr-1 text-orange-400" />}
                           {judge.schoolName || 'ไม่ระบุสังกัด'}
                           {conflict.hasConflict && (
                               <span className="ml-2 text-red-600 font-bold flex items-center">
