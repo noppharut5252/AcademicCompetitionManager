@@ -192,6 +192,7 @@ export interface Judge {
 
 // Official Judge Print Configuration
 export interface JudgeConfig {
+  id?: string; // Context ID (area or clusterID)
   officeName: string;
   commandNumber: string;
   subject: string;
@@ -199,6 +200,7 @@ export interface JudgeConfig {
   signerName: string;
   signerPosition: string;
   dateText: string;
+  logoUrl?: string; // New: Custom Logo
   margins?: {
       top: number;
       bottom: number;
