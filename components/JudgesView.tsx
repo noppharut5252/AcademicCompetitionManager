@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { AppData, Judge, User, Team } from '../types';
-import { Search, Plus, Edit2, Trash2, Gavel, Mail, Phone, School, MapPin, Loader2, Save, X, LayoutGrid, AlertTriangle, CheckCircle, Users, Briefcase, ChevronDown, ChevronUp, AlertOctagon, UserCheck, Camera, Copy, Trophy, Filter, Layers, ChevronRight, Hash, Eye, EyeOff, ChevronsUpDown, ChevronLeft, ListChecks, ArrowRight, Import } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, Gavel, Mail, Phone, School, MapPin, Loader2, Save, X, LayoutGrid, AlertTriangle, CheckCircle, Users, Briefcase, ChevronDown, ChevronUp, AlertOctagon, UserCheck, Camera, Copy, Trophy, Filter, Layers, ChevronRight, Hash, Eye, EyeOff, ChevronsUpDown, ChevronLeft, ListChecks, ArrowRight, Import, AlertCircle } from 'lucide-react';
 import SearchableSelect from './SearchableSelect';
 import ConfirmationModal from './ConfirmationModal';
 import { saveJudge, deleteJudge, uploadImage } from '../services/api';
@@ -28,6 +28,40 @@ interface JudgeAssignment {
     clusterLabel: string;
 }
 
+// Internal Toast Component
+const Toast = ({ message, type, isVisible, onClose }: { message: string, type: 'success' | 'error' | 'info', isVisible: boolean, onClose: () => void }) => {
+    useEffect(() => {
+        if (isVisible) {
+            const timer = setTimeout(onClose, 3000);
+            return () => clearTimeout(timer);
+        }
+    }, [isVisible, onClose]);
+
+    if (!isVisible) return null;
+
+    const styles = {
+        success: 'bg-green-600 text-white',
+        error: 'bg-red-600 text-white',
+        info: 'bg-blue-600 text-white'
+    };
+
+    const icons = {
+        success: <CheckCircle className="w-5 h-5" />,
+        error: <AlertCircle className="w-5 h-5" />,
+        info: <ListChecks className="w-5 h-5" />
+    };
+
+    return (
+        <div className={`fixed top-6 right-6 z-[300] flex items-center p-4 rounded-xl shadow-xl transition-all duration-500 transform translate-y-0 ${styles[type]} animate-in slide-in-from-top-5 fade-in`}>
+            <div className="mr-3">{icons[type]}</div>
+            <div className="font-medium text-sm">{message}</div>
+            <button onClick={onClose} className="ml-4 p-1 hover:bg-white/20 rounded-full transition-colors">
+                <X className="w-4 h-4" />
+            </button>
+        </div>
+    );
+};
+
 const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'management' | 'directory'>('management');
   const [viewScope, setViewScope] = useState<'cluster' | 'area'>('area'); 
@@ -49,6 +83,9 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   
+  // Toast State
+  const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info', isVisible: boolean }>({ message: '', type: 'info', isVisible: false });
+
   // Judge Data State
   const [editingJudge, setEditingJudge] = useState<Partial<Judge> | null>(null);
   const [isExternal, setIsExternal] = useState(false);
@@ -76,6 +113,11 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
   useEffect(() => {
       setDirPage(1);
   }, [searchTerm, clusterFilter, viewScope]);
+
+  // Helper to show toast
+  const showToast = (message: string, type: 'success' | 'error' | 'info') => {
+      setToast({ message, type, isVisible: true });
+  };
 
   // --- Derived Data & Logic ---
 
@@ -406,13 +448,13 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
 
   const addAssignment = () => {
       if (!tempAssignment.activityId) {
-          alert('กรุณาเลือกกิจกรรม');
+          showToast('กรุณาเลือกกิจกรรม', 'error');
           return;
       }
       
       // Validate duplicates
       if (assignments.some(a => a.activityId === tempAssignment.activityId)) {
-          alert('กิจกรรมนี้ถูกเพิ่มไปแล้ว');
+          showToast('กิจกรรมนี้ถูกเพิ่มไปแล้ว', 'error');
           return;
       }
 
@@ -466,11 +508,11 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
               const publicUrl = `https://drive.google.com/thumbnail?id=${res.fileId}`;
               setEditingJudge({ ...editingJudge, photoUrl: publicUrl });
           } else {
-              alert('อัปโหลดรูปภาพไม่สำเร็จ');
+              showToast('อัปโหลดรูปภาพไม่สำเร็จ', 'error');
           }
       } catch (err) {
           console.error(err);
-          alert('เกิดข้อผิดพลาดในการอัปโหลด');
+          showToast('เกิดข้อผิดพลาดในการอัปโหลด', 'error');
       } finally {
           setIsUploading(false);
           if (fileInputRef.current) fileInputRef.current.value = '';
@@ -479,11 +521,11 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
 
   const handleReview = () => {
       if (!editingJudge?.judgeName) {
-          alert('กรุณากรอกชื่อ-นามสกุลกรรมการ');
+          showToast('กรุณากรอกชื่อ-นามสกุลกรรมการ', 'error');
           return;
       }
       if (assignments.length === 0) {
-          alert('กรุณาเพิ่มกิจกรรมอย่างน้อย 1 รายการ');
+          showToast('กรุณาเพิ่มกิจกรรมอย่างน้อย 1 รายการ', 'error');
           return;
       }
       setModalStep('summary');
@@ -543,12 +585,18 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
 
           await Promise.all(promises);
           
-          setIsSaving(false);
-          setIsModalOpen(false);
-          onDataUpdate();
+          showToast('บันทึกข้อมูลเรียบร้อยแล้ว', 'success');
+          
+          // Delay closing to show success state briefly
+          setTimeout(() => {
+              setIsSaving(false);
+              setIsModalOpen(false);
+              onDataUpdate();
+          }, 1000);
+
       } catch (e) {
           console.error(e);
-          alert('เกิดข้อผิดพลาดในการบันทึกข้อมูล');
+          showToast('เกิดข้อผิดพลาดในการบันทึกข้อมูล', 'error');
           setIsSaving(false);
       }
   };
@@ -557,6 +605,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
       if (confirmDelete.id) {
           await deleteJudge(confirmDelete.id);
           setConfirmDelete({ isOpen: false, id: null });
+          showToast('ลบข้อมูลเรียบร้อยแล้ว', 'success');
           onDataUpdate();
       }
   };
@@ -573,7 +622,8 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
   );
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500 pb-20">
+    <div className="space-y-6 animate-in fade-in duration-500 pb-20 relative">
+        <Toast message={toast.message} type={toast.type} isVisible={toast.isVisible} onClose={() => setToast(prev => ({...prev, isVisible: false}))} />
         
         {/* Top Header & Scope Toggle */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -971,8 +1021,16 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
         {/* Enhanced Edit/Add Modal */}
         {isModalOpen && editingJudge && (
             <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
-                <div className={`bg-white rounded-xl shadow-xl w-full max-w-4xl overflow-hidden flex flex-col transition-all duration-300 ${modalStep === 'summary' ? 'max-h-[80vh]' : 'max-h-[90vh]'}`}>
+                <div className={`bg-white rounded-xl shadow-xl w-full max-w-4xl overflow-hidden flex flex-col transition-all duration-300 relative ${modalStep === 'summary' ? 'max-h-[80vh]' : 'max-h-[90vh]'}`}>
                     
+                    {/* Loading Overlay inside Modal */}
+                    {isSaving && (
+                        <div className="absolute inset-0 bg-white/80 z-50 flex flex-col items-center justify-center backdrop-blur-sm animate-in fade-in">
+                            <Loader2 className="w-12 h-12 text-blue-600 animate-spin mb-3" />
+                            <p className="text-gray-600 font-medium">กำลังบันทึกข้อมูลกรรมการ...</p>
+                        </div>
+                    )}
+
                     {/* Modal Header */}
                     <div className={`px-6 py-4 border-b border-gray-100 flex justify-between items-center ${modalStep === 'summary' ? 'bg-green-50' : 'bg-gray-50'}`}>
                         <div>
@@ -1020,36 +1078,54 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                                                         />
                                                     </div>
 
-                                                    {/* Candidate Grid */}
-                                                    <div className="grid grid-cols-2 gap-2 max-h-[180px] overflow-y-auto custom-scrollbar">
+                                                    {/* Candidate List (Vertical) - Improved Layout */}
+                                                    <div className="space-y-2 max-h-[250px] overflow-y-auto custom-scrollbar pr-1">
                                                         {filteredCandidates.map(cj => {
                                                             const hasConflict = isConflictWithArea(cj.schoolName, tempAssignment.activityId || '');
                                                             return (
-                                                                <button
+                                                                <div
                                                                     key={cj.id}
-                                                                    type="button"
-                                                                    onClick={() => handleImportFromCluster(cj)}
-                                                                    className={`flex items-start text-left p-2 rounded-lg border transition-all relative group
+                                                                    className={`flex items-center p-2 rounded-lg border transition-all relative group
                                                                         ${hasConflict 
                                                                             ? 'bg-red-50 border-red-200 hover:bg-red-100' 
-                                                                            : 'bg-white border-gray-100 hover:border-blue-300 hover:bg-blue-50'
+                                                                            : 'bg-white border-gray-100 hover:border-blue-300 hover:bg-blue-50 hover:shadow-sm'
                                                                         }`}
                                                                 >
-                                                                    <img src={cj.photoUrl || "https://cdn-icons-png.flaticon.com/512/3135/3135768.png"} className="w-8 h-8 rounded-full object-cover border border-gray-200 shrink-0 bg-white" />
-                                                                    <div className="ml-2 min-w-0 w-full">
-                                                                        <div className="text-[10px] font-bold text-gray-800 truncate leading-tight">{cj.judgeName}</div>
-                                                                        <div className="text-[9px] text-gray-500 truncate">{cj.schoolName}</div>
+                                                                    {/* Avatar */}
+                                                                    <div className="relative shrink-0 mr-3">
+                                                                        <img src={cj.photoUrl || "https://cdn-icons-png.flaticon.com/512/3135/3135768.png"} className="w-10 h-10 rounded-full object-cover border border-gray-200 bg-white" />
                                                                         {hasConflict && (
-                                                                            <div className="text-[8px] text-red-600 font-bold flex items-center mt-0.5 bg-white/50 rounded px-1 w-fit">
-                                                                                <AlertTriangle className="w-2.5 h-2.5 mr-0.5" /> ตรงกับ รร.แข่ง
+                                                                            <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-0.5 shadow-sm border border-red-100">
+                                                                                <AlertTriangle className="w-3 h-3 text-red-500" /> 
                                                                             </div>
                                                                         )}
                                                                     </div>
-                                                                </button>
+                                                                    
+                                                                    {/* Text Info */}
+                                                                    <div className="min-w-0 flex-1">
+                                                                        <div className="text-xs font-bold text-gray-800 truncate">{cj.judgeName}</div>
+                                                                        <div className="text-[10px] text-gray-500 truncate flex items-center">
+                                                                            <School className="w-3 h-3 mr-1 inline" /> {cj.schoolName}
+                                                                        </div>
+                                                                        <div className="text-[10px] text-blue-600 truncate mt-0.5">{cj.role}</div>
+                                                                    </div>
+
+                                                                    {/* Action Button */}
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => handleImportFromCluster(cj)}
+                                                                        className="ml-2 p-1.5 bg-white border border-gray-200 rounded-md text-gray-400 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition-colors shadow-sm group-hover:visible"
+                                                                        title="เลือกคนนี้"
+                                                                    >
+                                                                        <ArrowRight className="w-4 h-4" />
+                                                                    </button>
+                                                                </div>
                                                             )
                                                         })}
                                                         {filteredCandidates.length === 0 && (
-                                                            <div className="col-span-2 text-center py-4 text-gray-400 text-xs italic">ไม่พบข้อมูลกรรมการ</div>
+                                                            <div className="text-center py-6 text-gray-400 text-xs italic border-2 border-dashed border-gray-100 rounded-lg">
+                                                                ไม่พบข้อมูลกรรมการ
+                                                            </div>
                                                         )}
                                                     </div>
                                                 </div>
