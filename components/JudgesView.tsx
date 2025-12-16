@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { AppData, Judge, User, Team, JudgeConfig } from '../types';
-import { Search, Plus, Edit2, Trash2, Gavel, Mail, Phone, School, MapPin, Loader2, Save, X, LayoutGrid, AlertTriangle, CheckCircle, Users, Briefcase, ChevronDown, ChevronUp, AlertOctagon, UserCheck, Camera, Copy, Trophy, Filter, Layers, ChevronRight, Hash, Eye, EyeOff, ChevronsUpDown, ChevronLeft, ListChecks, ArrowRight, Import, AlertCircle, Printer, FileText, Files, Settings, ScrollText, ArrowUpFromLine, ArrowDownToLine, MoveHorizontal } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, Gavel, Mail, Phone, School, MapPin, Loader2, Save, X, LayoutGrid, AlertTriangle, CheckCircle, Users, Briefcase, ChevronDown, ChevronUp, AlertOctagon, UserCheck, Camera, Copy, Trophy, Filter, Layers, ChevronRight, Hash, Eye, EyeOff, ChevronsUpDown, ChevronLeft, ListChecks, ArrowRight, Import, AlertCircle, Printer, FileText, Files, Settings, ScrollText, ArrowUpFromLine, ArrowDownToLine, MoveHorizontal, Image as ImageIcon, Upload } from 'lucide-react';
 import SearchableSelect from './SearchableSelect';
 import ConfirmationModal from './ConfirmationModal';
 import { saveJudge, deleteJudge, uploadImage, getJudgeConfig, saveJudgeConfig } from '../services/api';
@@ -28,6 +28,20 @@ interface JudgeAssignment {
     clusterKey: string;
     clusterLabel: string;
 }
+
+// Default Configuration Template
+const DEFAULT_CONFIG: JudgeConfig = {
+    id: '',
+    officeName: 'ศูนย์เครือข่ายพัฒนาคุณภาพการศึกษา...',
+    commandNumber: '1/2567',
+    subject: 'แต่งตั้งคณะกรรมการตัดสินการแข่งขันงานศิลปหัตถกรรมนักเรียน ครั้งที่ 71',
+    preamble: 'ด้วยศูนย์เครือข่ายพัฒนาคุณภาพการศึกษา... ได้กำหนดจัดงานศิลปหัตถกรรมนักเรียน เพื่อคัดเลือกตัวแทนเข้าร่วมการแข่งขันในระดับเขตพื้นที่การศึกษา เพื่อให้การดำเนินงานเป็นไปด้วยความเรียบร้อยและบรรลุตามวัตถุประสงค์ จึงแต่งตั้งคณะกรรมการตัดสินการแข่งขัน ดังรายชื่อต่อไปนี้',
+    signerName: 'นายสมชาย ใจดี',
+    signerPosition: 'ประธานศูนย์เครือข่าย...',
+    dateText: `สั่ง ณ วันที่ ${new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}`,
+    margins: { top: 20, bottom: 20, left: 20, right: 20 },
+    logoUrl: ''
+};
 
 // Helper to sort judges by role priority
 const sortJudgesByRole = (judges: Judge[]) => {
@@ -102,47 +116,70 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isLoadingCandidates, setIsLoadingCandidates] = useState(false);
-  const [isSavingConfig, setIsSavingConfig] = useState(false);
   
-  // Print Modal State
+  // Settings & Config State
+  const [isSavingConfig, setIsSavingConfig] = useState(false);
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [isGeneratingPrint, setIsGeneratingPrint] = useState(false);
   const [showOfficialSettings, setShowOfficialSettings] = useState(false);
-  const [officialConfig, setOfficialConfig] = useState<JudgeConfig>({
-      officeName: 'ศูนย์เครือข่ายพัฒนาคุณภาพการศึกษา...',
-      commandNumber: '1/2567',
-      subject: 'แต่งตั้งคณะกรรมการตัดสินการแข่งขันงานศิลปหัตถกรรมนักเรียน ครั้งที่ 71',
-      preamble: 'ด้วยศูนย์เครือข่ายพัฒนาคุณภาพการศึกษา... ได้กำหนดจัดงานศิลปหัตถกรรมนักเรียน เพื่อคัดเลือกตัวแทนเข้าร่วมการแข่งขันในระดับเขตพื้นที่การศึกษา เพื่อให้การดำเนินงานเป็นไปด้วยความเรียบร้อยและบรรลุตามวัตถุประสงค์ จึงแต่งตั้งคณะกรรมการตัดสินการแข่งขัน ดังรายชื่อต่อไปนี้',
-      signerName: 'นายสมชาย ใจดี',
-      signerPosition: 'ประธานศูนย์เครือข่าย...',
-      dateText: `สั่ง ณ วันที่ ${new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}`,
-      margins: { top: 20, bottom: 20, left: 20, right: 20 }
-  });
+  
+  // Maps config ID (area, clusterID) to its config
+  const [configMap, setConfigMap] = useState<Record<string, JudgeConfig>>({});
+  
+  // Determine user context for settings
+  const userRole = user?.level?.toLowerCase();
+  const isAdminOrArea = userRole === 'admin' || userRole === 'area';
+  const isGroupAdmin = userRole === 'group_admin';
+  const canManage = isAdminOrArea || isGroupAdmin;
+  const userSchool = data.schools.find(s => s.SchoolID === user?.SchoolID);
+  const userClusterID = userSchool?.SchoolCluster;
 
-  // Load official config from API
+  // The ID currently being edited in the settings modal
+  const [selectedConfigContext, setSelectedConfigContext] = useState<string>(isAdminOrArea ? 'area' : (userClusterID || 'area'));
+  
+  // Current config object for editing in modal
+  const [currentEditConfig, setCurrentEditConfig] = useState<JudgeConfig>({ ...DEFAULT_CONFIG });
+
+  const configFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Load official config from API map
   useEffect(() => {
-      const loadConfig = async () => {
+      const loadConfigs = async () => {
           try {
-              const saved = await getJudgeConfig();
-              if (saved) {
-                  // Merge with defaults to ensure margins exist if old config didn't have them
-                  setOfficialConfig(prev => ({
-                      ...prev,
-                      ...saved,
-                      margins: { 
-                          top: saved.margins?.top ?? 20,
-                          bottom: saved.margins?.bottom ?? 20,
-                          left: saved.margins?.left ?? 20,
-                          right: saved.margins?.right ?? 20
-                      }
-                  }));
+              const savedMap = await getJudgeConfig();
+              if (savedMap) {
+                  setConfigMap(savedMap);
               }
           } catch (e) {
-              console.error("Failed to load config");
+              console.error("Failed to load configs");
           }
       };
-      loadConfig();
+      loadConfigs();
   }, []);
+
+  // Update edit config whenever selected context changes or map updates
+  useEffect(() => {
+      const existing = configMap[selectedConfigContext];
+      if (existing) {
+          // Merge to ensure new fields (like margins) exist if old saved data lacks them
+          setCurrentEditConfig({
+              ...DEFAULT_CONFIG,
+              ...existing,
+              id: selectedConfigContext,
+              margins: { ...DEFAULT_CONFIG.margins, ...existing.margins }
+          });
+      } else {
+          // Initialize new for this context
+          const clusterName = data.clusters.find(c => c.ClusterID === selectedConfigContext)?.ClusterName || 'ระดับเขตพื้นที่';
+          setCurrentEditConfig({
+              ...DEFAULT_CONFIG,
+              id: selectedConfigContext,
+              officeName: selectedConfigContext === 'area' ? 'สำนักงานเขตพื้นที่...' : `ศูนย์เครือข่าย${clusterName}`,
+              signerPosition: selectedConfigContext === 'area' ? 'ผู้อำนวยการเขตพื้นที่...' : 'ประธานศูนย์เครือข่าย...'
+          });
+      }
+  }, [selectedConfigContext, configMap, data.clusters]);
 
   // Toast State
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info', isVisible: boolean }>({ message: '', type: 'info', isVisible: false });
@@ -161,15 +198,40 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
   // Import Search State
   const [importSearch, setImportSearch] = useState('');
 
+  // Candidates Logic for Import (Area View only)
+  const candidates = useMemo(() => {
+      if (viewScope !== 'area' || !tempAssignment.activityId) return [];
+      
+      // Get all judges for this activity at cluster level
+      const clusterJudges = data.judges.filter(j => 
+          j.activityId === tempAssignment.activityId && 
+          (j.stageScope === 'cluster' || !j.stageScope)
+      );
+
+      // Deduplicate by name + school
+      const unique = new Map();
+      clusterJudges.forEach(j => {
+          const key = `${j.judgeName}_${j.schoolName}`;
+          if (!unique.has(key)) unique.set(key, j);
+      });
+      
+      return Array.from(unique.values()).sort((a, b) => a.judgeName.localeCompare(b.judgeName));
+  }, [data.judges, tempAssignment.activityId, viewScope]);
+
+  const filteredCandidates = useMemo(() => {
+      if (!importSearch) return candidates;
+      const lower = importSearch.toLowerCase();
+      return candidates.filter(c => 
+          c.judgeName.toLowerCase().includes(lower) || 
+          c.schoolName.toLowerCase().includes(lower)
+      );
+  }, [candidates, importSearch]);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [confirmDelete, setConfirmDelete] = useState<{ isOpen: boolean, id: string | null }>({ isOpen: false, id: null });
   const [isDeleting, setIsDeleting] = useState(false);
   const [expandedActivity, setExpandedActivity] = useState<string | null>(null);
-
-  // Permissions
-  const canManage = ['admin', 'area', 'group_admin'].includes(user?.level?.toLowerCase() || '');
-  const isGroupAdmin = user?.level === 'group_admin';
 
   // Reset pagination when filter changes
   useEffect(() => {
@@ -190,11 +252,23 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
       setToast({ message, type, isVisible: true });
   };
 
+  const handleConfigContextChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+      // Save current temp state to map before switching (optional, but good UX if user switches without saving?)
+      // Actually, standard is explicit save. So just switch and load.
+      setSelectedConfigContext(e.target.value);
+  };
+
   const handleSaveOfficialConfig = async () => {
       setIsSavingConfig(true);
       try {
-          const success = await saveJudgeConfig(officialConfig);
+          const configToSave = { ...currentEditConfig, id: selectedConfigContext };
+          const success = await saveJudgeConfig(configToSave);
           if (success) {
+              // Update local map
+              setConfigMap(prev => ({
+                  ...prev,
+                  [selectedConfigContext]: configToSave
+              }));
               setShowOfficialSettings(false);
               showToast('บันทึกการตั้งค่าเรียบร้อย', 'success');
           } else {
@@ -204,6 +278,29 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
           showToast('เกิดข้อผิดพลาดในการบันทึก', 'error');
       } finally {
           setIsSavingConfig(false);
+      }
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      setIsUploadingLogo(true);
+      try {
+          const base64 = await resizeImage(file, 800, 800, 0.8);
+          const res = await uploadImage(base64, `judge_logo_${selectedConfigContext}_${Date.now()}.jpg`);
+          
+          if (res.status === 'success' && res.fileUrl) {
+              const publicUrl = `https://drive.google.com/thumbnail?id=${res.fileId}`;
+              setCurrentEditConfig(prev => ({ ...prev, logoUrl: publicUrl }));
+          } else {
+              showToast('อัปโหลดโลโก้ไม่สำเร็จ', 'error');
+          }
+      } catch (err) {
+          showToast('เกิดข้อผิดพลาดในการอัปโหลด', 'error');
+      } finally {
+          setIsUploadingLogo(false);
+          if(configFileInputRef.current) configFileInputRef.current.value = '';
       }
   };
 
@@ -717,16 +814,30 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
       const date = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
       const scopeTitle = viewScope === 'cluster' ? `ระดับกลุ่มเครือข่าย ${clusterFilter ? `(${data.clusters.find(c => c.ClusterID === clusterFilter)?.ClusterName})` : ''}` : 'ระดับเขตพื้นที่การศึกษา';
       
-      // Generate QR Code for this specific view/filter
+      // Determine Context Config to use
+      let activeConfig = DEFAULT_CONFIG;
+      if (viewScope === 'area') {
+          activeConfig = configMap['area'] || DEFAULT_CONFIG;
+      } else {
+          // Cluster view
+          if (clusterFilter) {
+              activeConfig = configMap[clusterFilter] || DEFAULT_CONFIG;
+          } else {
+              // If viewing all clusters, default to area or handle per-item?
+              // For a combined list, 'area' config usually serves as the cover or use default.
+              // Let's default to area config if no specific filter, assuming printed by central admin.
+              activeConfig = configMap['area'] || DEFAULT_CONFIG;
+          }
+      }
+
+      // Generate QR Code
       let qrCodeBase64 = '';
       try {
           qrCodeBase64 = await QRCode.toDataURL(window.location.href, { margin: 1, width: 100 });
-      } catch (e) {
-          console.error("QR Error", e);
-      }
+      } catch (e) { console.error("QR Error", e); }
 
       // Margins
-      const margins = officialConfig.margins || { top: 20, bottom: 20, left: 20, right: 20 };
+      const margins = activeConfig.margins || { top: 20, bottom: 20, left: 20, right: 20 };
 
       // 1. Organize data: Category -> Activity -> Judges (Sorted)
       const categoryList = Array.from(new Set(data.activities.map(a => a.category))).sort();
@@ -782,18 +893,21 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
               });
           });
 
+          // Official Logo: Use uploaded URL or Default Garuda
+          const logoSrc = activeConfig.logoUrl || "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c9/Garuda_Phra_Khrut_Pha_Thira_Chao.svg/1200px-Garuda_Phra_Khrut_Pha_Thira_Chao.svg.png";
+
           htmlBodyContent = `
             <div class="garuda-container">
-                <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c9/Garuda_Phra_Khrut_Pha_Thira_Chao.svg/1200px-Garuda_Phra_Khrut_Pha_Thira_Chao.svg.png" class="garuda" />
+                <img src="${logoSrc}" class="garuda" />
             </div>
             <div class="official-header">
-                คำสั่ง ${officialConfig.officeName}<br/>
-                ที่ ${officialConfig.commandNumber}<br/>
-                เรื่อง ${officialConfig.subject}
+                คำสั่ง ${activeConfig.officeName}<br/>
+                ที่ ${activeConfig.commandNumber}<br/>
+                เรื่อง ${activeConfig.subject}
             </div>
             <div class="divider"></div>
             <div class="official-body">
-                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;${officialConfig.preamble}
+                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;${activeConfig.preamble}
             </div>
             <br/>
             ${allJudgesContent}
@@ -803,12 +917,12 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
             </div>
             <br/>
             <div class="official-date">
-                ${officialConfig.dateText}
+                ${activeConfig.dateText}
             </div>
             <br/><br/><br/>
             <div class="official-sign">
-                (${officialConfig.signerName})<br/>
-                ${officialConfig.signerPosition}
+                (${activeConfig.signerName})<br/>
+                ${activeConfig.signerPosition}
             </div>
           `;
 
@@ -985,7 +1099,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                 
                 /* Official Document Styles */
                 .garuda-container { text-align: center; margin-bottom: 20px; }
-                .garuda { width: 3cm; height: auto; }
+                .garuda { width: 3cm; height: auto; object-fit: contain; }
                 .official-header { text-align: center; font-weight: bold; font-size: 16pt; line-height: 1.5; margin-bottom: 10px; }
                 .divider { border-bottom: 1px solid transparent; margin-bottom: 10px; }
                 .official-body { text-align: justify; font-size: 16px; line-height: 1.6; }
@@ -1037,17 +1151,6 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
       printWindow.document.close();
       setIsGeneratingPrint(false);
   };
-
-  if (!canManage) {
-      return <div className="text-center py-20 text-gray-500">คุณไม่มีสิทธิ์เข้าถึงหน้านี้</div>;
-  }
-
-  // Candidates Calculation for Import
-  const candidates = tempAssignment.activityId ? getClusterJudgesForActivity(tempAssignment.activityId) : [];
-  const filteredCandidates = candidates.filter(c => 
-      c.judgeName.toLowerCase().includes(importSearch.toLowerCase()) || 
-      c.schoolName.toLowerCase().includes(importSearch.toLowerCase())
-  );
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20 relative">
@@ -1105,19 +1208,24 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                 </button>
             </div>
             
+            {/* Action Buttons (Restricted to Managers) */}
             <div className="flex items-center gap-2">
-                <button
-                    onClick={() => setShowPrintModal(true)}
-                    className="flex items-center px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors shadow-sm font-medium text-sm"
-                >
-                    <Printer className="w-4 h-4 mr-2" /> พิมพ์ใบรายชื่อ
-                </button>
-                <button 
-                    onClick={() => handleAdd(undefined, clusterFilter)}
-                    className={`flex items-center px-4 py-2 text-white rounded-lg transition-colors shadow-sm font-medium text-sm ${viewScope === 'area' ? 'bg-purple-600 hover:bg-purple-700' : 'bg-blue-600 hover:bg-blue-700'}`}
-                >
-                    <Plus className="w-4 h-4 mr-2" /> เพิ่มกรรมการ ({viewScope === 'area' ? 'เขต' : 'กลุ่ม'})
-                </button>
+                {canManage && (
+                    <button
+                        onClick={() => setShowPrintModal(true)}
+                        className="flex items-center px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors shadow-sm font-medium text-sm"
+                    >
+                        <Printer className="w-4 h-4 mr-2" /> พิมพ์ใบรายชื่อ
+                    </button>
+                )}
+                {canManage && (
+                    <button 
+                        onClick={() => handleAdd(undefined, clusterFilter)}
+                        className={`flex items-center px-4 py-2 text-white rounded-lg transition-colors shadow-sm font-medium text-sm ${viewScope === 'area' ? 'bg-purple-600 hover:bg-purple-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+                    >
+                        <Plus className="w-4 h-4 mr-2" /> เพิ่มกรรมการ ({viewScope === 'area' ? 'เขต' : 'กลุ่ม'})
+                    </button>
+                )}
             </div>
         </div>
 
@@ -1192,7 +1300,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
             </div>
         )}
 
-        {/* Official Settings Modal */}
+        {/* Official Settings Modal - Updated for Context & Logo */}
         {showOfficialSettings && (
             <div className="fixed inset-0 bg-black/60 z-[250] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
                 <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[90vh]">
@@ -1205,6 +1313,26 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                         </button>
                     </div>
                     <div className="p-6 overflow-y-auto space-y-4">
+                        
+                        {/* Context Selection */}
+                        <div className="bg-blue-50 p-3 rounded border border-blue-200">
+                            <label className="block text-xs font-bold text-blue-800 mb-1">เลือกหน่วยงาน (Scope)</label>
+                            <select 
+                                className="w-full border rounded p-2 text-sm bg-white focus:ring-blue-500"
+                                value={selectedConfigContext}
+                                onChange={handleConfigContextChange}
+                                disabled={isGroupAdmin && !isAdminOrArea}
+                            >
+                                {isAdminOrArea && <option value="area">ระดับเขตพื้นที่การศึกษา (District)</option>}
+                                <optgroup label="ระดับกลุ่มเครือข่าย (Clusters)">
+                                    {data.clusters.map(c => {
+                                        if (isGroupAdmin && c.ClusterID !== userClusterID) return null;
+                                        return <option key={c.ClusterID} value={c.ClusterID}>{c.ClusterName}</option>;
+                                    })}
+                                </optgroup>
+                            </select>
+                        </div>
+
                         {/* Page Margins Settings */}
                         <div className="bg-white p-3 rounded border border-gray-200 shadow-sm">
                             <h4 className="text-xs font-bold text-gray-500 mb-2 uppercase flex items-center">
@@ -1216,8 +1344,8 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                                     <input 
                                         type="number" 
                                         className="w-full border rounded p-1.5 text-sm" 
-                                        value={officialConfig.margins?.top ?? 20} 
-                                        onChange={e => setOfficialConfig({...officialConfig, margins: { ...officialConfig.margins!, top: parseInt(e.target.value) || 0 } })} 
+                                        value={currentEditConfig.margins?.top ?? 20} 
+                                        onChange={e => setCurrentEditConfig({...currentEditConfig, margins: { ...currentEditConfig.margins!, top: parseInt(e.target.value) || 0 } })} 
                                     />
                                 </div>
                                 <div>
@@ -1225,8 +1353,8 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                                     <input 
                                         type="number" 
                                         className="w-full border rounded p-1.5 text-sm" 
-                                        value={officialConfig.margins?.bottom ?? 20} 
-                                        onChange={e => setOfficialConfig({...officialConfig, margins: { ...officialConfig.margins!, bottom: parseInt(e.target.value) || 0 } })} 
+                                        value={currentEditConfig.margins?.bottom ?? 20} 
+                                        onChange={e => setCurrentEditConfig({...currentEditConfig, margins: { ...currentEditConfig.margins!, bottom: parseInt(e.target.value) || 0 } })} 
                                     />
                                 </div>
                                 <div>
@@ -1234,8 +1362,8 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                                     <input 
                                         type="number" 
                                         className="w-full border rounded p-1.5 text-sm" 
-                                        value={officialConfig.margins?.left ?? 20} 
-                                        onChange={e => setOfficialConfig({...officialConfig, margins: { ...officialConfig.margins!, left: parseInt(e.target.value) || 0 } })} 
+                                        value={currentEditConfig.margins?.left ?? 20} 
+                                        onChange={e => setCurrentEditConfig({...currentEditConfig, margins: { ...currentEditConfig.margins!, left: parseInt(e.target.value) || 0 } })} 
                                     />
                                 </div>
                                 <div>
@@ -1243,40 +1371,69 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                                     <input 
                                         type="number" 
                                         className="w-full border rounded p-1.5 text-sm" 
-                                        value={officialConfig.margins?.right ?? 20} 
-                                        onChange={e => setOfficialConfig({...officialConfig, margins: { ...officialConfig.margins!, right: parseInt(e.target.value) || 0 } })} 
+                                        value={currentEditConfig.margins?.right ?? 20} 
+                                        onChange={e => setCurrentEditConfig({...currentEditConfig, margins: { ...currentEditConfig.margins!, right: parseInt(e.target.value) || 0 } })} 
                                     />
                                 </div>
                             </div>
                         </div>
 
+                        {/* Logo Upload */}
+                        <div>
+                            <label className="block text-xs font-bold text-gray-700 mb-1">ตราสัญลักษณ์ (Logo)</label>
+                            <div className="flex gap-2 items-center">
+                                <input 
+                                    className="flex-1 border rounded p-2 text-sm" 
+                                    placeholder="URL (หรืออัปโหลด)" 
+                                    value={currentEditConfig.logoUrl || ''} 
+                                    onChange={e => setCurrentEditConfig({...currentEditConfig, logoUrl: e.target.value})}
+                                />
+                                <input 
+                                    type="file" 
+                                    ref={configFileInputRef} 
+                                    className="hidden" 
+                                    accept="image/*" 
+                                    onChange={handleLogoUpload}
+                                />
+                                <button 
+                                    onClick={() => configFileInputRef.current?.click()}
+                                    disabled={isUploadingLogo}
+                                    className="px-3 py-2 bg-gray-100 rounded border border-gray-300 hover:bg-gray-200"
+                                    title="อัปโหลดรูปภาพ"
+                                >
+                                    {isUploadingLogo ? <Loader2 className="w-4 h-4 animate-spin"/> : <ImageIcon className="w-4 h-4"/>}
+                                </button>
+                            </div>
+                            <p className="text-[10px] text-gray-400 mt-1">หากเว้นว่างจะใช้ตราครุฑมาตรฐาน</p>
+                        </div>
+
                         <div>
                             <label className="block text-xs font-bold text-gray-700 mb-1">หัวข้อคำสั่ง (Office Name)</label>
-                            <input className="w-full border rounded p-2 text-sm" value={officialConfig.officeName} onChange={e => setOfficialConfig({...officialConfig, officeName: e.target.value})} placeholder="คำสั่ง ศูนย์เครือข่าย..." />
+                            <input className="w-full border rounded p-2 text-sm" value={currentEditConfig.officeName} onChange={e => setCurrentEditConfig({...currentEditConfig, officeName: e.target.value})} placeholder="คำสั่ง ศูนย์เครือข่าย..." />
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-xs font-bold text-gray-700 mb-1">เลขที่คำสั่ง (No.)</label>
-                                <input className="w-full border rounded p-2 text-sm" value={officialConfig.commandNumber} onChange={e => setOfficialConfig({...officialConfig, commandNumber: e.target.value})} placeholder="ที่ .../2567" />
+                                <input className="w-full border rounded p-2 text-sm" value={currentEditConfig.commandNumber} onChange={e => setCurrentEditConfig({...currentEditConfig, commandNumber: e.target.value})} placeholder="ที่ .../2567" />
                             </div>
                             <div>
                                 <label className="block text-xs font-bold text-gray-700 mb-1">ข้อความวันที่ (Date)</label>
-                                <input className="w-full border rounded p-2 text-sm" value={officialConfig.dateText} onChange={e => setOfficialConfig({...officialConfig, dateText: e.target.value})} />
+                                <input className="w-full border rounded p-2 text-sm" value={currentEditConfig.dateText} onChange={e => setCurrentEditConfig({...currentEditConfig, dateText: e.target.value})} />
                             </div>
                         </div>
                         <div>
                             <label className="block text-xs font-bold text-gray-700 mb-1">เรื่อง (Subject)</label>
-                            <input className="w-full border rounded p-2 text-sm" value={officialConfig.subject} onChange={e => setOfficialConfig({...officialConfig, subject: e.target.value})} />
+                            <input className="w-full border rounded p-2 text-sm" value={currentEditConfig.subject} onChange={e => setCurrentEditConfig({...currentEditConfig, subject: e.target.value})} />
                         </div>
                         <div>
                             <label className="block text-xs font-bold text-gray-700 mb-1">ข้อความเกริ่นนำ (Preamble)</label>
-                            <textarea className="w-full border rounded p-2 text-sm h-24" value={officialConfig.preamble} onChange={e => setOfficialConfig({...officialConfig, preamble: e.target.value})} />
+                            <textarea className="w-full border rounded p-2 text-sm h-24" value={currentEditConfig.preamble} onChange={e => setCurrentEditConfig({...currentEditConfig, preamble: e.target.value})} />
                         </div>
                         <div className="bg-gray-50 p-3 rounded border border-gray-200">
                             <h4 className="text-xs font-bold text-gray-500 mb-2 uppercase">ผู้ลงนาม (Signatory)</h4>
                             <div className="space-y-2">
-                                <input className="w-full border rounded p-2 text-sm" value={officialConfig.signerName} onChange={e => setOfficialConfig({...officialConfig, signerName: e.target.value})} placeholder="ชื่อ-สกุล (ไม่ต้องมีวงเล็บ)" />
-                                <input className="w-full border rounded p-2 text-sm" value={officialConfig.signerPosition} onChange={e => setOfficialConfig({...officialConfig, signerPosition: e.target.value})} placeholder="ตำแหน่ง" />
+                                <input className="w-full border rounded p-2 text-sm" value={currentEditConfig.signerName} onChange={e => setCurrentEditConfig({...currentEditConfig, signerName: e.target.value})} placeholder="ชื่อ-สกุล (ไม่ต้องมีวงเล็บ)" />
+                                <input className="w-full border rounded p-2 text-sm" value={currentEditConfig.signerPosition} onChange={e => setCurrentEditConfig({...currentEditConfig, signerPosition: e.target.value})} placeholder="ตำแหน่ง" />
                             </div>
                         </div>
                     </div>
@@ -1456,7 +1613,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                                                                     <div className="md:col-span-2">
                                                                         <div className="flex justify-between items-center mb-3">
                                                                             <h4 className="text-xs font-bold text-gray-500 uppercase flex items-center"><UserCheck className="w-3 h-3 mr-1" /> รายชื่อกรรมการ (ระดับเขต)</h4>
-                                                                            <button onClick={(e) => { e.stopPropagation(); handleAdd(act.id); }} className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded hover:bg-blue-100 font-medium flex items-center"><Plus className="w-3 h-3 mr-1" /> เพิ่ม</button>
+                                                                            {canManage && <button onClick={(e) => { e.stopPropagation(); handleAdd(act.id); }} className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded hover:bg-blue-100 font-medium flex items-center"><Plus className="w-3 h-3 mr-1" /> เพิ่ม</button>}
                                                                         </div>
                                                                         <div className="space-y-2">
                                                                             {sortJudgesByRole(group.areaJudges).map(judge => renderJudgeRow(judge, group.areaSchools))}
@@ -1484,7 +1641,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                                                                                         <span className="font-bold text-blue-800 text-xs flex items-center"><LayoutGrid className="w-3.5 h-3.5 mr-2" /> {cluster.ClusterName}</span>
                                                                                         <span className="text-[10px] text-gray-500 bg-white px-1.5 py-0.5 rounded border border-blue-100">{cData.judges.length} คน / {cData.teamCount} ทีม</span>
                                                                                     </div>
-                                                                                    {!isClusterCollapsed && (
+                                                                                    {!isClusterCollapsed && canManage && (
                                                                                         <button onClick={(e) => { e.stopPropagation(); handleAdd(act.id, cluster.ClusterID); }} className="text-[10px] bg-white border border-blue-200 text-blue-600 px-2 py-1 rounded hover:bg-blue-100 flex items-center"><Plus className="w-3 h-3 mr-1" /> เพิ่ม</button>
                                                                                     )}
                                                                                 </div>
@@ -1594,9 +1751,11 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                                         <div className="text-xs text-gray-500 flex items-center"><Phone className="w-3 h-3 mr-1.5"/> {item.judge.phone || '-'}</div>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium align-top">
-                                        <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <button onClick={() => handleEdit(item.judge)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded" title="แก้ไขข้อมูลหลัก"><Edit2 className="w-4 h-4"/></button>
-                                        </div>
+                                        {canManage && (
+                                            <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <button onClick={() => handleEdit(item.judge)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded" title="แก้ไขข้อมูลหลัก"><Edit2 className="w-4 h-4"/></button>
+                                            </div>
+                                        )}
                                     </td>
                                 </tr>
                             ))}
@@ -2043,109 +2202,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
             </div>
         )}
 
-        {/* Official Settings Modal */}
-        {showOfficialSettings && (
-            <div className="fixed inset-0 bg-black/60 z-[250] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-                <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[90vh]">
-                    <div className="p-4 border-b border-gray-100 bg-amber-50 flex justify-between items-center">
-                        <h3 className="font-bold text-amber-800 flex items-center">
-                            <Settings className="w-5 h-5 mr-2" /> ตั้งค่าหนังสือคำสั่งราชการ
-                        </h3>
-                        <button onClick={() => setShowOfficialSettings(false)} className="p-1 hover:bg-amber-100 rounded-full text-amber-800">
-                            <X className="w-5 h-5" />
-                        </button>
-                    </div>
-                    <div className="p-6 overflow-y-auto space-y-4">
-                        {/* Page Margins Settings */}
-                        <div className="bg-white p-3 rounded border border-gray-200 shadow-sm">
-                            <h4 className="text-xs font-bold text-gray-500 mb-2 uppercase flex items-center">
-                                <MoveHorizontal className="w-3.5 h-3.5 mr-1"/> ตั้งค่าขอบกระดาษ (Margins) - หน่วย mm
-                            </h4>
-                            <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-[10px] text-gray-500 mb-1 flex items-center"><ArrowDownToLine className="w-3 h-3 mr-1"/> ขอบบน (Top)</label>
-                                    <input 
-                                        type="number" 
-                                        className="w-full border rounded p-1.5 text-sm" 
-                                        value={officialConfig.margins?.top ?? 20} 
-                                        onChange={e => setOfficialConfig({...officialConfig, margins: { ...officialConfig.margins!, top: parseInt(e.target.value) || 0 } })} 
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] text-gray-500 mb-1 flex items-center"><ArrowUpFromLine className="w-3 h-3 mr-1"/> ขอบล่าง (Bottom)</label>
-                                    <input 
-                                        type="number" 
-                                        className="w-full border rounded p-1.5 text-sm" 
-                                        value={officialConfig.margins?.bottom ?? 20} 
-                                        onChange={e => setOfficialConfig({...officialConfig, margins: { ...officialConfig.margins!, bottom: parseInt(e.target.value) || 0 } })} 
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] text-gray-500 mb-1">ขอบซ้าย (Left)</label>
-                                    <input 
-                                        type="number" 
-                                        className="w-full border rounded p-1.5 text-sm" 
-                                        value={officialConfig.margins?.left ?? 20} 
-                                        onChange={e => setOfficialConfig({...officialConfig, margins: { ...officialConfig.margins!, left: parseInt(e.target.value) || 0 } })} 
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] text-gray-500 mb-1">ขอบขวา (Right)</label>
-                                    <input 
-                                        type="number" 
-                                        className="w-full border rounded p-1.5 text-sm" 
-                                        value={officialConfig.margins?.right ?? 20} 
-                                        onChange={e => setOfficialConfig({...officialConfig, margins: { ...officialConfig.margins!, right: parseInt(e.target.value) || 0 } })} 
-                                    />
-                                </div>
-                            </div>
-                        </div>
-
-                        <div>
-                            <label className="block text-xs font-bold text-gray-700 mb-1">หัวข้อคำสั่ง (Office Name)</label>
-                            <input className="w-full border rounded p-2 text-sm" value={officialConfig.officeName} onChange={e => setOfficialConfig({...officialConfig, officeName: e.target.value})} placeholder="คำสั่ง ศูนย์เครือข่าย..." />
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-xs font-bold text-gray-700 mb-1">เลขที่คำสั่ง (No.)</label>
-                                <input className="w-full border rounded p-2 text-sm" value={officialConfig.commandNumber} onChange={e => setOfficialConfig({...officialConfig, commandNumber: e.target.value})} placeholder="ที่ .../2567" />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-gray-700 mb-1">ข้อความวันที่ (Date)</label>
-                                <input className="w-full border rounded p-2 text-sm" value={officialConfig.dateText} onChange={e => setOfficialConfig({...officialConfig, dateText: e.target.value})} />
-                            </div>
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold text-gray-700 mb-1">เรื่อง (Subject)</label>
-                            <input className="w-full border rounded p-2 text-sm" value={officialConfig.subject} onChange={e => setOfficialConfig({...officialConfig, subject: e.target.value})} />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold text-gray-700 mb-1">ข้อความเกริ่นนำ (Preamble)</label>
-                            <textarea className="w-full border rounded p-2 text-sm h-24" value={officialConfig.preamble} onChange={e => setOfficialConfig({...officialConfig, preamble: e.target.value})} />
-                        </div>
-                        <div className="bg-gray-50 p-3 rounded border border-gray-200">
-                            <h4 className="text-xs font-bold text-gray-500 mb-2 uppercase">ผู้ลงนาม (Signatory)</h4>
-                            <div className="space-y-2">
-                                <input className="w-full border rounded p-2 text-sm" value={officialConfig.signerName} onChange={e => setOfficialConfig({...officialConfig, signerName: e.target.value})} placeholder="ชื่อ-สกุล (ไม่ต้องมีวงเล็บ)" />
-                                <input className="w-full border rounded p-2 text-sm" value={officialConfig.signerPosition} onChange={e => setOfficialConfig({...officialConfig, signerPosition: e.target.value})} placeholder="ตำแหน่ง" />
-                            </div>
-                        </div>
-                    </div>
-                    <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-2">
-                        <button onClick={() => setShowOfficialSettings(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded text-sm">ยกเลิก</button>
-                        <button 
-                            onClick={handleSaveOfficialConfig} 
-                            disabled={isSavingConfig}
-                            className="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 font-medium flex items-center"
-                        >
-                            {isSavingConfig && <Loader2 className="w-3 h-3 mr-2 animate-spin" />}
-                            บันทึกการตั้งค่า
-                        </button>
-                    </div>
-                </div>
-            </div>
-        )}
-
+        {/* Confirmation Modal */}
         <ConfirmationModal 
             isOpen={confirmDelete.isOpen}
             title="ลบข้อมูลกรรมการ"
@@ -2193,8 +2250,12 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                   </div>
               </div>
               <div className="flex items-center gap-1">
-                  <button onClick={() => handleEdit(judge)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"><Edit2 className="w-3.5 h-3.5" /></button>
-                  <button onClick={() => setConfirmDelete({ isOpen: true, id: judge.id })} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 className="w-3.5 h-3.5" /></button>
+                  {canManage && (
+                      <>
+                        <button onClick={() => handleEdit(judge)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"><Edit2 className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => setConfirmDelete({ isOpen: true, id: judge.id })} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 className="w-3.5 h-3.5" /></button>
+                      </>
+                  )}
               </div>
           </div>
       );
