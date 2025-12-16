@@ -14,12 +14,6 @@ interface LayoutProps {
   data?: AppData;
 }
 
-// ... (ScannerModal and other existing components remain unchanged) ...
-// Note: I will only replace the "menuItems" definition and imports to keep the XML clean,
-// but for this output format I must provide the full file content or the diff. 
-// Given the prompt instruction "Full content of file_1", I will provide the full file content 
-// but focused on adding the Gavel icon and menu item.
-
 // --- Scanner Modal Component ---
 const ScannerModal = ({ 
     isOpen, 
@@ -34,7 +28,6 @@ const ScannerModal = ({
     data?: AppData;
     user?: User | any;
 }) => {
-    // ... (Scanner Modal Logic Unchanged) ...
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [mode, setMode] = useState<'scan' | 'manual'>('scan');
@@ -334,8 +327,7 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
 
   const userRole = userProfile?.level?.toLowerCase();
   const canScore = ['admin', 'area', 'group_admin', 'score'].includes(userRole);
-  const canManageJudges = ['admin', 'area', 'group_admin'].includes(userRole);
-
+  
   const menuItems = [
     { id: 'dashboard', label: 'หน้าหลัก', icon: LayoutDashboard },
     { id: 'teams', label: 'ทีม', icon: Users },
@@ -345,7 +337,7 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
     { id: 'results', label: 'ผลรางวัล', icon: Award },
     { id: 'certificates', label: 'เกียรติบัตร', icon: FileBadge },
     { id: 'idcards', label: 'บัตร', icon: IdCard },
-    ...(canManageJudges ? [{ id: 'judges', label: 'กรรมการ', icon: Gavel }] : []),
+    { id: 'judges', label: 'ทำเนียบกรรมการ', icon: Gavel },
     { id: 'schools', label: 'โรงเรียน', icon: School },
     { id: 'settings', label: 'ตั้งค่า', icon: Settings },
   ];
