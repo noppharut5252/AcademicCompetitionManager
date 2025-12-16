@@ -1,10 +1,11 @@
 
 import React, { useState, useRef, useMemo } from 'react';
 import { AppData, Venue, VenueSchedule } from '../types';
-import { MapPin, Calendar, Plus, Edit2, Trash2, Navigation, Info, ExternalLink, X, Save, CheckCircle, Utensils, Wifi, Car, Wind, Clock, Building, Layers, Map, AlertCircle, Search, LayoutGrid, Camera, Loader2, Upload, ImageIcon, List, ArrowRight } from 'lucide-react';
+import { MapPin, Calendar, Plus, Edit2, Trash2, Navigation, Info, ExternalLink, X, Save, CheckCircle, Utensils, Wifi, Car, Wind, Clock, Building, Layers, Map, AlertCircle, Search, LayoutGrid, Camera, Loader2, Upload, ImageIcon, List, ArrowRight, Trophy, Share2 } from 'lucide-react';
 import SearchableSelect from './SearchableSelect';
 import { saveVenue, deleteVenue, uploadImage } from '../services/api';
 import { resizeImage } from '../services/utils';
+import { shareVenue } from '../services/liff';
 
 interface VenuesViewProps {
   data: AppData;
@@ -96,23 +97,38 @@ const VenueScheduleModal = ({ venue, isOpen, onClose }: { venue: Venue, isOpen: 
                                     </div>
                                     <div className="divide-y divide-gray-100">
                                         {groupedSchedules[date].map((sch, idx) => (
-                                            <div key={idx} className="p-3 hover:bg-gray-50 transition-colors flex flex-col sm:flex-row gap-3">
-                                                <div className="sm:w-24 shrink-0 flex items-center text-orange-600 font-medium text-xs sm:text-sm bg-orange-50 sm:bg-transparent px-2 py-1 sm:p-0 rounded w-fit h-fit">
-                                                    <Clock className="w-3.5 h-3.5 mr-1.5" />
-                                                    {sch.timeRange || 'ตลอดวัน'}
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <div className="font-bold text-gray-900 text-sm">{sch.activityName}</div>
-                                                    <div className="flex items-center text-xs text-gray-500 mt-1">
-                                                        <MapPin className="w-3.5 h-3.5 mr-1" />
-                                                        <span>{sch.building} {sch.floor} <b>{sch.room}</b></span>
-                                                    </div>
-                                                    {sch.note && (
-                                                        <div className="mt-1.5 text-xs text-red-600 bg-red-50 inline-block px-2 py-0.5 rounded border border-red-100">
-                                                            Note: {sch.note}
+                                            <div key={idx} className="p-3 hover:bg-gray-50 transition-colors flex flex-col gap-3">
+                                                <div className="flex items-start gap-3">
+                                                    <div className="sm:w-24 shrink-0 flex flex-col gap-1">
+                                                        <div className="text-orange-600 font-medium text-xs sm:text-sm bg-orange-50 px-2 py-1 rounded w-fit">
+                                                            <Clock className="w-3 h-3 mr-1 inline" />
+                                                            {sch.timeRange || 'ตลอดวัน'}
                                                         </div>
-                                                    )}
+                                                        {sch.level && (
+                                                            <div className={`text-[10px] px-2 py-0.5 rounded w-fit border ${sch.level === 'area' ? 'bg-purple-50 text-purple-700 border-purple-100' : 'bg-blue-50 text-blue-700 border-blue-100'}`}>
+                                                                {sch.level === 'area' ? 'ระดับเขต' : 'ระดับกลุ่ม'}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="font-bold text-gray-900 text-sm">{sch.activityName}</div>
+                                                        <div className="flex items-center text-xs text-gray-500 mt-1">
+                                                            <MapPin className="w-3.5 h-3.5 mr-1" />
+                                                            <span>{sch.building} {sch.floor} <b>{sch.room}</b></span>
+                                                        </div>
+                                                        {sch.note && (
+                                                            <div className="mt-1.5 text-xs text-red-600 bg-red-50 inline-block px-2 py-0.5 rounded border border-red-100">
+                                                                Note: {sch.note}
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </div>
+                                                {/* Image Preview for specific schedule */}
+                                                {sch.imageUrl && (
+                                                    <div className="mt-1 ml-0 sm:ml-27">
+                                                        <img src={sch.imageUrl} alt="Room" className="h-24 w-auto rounded-lg object-cover border border-gray-200" />
+                                                    </div>
+                                                )}
                                             </div>
                                         ))}
                                     </div>
@@ -140,8 +156,16 @@ const VenueCard = ({ venue, isAdmin, onEdit, onViewSchedule }: { venue: Venue, i
     const previewSchedules = allSchedules.slice(0, PREVIEW_LIMIT);
     const hiddenCount = Math.max(0, allSchedules.length - PREVIEW_LIMIT);
 
+    const handleShareVenue = async () => {
+        try {
+            await shareVenue(venue);
+        } catch(e) {
+            alert('ไม่สามารถแชร์ได้');
+        }
+    };
+
     return (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow group flex flex-col h-full">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow group flex flex-col h-full relative">
             {/* Image Section */}
             <div className="relative h-48 bg-gray-200 shrink-0">
                 <img 
@@ -151,6 +175,16 @@ const VenueCard = ({ venue, isAdmin, onEdit, onViewSchedule }: { venue: Venue, i
                     onError={(e) => { (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=800&q=80"; }}
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
+                
+                {/* Share Button (Always Visible) */}
+                <button 
+                    onClick={handleShareVenue}
+                    className="absolute top-3 left-3 p-2 bg-black/40 hover:bg-black/60 backdrop-blur-md rounded-full text-white transition-colors"
+                    title="แชร์สนามแข่งขัน"
+                >
+                    <Share2 className="w-4 h-4" />
+                </button>
+
                 <div className="absolute bottom-4 left-4 right-4">
                     <h3 className="text-white font-bold text-xl leading-tight text-shadow">{venue.name}</h3>
                 </div>
@@ -194,7 +228,10 @@ const VenueCard = ({ venue, isAdmin, onEdit, onViewSchedule }: { venue: Venue, i
                         <div className="space-y-2 mb-2">
                             {previewSchedules.map((sch, idx) => (
                                 <div key={idx} className="bg-white p-2 rounded border border-gray-200 text-xs shadow-sm flex flex-col gap-1">
-                                    <div className="font-bold text-gray-800 line-clamp-1" title={sch.activityName}>{sch.activityName}</div>
+                                    <div className="flex justify-between items-start">
+                                        <div className="font-bold text-gray-800 line-clamp-1 flex-1" title={sch.activityName}>{sch.activityName}</div>
+                                        {sch.level && <span className={`text-[9px] px-1.5 rounded border ml-1 ${sch.level === 'area' ? 'bg-purple-50 text-purple-700 border-purple-100' : 'bg-blue-50 text-blue-700 border-blue-100'}`}>{sch.level === 'area' ? 'เขต' : 'กลุ่ม'}</span>}
+                                    </div>
                                     <div className="flex items-center justify-between text-gray-500">
                                         <span className="flex items-center"><Clock className="w-3 h-3 mr-1"/> {sch.date} {sch.timeRange ? `(${sch.timeRange})` : ''}</span>
                                     </div>
@@ -260,12 +297,14 @@ const VenueModal = ({ venue, isOpen, onClose, onSave, onDelete, activities }: { 
     // Schedule Editing State
     const [scheduleEditIndex, setScheduleEditIndex] = useState<number | null>(null);
     const [newSchedule, setNewSchedule] = useState<VenueSchedule>({
-        activityId: '', activityName: '', building: '', floor: '', room: '', date: '', timeRange: '', note: ''
+        activityId: '', activityName: '', building: '', floor: '', room: '', date: '', timeRange: '', note: '', level: 'cluster', imageUrl: ''
     });
 
     // Image Upload State
     const [isUploading, setIsUploading] = useState(false);
+    const [isUploadingScheduleImg, setIsUploadingScheduleImg] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const scheduleFileInputRef = useRef<HTMLInputElement>(null);
 
     React.useEffect(() => {
         if (venue) {
@@ -274,7 +313,7 @@ const VenueModal = ({ venue, isOpen, onClose, onSave, onDelete, activities }: { 
             setFormData({ name: '', description: '', locationUrl: '', imageUrl: '', facilities: [], contactInfo: '', scheduledActivities: [] });
         }
         setScheduleEditIndex(null);
-        setNewSchedule({ activityId: '', activityName: '', building: '', floor: '', room: '', date: '', timeRange: '', note: '' });
+        setNewSchedule({ activityId: '', activityName: '', building: '', floor: '', room: '', date: '', timeRange: '', note: '', level: 'cluster', imageUrl: '' });
     }, [venue, isOpen]);
 
     const handleChange = (field: keyof Venue, value: any) => {
@@ -300,10 +339,9 @@ const VenueModal = ({ venue, isOpen, onClose, onSave, onDelete, activities }: { 
             const res = await uploadImage(base64, `venue_${Date.now()}.jpg`);
             
             if (res.status === 'success' && res.fileUrl) {
-                // Use thumbnail link for better performance or fileUrl as needed
                 const publicUrl = `https://drive.google.com/thumbnail?id=${res.fileId}&sz=w1000`;
                 handleChange('imageUrl', publicUrl);
-                handleChange('mapImageId', res.fileId); // Also save ID if schema supports
+                handleChange('mapImageId', res.fileId); 
             } else {
                 alert('อัปโหลดไม่สำเร็จ: ' + res.message);
             }
@@ -316,7 +354,31 @@ const VenueModal = ({ venue, isOpen, onClose, onSave, onDelete, activities }: { 
         }
     };
 
-    // --- Schedule Logic ---
+    const handleScheduleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setIsUploadingScheduleImg(true);
+        try {
+            const base64 = await resizeImage(file, 800, 800, 0.8);
+            const res = await uploadImage(base64, `room_${Date.now()}.jpg`);
+            
+            if (res.status === 'success' && res.fileUrl) {
+                const publicUrl = `https://drive.google.com/thumbnail?id=${res.fileId}&sz=w800`;
+                setNewSchedule(prev => ({ ...prev, imageUrl: publicUrl }));
+            } else {
+                alert('อัปโหลดรูปห้องไม่สำเร็จ: ' + res.message);
+            }
+        } catch (err) {
+            console.error(err);
+            alert('เกิดข้อผิดพลาด');
+        } finally {
+            setIsUploadingScheduleImg(false);
+            if(scheduleFileInputRef.current) scheduleFileInputRef.current.value = '';
+        }
+    };
+
+    // --- Schedule Logic (Immediate Save) ---
     const addOrUpdateSchedule = () => {
         if (!newSchedule.activityId || !newSchedule.date) {
             alert('กรุณาเลือกรายการแข่งขันและระบุวันที่');
@@ -336,9 +398,15 @@ const VenueModal = ({ venue, isOpen, onClose, onSave, onDelete, activities }: { 
             currentList.push(entry);
         }
 
-        handleChange('scheduledActivities', currentList);
+        const updatedVenue = { ...formData, scheduledActivities: currentList } as Venue;
+        setFormData(updatedVenue); // Update local state
         
-        // Reset form but keep building/date context for easier consecutive entry
+        // Immediate Save to Backend
+        // If it's a new venue, ID might be generated in parent, handled by onSave logic usually
+        // But for safety, onSave handles ID generation if missing
+        onSave(updatedVenue); 
+        
+        // Reset form
         setNewSchedule({ 
             activityId: '', 
             activityName: '', 
@@ -347,7 +415,9 @@ const VenueModal = ({ venue, isOpen, onClose, onSave, onDelete, activities }: { 
             room: newSchedule.room, 
             date: newSchedule.date, 
             timeRange: '', 
-            note: '' 
+            note: '',
+            level: 'cluster',
+            imageUrl: ''
         });
     };
 
@@ -360,7 +430,7 @@ const VenueModal = ({ venue, isOpen, onClose, onSave, onDelete, activities }: { 
     const cancelScheduleEdit = () => {
         setScheduleEditIndex(null);
         setNewSchedule({ 
-            activityId: '', activityName: '', building: '', floor: '', room: '', date: '', timeRange: '', note: '' 
+            activityId: '', activityName: '', building: '', floor: '', room: '', date: '', timeRange: '', note: '', level: 'cluster', imageUrl: ''
         });
     };
 
@@ -368,7 +438,11 @@ const VenueModal = ({ venue, isOpen, onClose, onSave, onDelete, activities }: { 
         if (!confirm('ยืนยันการลบรายการนี้?')) return;
         const updatedList = [...(formData.scheduledActivities || [])];
         updatedList.splice(index, 1);
-        handleChange('scheduledActivities', updatedList);
+        
+        const updatedVenue = { ...formData, scheduledActivities: updatedList } as Venue;
+        setFormData(updatedVenue);
+        onSave(updatedVenue); // Immediate Save
+
         if (scheduleEditIndex === index) cancelScheduleEdit();
     };
 
@@ -456,9 +530,22 @@ const VenueModal = ({ venue, isOpen, onClose, onSave, onDelete, activities }: { 
                         
                         {/* Add/Edit Form */}
                         <div className={`p-4 rounded-xl border space-y-3 mb-4 transition-colors ${scheduleEditIndex !== null ? 'bg-orange-50 border-orange-200' : 'bg-blue-50 border-blue-100'}`}>
-                            <label className="text-xs font-bold uppercase tracking-wide opacity-70">
-                                {scheduleEditIndex !== null ? 'แก้ไขข้อมูล' : 'เพิ่มรายการใหม่'}
-                            </label>
+                            <div className="flex justify-between items-center">
+                                <label className="text-xs font-bold uppercase tracking-wide opacity-70">
+                                    {scheduleEditIndex !== null ? 'แก้ไขข้อมูล' : 'เพิ่มรายการใหม่'}
+                                </label>
+                                <div className="flex items-center gap-2">
+                                    {/* Level Selector */}
+                                    <select 
+                                        className="text-xs border rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                        value={newSchedule.level || 'cluster'}
+                                        onChange={(e) => setNewSchedule(prev => ({...prev, level: e.target.value as any}))}
+                                    >
+                                        <option value="cluster">ระดับกลุ่มเครือข่าย</option>
+                                        <option value="area">ระดับเขตพื้นที่</option>
+                                    </select>
+                                </div>
+                            </div>
                             
                             <SearchableSelect 
                                 options={activities.map(a => ({ label: a.name, value: a.id }))}
@@ -469,28 +556,49 @@ const VenueModal = ({ venue, isOpen, onClose, onSave, onDelete, activities }: { 
                             />
                             
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                                <input className="border rounded px-2 py-1.5 text-sm" placeholder="ตึก/อาคาร" value={newSchedule.building} onChange={e => setNewSchedule(prev => ({...prev, building: e.target.value}))} />
-                                <input className="border rounded px-2 py-1.5 text-sm" placeholder="ชั้น" value={newSchedule.floor} onChange={e => setNewSchedule(prev => ({...prev, floor: e.target.value}))} />
-                                <input className="border rounded px-2 py-1.5 text-sm" placeholder="ห้อง" value={newSchedule.room} onChange={e => setNewSchedule(prev => ({...prev, room: e.target.value}))} />
-                                <input className="border rounded px-2 py-1.5 text-sm" type="date" value={newSchedule.date} onChange={e => setNewSchedule(prev => ({...prev, date: e.target.value}))} />
+                                <input className="border rounded px-2 py-1.5 text-sm bg-white" placeholder="ตึก/อาคาร" value={newSchedule.building} onChange={e => setNewSchedule(prev => ({...prev, building: e.target.value}))} />
+                                <input className="border rounded px-2 py-1.5 text-sm bg-white" placeholder="ชั้น" value={newSchedule.floor} onChange={e => setNewSchedule(prev => ({...prev, floor: e.target.value}))} />
+                                <input className="border rounded px-2 py-1.5 text-sm bg-white" placeholder="ห้อง" value={newSchedule.room} onChange={e => setNewSchedule(prev => ({...prev, room: e.target.value}))} />
+                                <input className="border rounded px-2 py-1.5 text-sm bg-white" type="date" value={newSchedule.date} onChange={e => setNewSchedule(prev => ({...prev, date: e.target.value}))} />
                             </div>
                             
-                            <div className="flex gap-2">
-                                <input className="flex-1 border rounded px-2 py-1.5 text-sm" placeholder="เวลา (เช่น 09:00 - 12:00)" value={newSchedule.timeRange} onChange={e => setNewSchedule(prev => ({...prev, timeRange: e.target.value}))} />
-                                <input className="flex-[2] border rounded px-2 py-1.5 text-sm" placeholder="หมายเหตุ (เช่น เตรียมปลั๊กไฟมาเอง)" value={newSchedule.note} onChange={e => setNewSchedule(prev => ({...prev, note: e.target.value}))} />
-                                
+                            <div className="flex flex-col md:flex-row gap-2">
+                                <input className="flex-1 border rounded px-2 py-1.5 text-sm bg-white" placeholder="เวลา (เช่น 09:00 - 12:00)" value={newSchedule.timeRange} onChange={e => setNewSchedule(prev => ({...prev, timeRange: e.target.value}))} />
+                                <input className="flex-[2] border rounded px-2 py-1.5 text-sm bg-white" placeholder="หมายเหตุ (เช่น เตรียมปลั๊กไฟมาเอง)" value={newSchedule.note} onChange={e => setNewSchedule(prev => ({...prev, note: e.target.value}))} />
+                            </div>
+
+                            {/* Schedule Specific Image Upload */}
+                            <div className="flex items-center gap-2">
+                                <input type="file" ref={scheduleFileInputRef} className="hidden" accept="image/*" onChange={handleScheduleImageUpload} />
+                                <button 
+                                    onClick={() => scheduleFileInputRef.current?.click()}
+                                    disabled={isUploadingScheduleImg}
+                                    className="px-3 py-1.5 bg-white border border-gray-300 text-gray-600 rounded-lg text-xs hover:bg-gray-50 flex items-center shrink-0"
+                                >
+                                    {isUploadingScheduleImg ? <Loader2 className="w-3 h-3 animate-spin mr-1"/> : <ImageIcon className="w-3 h-3 mr-1"/>}
+                                    {newSchedule.imageUrl ? 'เปลี่ยนรูปห้อง' : 'อัปโหลดรูปห้อง/สถานที่'}
+                                </button>
+                                {newSchedule.imageUrl && (
+                                    <div className="flex items-center gap-2">
+                                        <img src={newSchedule.imageUrl} className="h-8 w-8 rounded object-cover border border-gray-200" alt="Room" />
+                                        <button onClick={() => setNewSchedule(prev => ({...prev, imageUrl: ''}))} className="text-red-500 hover:text-red-700"><X className="w-3 h-3"/></button>
+                                    </div>
+                                )}
+                            </div>
+                            
+                            <div className="flex gap-2 pt-2 border-t border-dashed border-gray-300 mt-2">
                                 {scheduleEditIndex !== null ? (
                                     <>
-                                        <button onClick={addOrUpdateSchedule} className="px-4 py-1.5 bg-orange-500 text-white rounded-lg text-sm font-bold hover:bg-orange-600 flex items-center shrink-0">
-                                            <Save className="w-4 h-4 mr-1"/> บันทึกแก้ไข
+                                        <button onClick={addOrUpdateSchedule} className="flex-1 px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-bold hover:bg-orange-600 flex items-center justify-center">
+                                            <Save className="w-4 h-4 mr-1"/> บันทึกแก้ไขทันที
                                         </button>
-                                        <button onClick={cancelScheduleEdit} className="px-3 py-1.5 bg-white text-gray-600 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 flex items-center shrink-0">
+                                        <button onClick={cancelScheduleEdit} className="px-4 py-2 bg-white text-gray-600 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 flex items-center">
                                             ยกเลิก
                                         </button>
                                     </>
                                 ) : (
-                                    <button onClick={addOrUpdateSchedule} className="px-4 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 flex items-center shrink-0">
-                                        <Plus className="w-4 h-4 mr-1"/> เพิ่ม
+                                    <button onClick={addOrUpdateSchedule} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 flex items-center justify-center">
+                                        <Plus className="w-4 h-4 mr-1"/> เพิ่มและบันทึกทันที
                                     </button>
                                 )}
                             </div>
@@ -501,13 +609,21 @@ const VenueModal = ({ venue, isOpen, onClose, onSave, onDelete, activities }: { 
                             {formData.scheduledActivities?.map((item, idx) => (
                                 <div key={idx} className={`flex items-start justify-between p-3 bg-white border rounded-lg transition-colors shadow-sm group ${scheduleEditIndex === idx ? 'border-orange-400 ring-1 ring-orange-400 bg-orange-50/20' : 'border-gray-200 hover:border-blue-300'}`}>
                                     <div className="flex-1" onClick={() => editScheduleItem(idx)}>
-                                        <div className="font-bold text-sm text-gray-900 cursor-pointer hover:text-blue-600 transition-colors">{item.activityName}</div>
+                                        <div className="flex justify-between items-start pr-2">
+                                            <div className="font-bold text-sm text-gray-900 cursor-pointer hover:text-blue-600 transition-colors">{item.activityName}</div>
+                                            {item.level && <span className={`text-[10px] px-1.5 rounded border ${item.level === 'area' ? 'bg-purple-50 text-purple-700 border-purple-100' : 'bg-blue-50 text-blue-700 border-blue-100'}`}>{item.level === 'area' ? 'เขต' : 'กลุ่ม'}</span>}
+                                        </div>
                                         <div className="text-xs text-gray-500 mt-1 flex flex-wrap gap-x-4 gap-y-1">
                                             <span className="flex items-center text-blue-600 font-medium"><MapPin className="w-3 h-3 mr-1"/> {item.building} {item.floor} {item.room}</span>
                                             <span className="flex items-center"><Calendar className="w-3 h-3 mr-1"/> {item.date}</span>
                                             <span className="flex items-center"><Clock className="w-3 h-3 mr-1"/> {item.timeRange}</span>
                                         </div>
                                         {item.note && <div className="text-xs text-orange-600 mt-1 bg-orange-50 inline-block px-2 py-0.5 rounded border border-orange-100">{item.note}</div>}
+                                        {item.imageUrl && (
+                                            <div className="mt-1">
+                                                <span className="text-[10px] text-green-600 flex items-center"><ImageIcon className="w-3 h-3 mr-1"/> มีรูปภาพประกอบ</span>
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                         <button onClick={() => editScheduleItem(idx)} className="text-blue-500 hover:text-blue-700 p-1.5 rounded hover:bg-blue-50" title="แก้ไข">
@@ -535,9 +651,9 @@ const VenueModal = ({ venue, isOpen, onClose, onSave, onDelete, activities }: { 
                         </button>
                     ) : <div></div>}
                     <div className="flex gap-2">
-                        <button onClick={onClose} className="px-4 py-2 text-gray-600 text-sm hover:bg-gray-200 rounded-lg">ยกเลิก</button>
+                        <button onClick={onClose} className="px-4 py-2 text-gray-600 text-sm hover:bg-gray-200 rounded-lg">ปิด</button>
                         <button onClick={() => onSave(formData as Venue)} className="px-6 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 shadow-sm flex items-center">
-                            <Save className="w-4 h-4 mr-2" /> บันทึกข้อมูล
+                            <Save className="w-4 h-4 mr-2" /> บันทึกข้อมูลหลัก
                         </button>
                     </div>
                 </div>
@@ -576,20 +692,25 @@ const VenuesView: React.FC<VenuesViewProps> = ({ data, user }) => {
 
       // 2. Optimistic Update
       let updatedList = [];
-      if (editingVenue) {
+      const exists = localVenues.some(v => v.id === finalVenue.id);
+      if (exists) {
           updatedList = localVenues.map(v => v.id === finalVenue.id ? finalVenue : v);
       } else {
           updatedList = [...localVenues, finalVenue];
       }
       setLocalVenues(updatedList);
-      setIsModalOpen(false);
-
+      
+      // Close modal ONLY if it was a main save (not triggered by schedule update)
+      // Actually, if called from schedule update, we want to keep modal open usually?
+      // But the requirement says "Instant Save" inside schedule. 
+      // If we are in the modal, we just update state. 
+      // Let's rely on the Modal's internal state for UI and this parent function for syncing data.
+      
+      // Note: We don't close modal here automatically to allow continuous editing. 
+      // The Modal calls onClose when user clicks "Close" or "Cancel".
+      
       // 3. Call API with the Correct Object (Including ID)
-      const success = await saveVenue(finalVenue);
-      if (!success) {
-          alert('บันทึกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
-          // Optional: Revert local state here if strict
-      }
+      await saveVenue(finalVenue);
   };
 
   const handleDelete = async (id: string) => {
