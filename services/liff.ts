@@ -73,6 +73,12 @@ export const logoutLiff = async () => {
   window.location.reload();
 };
 
+// --- Helper: Check sharing capability ---
+const canUseShareTargetPicker = () => {
+    // @ts-ignore
+    return typeof liff !== 'undefined' && liff.isLoggedIn() && liff.isInClient() && liff.isApiAvailable('shareTargetPicker');
+};
+
 export const shareIdCard = async (
     teamName: string,
     schoolName: string,
@@ -88,12 +94,9 @@ export const shareIdCard = async (
 
     const appUrl = `${window.location.origin}${window.location.pathname}#/idcards?id=${teamId}&level=${viewLevel}`;
     const roleText = role === 'Teacher' ? 'ครูผู้ฝึกสอน (Trainer)' : 'ผู้เข้าแข่งขัน (Competitor)';
-    const headerColor = role === 'Teacher' ? '#4F46E5' : '#10B981'; // Indigo for Teacher, Green for Student
+    const headerColor = role === 'Teacher' ? '#4F46E5' : '#10B981'; 
 
-    // 1. Try LINE Flex Message (Only works if opened inside LINE)
-    // @ts-ignore
-    if (typeof liff !== 'undefined' && liff.isLoggedIn() && liff.isInClient() && liff.isApiAvailable('shareTargetPicker')) {
-        
+    if (canUseShareTargetPicker()) {
         const flexMessage = {
             type: "flex",
             altText: `Digital ID: ${memberName}`,
@@ -104,25 +107,8 @@ export const shareIdCard = async (
                   "type": "box",
                   "layout": "vertical",
                   "contents": [
-                    {
-                      "type": "text",
-                      "text": "DIGITAL ID CARD",
-                      "color": "#ffffff",
-                      "align": "start",
-                      "size": "xs",
-                      "gravity": "center",
-                      "weight": "bold",
-                      "letterSpacing": "2px"
-                    },
-                    {
-                      "type": "text",
-                      "text": levelText,
-                      "color": "#ffffff",
-                      "align": "start",
-                      "size": "xxs",
-                      "gravity": "center",
-                      "alpha": 0.8
-                    }
+                    { "type": "text", "text": "DIGITAL ID CARD", "color": "#ffffff", "align": "start", "size": "xs", "gravity": "center", "weight": "bold", "letterSpacing": "2px" },
+                    { "type": "text", "text": levelText, "color": "#ffffff", "align": "start", "size": "xxs", "gravity": "center", "alpha": 0.8 }
                   ],
                   "backgroundColor": headerColor,
                   "paddingTop": "15px",
@@ -141,12 +127,7 @@ export const shareIdCard = async (
                           "type": "box",
                           "layout": "vertical",
                           "contents": [
-                            {
-                              "type": "image",
-                              "url": imageUrl,
-                              "aspectMode": "cover",
-                              "size": "full"
-                            }
+                            { "type": "image", "url": imageUrl, "aspectMode": "cover", "size": "full" }
                           ],
                           "cornerRadius": "100px",
                           "width": "80px",
@@ -162,23 +143,8 @@ export const shareIdCard = async (
                       "type": "box",
                       "layout": "vertical",
                       "contents": [
-                        {
-                          "type": "text",
-                          "text": memberName,
-                          "align": "center",
-                          "weight": "bold",
-                          "size": "xl",
-                          "color": "#111111",
-                          "wrap": true
-                        },
-                        {
-                          "type": "text",
-                          "text": roleText,
-                          "align": "center",
-                          "size": "xs",
-                          "color": "#999999",
-                          "margin": "xs"
-                        }
+                        { "type": "text", "text": memberName, "align": "center", "weight": "bold", "size": "xl", "color": "#111111", "wrap": true },
+                        { "type": "text", "text": roleText, "align": "center", "size": "xs", "color": "#999999", "margin": "xs" }
                       ],
                       "offsetTop": "-45px"
                     },
@@ -190,20 +156,8 @@ export const shareIdCard = async (
                           "type": "box",
                           "layout": "vertical",
                           "contents": [
-                            {
-                              "type": "text",
-                              "text": "โรงเรียน / School",
-                              "size": "xxs",
-                              "color": "#aaaaaa"
-                            },
-                            {
-                              "type": "text",
-                              "text": schoolName,
-                              "size": "sm",
-                              "color": "#333333",
-                              "wrap": true,
-                              "weight": "bold"
-                            }
+                            { "type": "text", "text": "โรงเรียน / School", "size": "xxs", "color": "#aaaaaa" },
+                            { "type": "text", "text": schoolName, "size": "sm", "color": "#333333", "wrap": true, "weight": "bold" }
                           ],
                           "margin": "md"
                         },
@@ -211,20 +165,8 @@ export const shareIdCard = async (
                           "type": "box",
                           "layout": "vertical",
                           "contents": [
-                            {
-                              "type": "text",
-                              "text": "ทีม / Team",
-                              "size": "xxs",
-                              "color": "#aaaaaa"
-                            },
-                            {
-                              "type": "text",
-                              "text": teamName,
-                              "size": "sm",
-                              "color": "#333333",
-                              "wrap": true,
-                              "weight": "bold"
-                            }
+                            { "type": "text", "text": "ทีม / Team", "size": "xxs", "color": "#aaaaaa" },
+                            { "type": "text", "text": teamName, "size": "sm", "color": "#333333", "wrap": true, "weight": "bold" }
                           ],
                           "margin": "md"
                         }
@@ -243,11 +185,7 @@ export const shareIdCard = async (
                   "contents": [
                     {
                       "type": "button",
-                      "action": {
-                        "type": "uri",
-                        "label": "เปิดบัตรประจำตัว",
-                        "uri": appUrl
-                      },
+                      "action": { "type": "uri", "label": "เปิดบัตรประจำตัว", "uri": appUrl },
                       "style": "primary",
                       "color": headerColor,
                       "height": "sm"
@@ -264,11 +202,10 @@ export const shareIdCard = async (
             return { success: true, method: 'line' };
         } catch (error) {
             console.error("LINE Share ID failed", error);
-            // Continue to fallback
         }
     }
 
-    // Fallback: Web Share (Native Mobile Share Sheet)
+    // Fallback: Web Share
     if (navigator.share) {
         try {
             await navigator.share({
@@ -298,20 +235,14 @@ export const shareScoreResult = async (
   rank: string
 ): Promise<{ success: boolean; method: 'line' | 'share' | 'copy' | 'error' }> => {
     
-    // Ensure LIFF is ready before checking availability
     await ensureLiffInitialized();
 
     const medalThai = (medal === 'Gold') ? 'เหรียญทอง' : (medal === 'Silver') ? 'เหรียญเงิน' : (medal === 'Bronze') ? 'เหรียญทองแดง' : 'เข้าร่วม';
     const rankText = rank ? ` (ลำดับที่ ${rank})` : '';
-    
-    // Fallback for missing team name
     const displayTeamName = (teamName && teamName.trim() !== '') ? teamName : schoolName || 'ไม่ระบุชื่อทีม';
-    
     const textSummary = `🏆 ผลการแข่งขัน: ${activityName}\nทีม: ${displayTeamName}\nโรงเรียน: ${schoolName}\n\n⭐ คะแนน: ${score}\n🏅 รางวัล: ${medalThai}${rankText}`;
 
-    // 1. Try LINE Flex Message
-    // @ts-ignore
-    if (typeof liff !== 'undefined' && liff.isLoggedIn() && liff.isInClient() && liff.isApiAvailable('shareTargetPicker')) {
+    if (canUseShareTargetPicker()) {
         const medalColor = (medal === 'Gold') ? '#E6B800' : (medal === 'Silver') ? '#A0A0A0' : (medal === 'Bronze') ? '#CD7F32' : '#333333';
         
         const flexMessage = {
@@ -373,11 +304,7 @@ export const shareScoreResult = async (
                       "type": "button",
                       "style": "link",
                       "height": "sm",
-                      "action": {
-                        "type": "uri",
-                        "label": "ดูรายละเอียดเพิ่มเติม",
-                        "uri": window.location.href
-                      }
+                      "action": { "type": "uri", "label": "ดูรายละเอียดเพิ่มเติม", "uri": window.location.href }
                     }
                   ]
                 }
@@ -388,13 +315,9 @@ export const shareScoreResult = async (
             // @ts-ignore
             await liff.shareTargetPicker([flexMessage]);
             return { success: true, method: 'line' };
-        } catch (error) {
-            console.error("LINE Share failed", error);
-            // Fallback to Web Share logic below
-        }
+        } catch (error) { console.error("LINE Share failed", error); }
     }
 
-    // 2. Try Web Share API (Mobile Browsers)
     if (navigator.share) {
         try {
             await navigator.share({
@@ -403,12 +326,9 @@ export const shareScoreResult = async (
                 url: window.location.href,
             });
             return { success: true, method: 'share' };
-        } catch (error) {
-            console.log("Web Share cancelled/failed");
-        }
+        } catch (error) { console.log("Web Share cancelled/failed"); }
     }
 
-    // 3. Fallback: Copy to Clipboard
     try {
         await navigator.clipboard.writeText(textSummary);
         return { success: true, method: 'copy' };
@@ -424,16 +344,13 @@ export const shareTop3Result = async (
     
     await ensureLiffInitialized();
 
-    // Construct Text Summary for Fallback
     let textSummary = `🏆 สรุปผลการแข่งขัน (Top 3)\nรายการ: ${activityName}\n\n`;
     winners.forEach(w => {
         const displayTeam = (w.teamName && w.teamName.trim() !== '') ? w.teamName : w.schoolName || 'ไม่ระบุชื่อทีม';
         textSummary += `${w.rank}. ${displayTeam} (${w.score} คะแนน)\n`;
     });
 
-    // @ts-ignore
-    if (typeof liff !== 'undefined' && liff.isLoggedIn() && liff.isInClient() && liff.isApiAvailable('shareTargetPicker')) {
-        
+    if (canUseShareTargetPicker()) {
         const createRankRow = (winner: any) => {
              const color = winner.rank === 1 ? '#E6B800' : winner.rank === 2 ? '#A0A0A0' : '#CD7F32';
              const displayTeam = (winner.teamName && winner.teamName.trim() !== '') ? winner.teamName : winner.schoolName || 'ไม่ระบุชื่อทีม';
@@ -514,7 +431,6 @@ export const shareTop3Result = async (
         }
     }
 
-    // Fallbacks
     if (navigator.share) {
         try {
             await navigator.share({
@@ -537,16 +453,12 @@ export const shareTop3Result = async (
 export const shareVenue = async (venue: any): Promise<{ success: boolean; method: 'line' | 'share' | 'copy' | 'error' }> => {
     await ensureLiffInitialized();
     
-    // Construct App Link (Using Hash Router)
     const appUrl = `${window.location.origin}${window.location.pathname}#/venues`;
     const mapUrl = venue.locationUrl || '';
     const imageUrl = venue.imageUrl || "https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=800&q=80";
-
-    // Text Summary for Fallback
     const textSummary = `📍 สนามแข่งขัน: ${venue.name}\n${venue.description || ''}\n\n🗺️ แผนที่: ${mapUrl}\n📅 ดูตารางการแข่งขัน: ${appUrl}`;
 
-    // @ts-ignore
-    if (typeof liff !== 'undefined' && liff.isLoggedIn() && liff.isInClient() && liff.isApiAvailable('shareTargetPicker')) {
+    if (canUseShareTargetPicker()) {
         const flexMessage = {
             type: "flex",
             altText: `สนามแข่งขัน: ${venue.name}`,
@@ -558,30 +470,14 @@ export const shareVenue = async (venue: any): Promise<{ success: boolean; method
                   "size": "full",
                   "aspectRatio": "20:13",
                   "aspectMode": "cover",
-                  "action": {
-                    "type": "uri",
-                    "uri": appUrl
-                  }
+                  "action": { "type": "uri", "uri": appUrl }
                 },
                 "body": {
                   "type": "box",
                   "layout": "vertical",
                   "contents": [
-                    {
-                      "type": "text",
-                      "text": venue.name,
-                      "weight": "bold",
-                      "size": "xl",
-                      "wrap": true
-                    },
-                    {
-                      "type": "text",
-                      "text": venue.description || "รายละเอียดสนามแข่งขัน",
-                      "size": "sm",
-                      "color": "#666666",
-                      "wrap": true,
-                      "margin": "md"
-                    },
+                    { "type": "text", "text": venue.name, "weight": "bold", "size": "xl", "wrap": true },
+                    { "type": "text", "text": venue.description || "รายละเอียดสนามแข่งขัน", "size": "sm", "color": "#666666", "wrap": true, "margin": "md" },
                     {
                       "type": "box",
                       "layout": "vertical",
@@ -593,22 +489,8 @@ export const shareVenue = async (venue: any): Promise<{ success: boolean; method
                           "layout": "baseline",
                           "spacing": "sm",
                           "contents": [
-                            {
-                              "type": "text",
-                              "text": "สถานที่",
-                              "color": "#aaaaaa",
-                              "size": "sm",
-                              "flex": 1
-                            },
-                            {
-                              "type": "text",
-                              "text": "คลิกดูแผนที่ GPS",
-                              "wrap": true,
-                              "color": "#666666",
-                              "size": "sm",
-                              "flex": 4,
-                              "action": { "type": "uri", "label": "Map", "uri": mapUrl || appUrl }
-                            }
+                            { "type": "text", "text": "สถานที่", "color": "#aaaaaa", "size": "sm", "flex": 1 },
+                            { "type": "text", "text": "คลิกดูแผนที่ GPS", "wrap": true, "color": "#666666", "size": "sm", "flex": 4, "action": { "type": "uri", "label": "Map", "uri": mapUrl || appUrl } }
                           ]
                         }
                       ]
@@ -620,27 +502,8 @@ export const shareVenue = async (venue: any): Promise<{ success: boolean; method
                   "layout": "vertical",
                   "spacing": "sm",
                   "contents": [
-                    {
-                      "type": "button",
-                      "style": "primary",
-                      "height": "sm",
-                      "action": {
-                        "type": "uri",
-                        "label": "ดูตารางแข่งขัน",
-                        "uri": appUrl
-                      },
-                      "color": "#2563EB"
-                    },
-                    mapUrl ? {
-                      "type": "button",
-                      "style": "secondary",
-                      "height": "sm",
-                      "action": {
-                        "type": "uri",
-                        "label": "นำทาง (Google Maps)",
-                        "uri": mapUrl
-                      }
-                    } : { "type": "spacer", "size": "xs" }
+                    { "type": "button", "style": "primary", "height": "sm", "action": { "type": "uri", "label": "ดูตารางแข่งขัน", "uri": appUrl }, "color": "#2563EB" },
+                    mapUrl ? { "type": "button", "style": "secondary", "height": "sm", "action": { "type": "uri", "label": "นำทาง (Google Maps)", "uri": mapUrl } } : { "type": "spacer", "size": "xs" }
                   ],
                   "flex": 0
                 }
@@ -651,16 +514,140 @@ export const shareVenue = async (venue: any): Promise<{ success: boolean; method
             // @ts-ignore
             await liff.shareTargetPicker([flexMessage]);
             return { success: true, method: 'line' };
-        } catch (error) {
-            console.error("LINE Share Venue failed", error);
-        }
+        } catch (error) { console.error("LINE Share Venue failed", error); }
     }
 
-    // Fallbacks
     if (navigator.share) {
         try {
             await navigator.share({
                 title: venue.name,
+                text: textSummary,
+                url: appUrl,
+            });
+            return { success: true, method: 'share' };
+        } catch (error) { console.log("Web Share cancelled"); }
+    }
+
+    try {
+        await navigator.clipboard.writeText(textSummary);
+        return { success: true, method: 'copy' };
+    } catch (err) {
+        return { success: false, method: 'error' };
+    }
+}
+
+// New: Share Specific Schedule
+export const shareSchedule = async (
+    activityName: string,
+    venueName: string,
+    room: string,
+    date: string,
+    time: string,
+    locationUrl: string = ''
+): Promise<{ success: boolean; method: 'line' | 'share' | 'copy' | 'error' }> => {
+    
+    await ensureLiffInitialized();
+
+    const appUrl = `${window.location.origin}${window.location.pathname}#/venues`;
+    const displayRoom = room || 'ยังไม่ระบุห้อง';
+    const displayTime = time || 'ยังไม่ระบุเวลา';
+    const displayDate = date || 'ยังไม่ระบุวันที่';
+    
+    const textSummary = `📅 กำหนดการแข่งขัน\n${activityName}\n\n📍 สถานที่: ${venueName} ${displayRoom}\n🗓️ วันที่: ${displayDate}\n⏰ เวลา: ${displayTime}\n\nดูรายละเอียดเพิ่มเติม: ${appUrl}`;
+
+    if (canUseShareTargetPicker()) {
+        const flexMessage = {
+            type: "flex",
+            altText: `กำหนดการ: ${activityName}`,
+            contents: {
+                "type": "bubble",
+                "header": {
+                    "type": "box",
+                    "layout": "vertical",
+                    "contents": [
+                        { "type": "text", "text": "SCHEDULE", "color": "#FFFFFF", "weight": "bold", "size": "xs", "letterSpacing": "1px" },
+                        { "type": "text", "text": "กำหนดการแข่งขัน", "color": "#FFFFFF", "weight": "bold", "size": "lg" }
+                    ],
+                    "backgroundColor": "#0D9488",
+                    "paddingAll": "20px"
+                },
+                "body": {
+                    "type": "box",
+                    "layout": "vertical",
+                    "contents": [
+                        { "type": "text", "text": activityName, "weight": "bold", "size": "md", "wrap": true, "color": "#333333" },
+                        { "type": "separator", "margin": "lg" },
+                        {
+                            "type": "box",
+                            "layout": "vertical",
+                            "margin": "lg",
+                            "spacing": "sm",
+                            "contents": [
+                                {
+                                    "type": "box",
+                                    "layout": "baseline",
+                                    "spacing": "sm",
+                                    "contents": [
+                                        { "type": "text", "text": "วันที่", "color": "#aaaaaa", "size": "sm", "flex": 1 },
+                                        { "type": "text", "text": displayDate, "wrap": true, "color": "#666666", "size": "sm", "flex": 4, "weight": "bold" }
+                                    ]
+                                },
+                                {
+                                    "type": "box",
+                                    "layout": "baseline",
+                                    "spacing": "sm",
+                                    "contents": [
+                                        { "type": "text", "text": "เวลา", "color": "#aaaaaa", "size": "sm", "flex": 1 },
+                                        { "type": "text", "text": displayTime, "wrap": true, "color": "#E65100", "size": "sm", "flex": 4, "weight": "bold" }
+                                    ]
+                                },
+                                {
+                                    "type": "box",
+                                    "layout": "baseline",
+                                    "spacing": "sm",
+                                    "contents": [
+                                        { "type": "text", "text": "สถานที่", "color": "#aaaaaa", "size": "sm", "flex": 1 },
+                                        { "type": "text", "text": `${venueName} ${displayRoom}`, "wrap": true, "color": "#666666", "size": "sm", "flex": 4 }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                },
+                "footer": {
+                    "type": "box",
+                    "layout": "vertical",
+                    "spacing": "sm",
+                    "contents": [
+                        {
+                            "type": "button",
+                            "style": "primary",
+                            "height": "sm",
+                            "action": { "type": "uri", "label": "ดูตารางทั้งหมด", "uri": appUrl },
+                            "color": "#0D9488"
+                        },
+                        locationUrl ? {
+                            "type": "button",
+                            "style": "link",
+                            "height": "sm",
+                            "action": { "type": "uri", "label": "แผนที่ (Google Maps)", "uri": locationUrl }
+                        } : { "type": "spacer", "size": "xs" }
+                    ]
+                }
+            }
+        };
+
+        try {
+            // @ts-ignore
+            await liff.shareTargetPicker([flexMessage]);
+            return { success: true, method: 'line' };
+        } catch (error) { console.error("LINE Share Schedule failed", error); }
+    }
+
+    if (navigator.share) {
+        try {
+            await navigator.share({
+                title: `กำหนดการ: ${activityName}`,
                 text: textSummary,
                 url: appUrl,
             });
