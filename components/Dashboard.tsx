@@ -1,9 +1,10 @@
+
 import React, { useState, useMemo } from 'react';
 import { AppData, Announcement, User } from '../types';
-import { Users, School, Trophy, FileText, Megaphone, Plus, Book, Calendar, ChevronRight } from 'lucide-react';
+import { Users, School, Trophy, Megaphone, Plus, Book, Calendar, ChevronRight, Gavel, MapPin, Award, FileText, Smartphone } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from 'recharts';
 import StatCard from './StatCard';
-import { getTeamCountByStatus, getTeamsByActivity } from '../services/api';
+import { useNavigate } from 'react-router-dom';
 
 interface DashboardProps {
   data: AppData;
@@ -13,6 +14,7 @@ interface DashboardProps {
 const COLORS = ['#10B981', '#F59E0B', '#EF4444', '#6366F1'];
 
 const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
+  const navigate = useNavigate();
   const [viewLevel, setViewLevel] = useState<'cluster' | 'area'>('cluster');
   const [showAddNews, setShowAddNews] = useState(false);
   const [newTitle, setNewTitle] = useState('');
@@ -69,149 +71,229 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
   };
 
   const isAdmin = user?.level === 'admin';
-  const announcements = data.announcements || [];
+  const newsList = (data.announcements || []).filter(a => a.type !== 'manual');
+  const manualList = (data.announcements || []).filter(a => a.type === 'manual');
+
+  const QuickMenuItem = ({ icon: Icon, label, to, color }: { icon: any, label: string, to: string, color: string }) => (
+      <div 
+        onClick={() => navigate(to)}
+        className="flex flex-col items-center justify-center p-4 bg-white rounded-xl shadow-sm border border-gray-100 active:scale-95 transition-transform cursor-pointer"
+      >
+          <div className={`p-3 rounded-full ${color} text-white mb-2 shadow-md`}>
+              <Icon className="w-6 h-6" />
+          </div>
+          <span className="text-xs font-bold text-gray-700 text-center leading-tight">{label}</span>
+      </div>
+  );
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500 pb-10">
+    <div className="space-y-6 animate-in fade-in duration-500 pb-10">
       
       {/* Hero / Header Section */}
-      <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl p-6 text-white shadow-lg flex flex-col md:flex-row justify-between items-center gap-6">
-        <div>
-            <h1 className="text-3xl font-bold mb-2">ยินดีต้อนรับสู่ CompManager</h1>
-            <p className="text-blue-100 opacity-90">ระบบบริหารจัดการการแข่งขันวิชาการแบบครบวงจร</p>
+      <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-3xl p-8 text-white shadow-xl flex flex-col md:flex-row justify-between items-center gap-6 relative overflow-hidden">
+        <div className="absolute top-0 right-0 p-4 opacity-10">
+            <Trophy className="w-40 h-40" />
+        </div>
+        <div className="relative z-10 text-center md:text-left">
+            <h1 className="text-2xl md:text-3xl font-bold mb-2">ยินดีต้อนรับสู่ CompManager</h1>
+            <p className="text-blue-100 opacity-90 text-sm md:text-base">ระบบบริหารจัดการการแข่งขันวิชาการแบบครบวงจร</p>
+            {user && !user.isGuest && (
+                <div className="mt-4 inline-flex items-center bg-white/20 backdrop-blur-sm px-4 py-1.5 rounded-full text-xs font-medium text-white border border-white/30">
+                    <Users className="w-3 h-3 mr-2" /> สวัสดี, {user.displayName || user.name}
+                </div>
+            )}
         </div>
         
         {/* Level Selector */}
-        <div className="bg-white/10 p-1 rounded-xl backdrop-blur-sm flex">
+        <div className="bg-white/10 p-1.5 rounded-xl backdrop-blur-md flex relative z-10">
             <button
                 onClick={() => setViewLevel('cluster')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${viewLevel === 'cluster' ? 'bg-white text-blue-600 shadow' : 'text-white hover:bg-white/20'}`}
+                className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${viewLevel === 'cluster' ? 'bg-white text-blue-600 shadow' : 'text-white/80 hover:bg-white/10'}`}
             >
-                ระดับกลุ่มเครือข่าย
+                ระดับกลุ่มฯ
             </button>
             <button
                 onClick={() => setViewLevel('area')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${viewLevel === 'area' ? 'bg-white text-purple-600 shadow' : 'text-white hover:bg-white/20'}`}
+                className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${viewLevel === 'area' ? 'bg-white text-purple-600 shadow' : 'text-white/80 hover:bg-white/10'}`}
             >
-                ระดับเขตพื้นที่
+                ระดับเขตฯ
             </button>
+        </div>
+      </div>
+
+      {/* Mobile Quick Menu (Only on small screens) */}
+      <div className="grid grid-cols-4 gap-3 md:hidden">
+          <QuickMenuItem icon={Users} label="ทีมแข่งขัน" to="/teams" color="bg-blue-500" />
+          <QuickMenuItem icon={Award} label="ผลรางวัล" to="/results" color="bg-yellow-500" />
+          <QuickMenuItem icon={MapPin} label="สนามแข่ง" to="/venues" color="bg-emerald-500" />
+          <QuickMenuItem icon={Gavel} label="กรรมการ" to="/judges" color="bg-purple-500" />
+          <QuickMenuItem icon={FileText} label="เกียรติบัตร" to="/certificates" color="bg-indigo-500" />
+          <QuickMenuItem icon={Smartphone} label="Digital ID" to="/idcards" color="bg-pink-500" />
+          <QuickMenuItem icon={School} label="โรงเรียน" to="/schools" color="bg-cyan-500" />
+          <QuickMenuItem icon={Trophy} label="รายการ" to="/activities" color="bg-orange-500" />
+      </div>
+
+      {/* Stats Overview */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard 
+            title="ทีมทั้งหมด" 
+            value={filteredTeams.length} 
+            icon={Users} 
+            colorClass="bg-blue-500"
+            description={`ในรอบ${viewLevel === 'cluster' ? 'กลุ่มเครือข่าย' : 'เขตพื้นที่'}`} 
+        />
+        <StatCard 
+            title="โรงเรียนที่เข้าร่วม" 
+            value={uniqueSchoolCount} 
+            icon={School} 
+            colorClass="bg-indigo-500" 
+        />
+        <StatCard 
+            title="รายการแข่งขัน" 
+            value={uniqueActivityCount} 
+            icon={Trophy} 
+            colorClass="bg-amber-500" 
+        />
+        <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100 flex items-center justify-between">
+             <div className="h-20 w-20">
+                <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                        <Pie
+                            data={statusData}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={25}
+                            outerRadius={40}
+                            paddingAngle={5}
+                            dataKey="value"
+                        >
+                            {statusData.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                            ))}
+                        </Pie>
+                    </PieChart>
+                </ResponsiveContainer>
+             </div>
+             <div className="flex-1 ml-4">
+                 <p className="text-xs font-bold text-gray-500 uppercase">สถานะการสมัคร</p>
+                 <div className="flex flex-wrap gap-2 mt-1">
+                     {statusData.map((entry, idx) => (
+                         <div key={idx} className="flex items-center text-[10px] text-gray-600">
+                             <div className="w-2 h-2 rounded-full mr-1" style={{ backgroundColor: COLORS[idx % COLORS.length] }}></div>
+                             {entry.name}: {entry.value}
+                         </div>
+                     ))}
+                 </div>
+             </div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
-          {/* Left Column: News & Manuals */}
+          {/* Main Column: News */}
           <div className="lg:col-span-2 space-y-6">
               <div className="flex items-center justify-between">
                   <h2 className="text-xl font-bold text-gray-800 flex items-center">
                       <Megaphone className="w-6 h-6 mr-2 text-orange-500" />
-                      ข่าวประชาสัมพันธ์และคู่มือ
+                      ข่าวประชาสัมพันธ์
                   </h2>
                   {isAdmin && (
                       <button 
                         onClick={() => setShowAddNews(true)}
-                        className="flex items-center px-3 py-1.5 text-sm bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
+                        className="flex items-center px-3 py-1.5 text-xs bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors font-medium"
                       >
-                          <Plus className="w-4 h-4 mr-1" /> เพิ่มข่าว/คู่มือ
+                          <Plus className="w-4 h-4 mr-1" /> เพิ่มข่าว
                       </button>
                   )}
               </div>
 
-              {/* News Feed */}
               <div className="space-y-4">
-                  {announcements.length > 0 ? (
-                      announcements.map((item) => (
-                          <div key={item.id} className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
-                              <div className={`absolute top-0 left-0 w-1 h-full ${item.type === 'manual' ? 'bg-green-500' : 'bg-orange-500'}`}></div>
-                              <div className="flex justify-between items-start mb-2">
-                                  <span className={`px-2 py-0.5 text-[10px] rounded uppercase font-bold tracking-wider ${item.type === 'manual' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
-                                      {item.type === 'manual' ? 'Manual' : 'News'}
-                                  </span>
-                                  <span className="text-xs text-gray-400 flex items-center">
+                  {newsList.length > 0 ? (
+                      newsList.map((item) => (
+                          <div key={item.id} className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all relative overflow-hidden group">
+                              <div className="absolute top-0 left-0 w-1.5 h-full bg-orange-500"></div>
+                              <div className="flex justify-between items-start mb-2 pl-3">
+                                  <span className="text-xs text-gray-400 flex items-center bg-gray-50 px-2 py-1 rounded-full">
                                       <Calendar className="w-3 h-3 mr-1" />
-                                      {new Date(item.date).toLocaleDateString('th-TH')}
+                                      {new Date(item.date).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}
                                   </span>
                               </div>
-                              <h3 className="text-lg font-bold text-gray-900 mb-2">{item.title}</h3>
-                              <p className="text-gray-600 text-sm leading-relaxed mb-3 line-clamp-3">
-                                  {item.content}
-                              </p>
-                              {item.link && (
-                                  <a href={item.link} target="_blank" rel="noreferrer" className="text-sm font-medium text-blue-600 hover:text-blue-800 flex items-center mt-2">
-                                      {item.type === 'manual' ? <Book className="w-4 h-4 mr-1" /> : <ChevronRight className="w-4 h-4 mr-1" />}
-                                      {item.type === 'manual' ? 'เปิดคู่มือ' : 'อ่านเพิ่มเติม'}
-                                  </a>
-                              )}
+                              <div className="pl-3">
+                                  <h3 className="text-lg font-bold text-gray-900 mb-2 group-hover:text-blue-600 transition-colors">{item.title}</h3>
+                                  <p className="text-gray-600 text-sm leading-relaxed mb-3">
+                                      {item.content}
+                                  </p>
+                                  {item.link && (
+                                      <a href={item.link} target="_blank" rel="noreferrer" className="inline-flex items-center text-sm font-medium text-blue-600 hover:text-blue-800 mt-1">
+                                          อ่านเพิ่มเติม <ChevronRight className="w-4 h-4 ml-1" />
+                                      </a>
+                                  )}
+                              </div>
                           </div>
                       ))
                   ) : (
-                      <div className="text-center py-10 bg-white rounded-xl border border-dashed border-gray-300 text-gray-400">
+                      <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-gray-200 text-gray-400">
+                          <Megaphone className="w-12 h-12 mx-auto mb-3 opacity-20" />
                           ยังไม่มีข่าวประชาสัมพันธ์
                       </div>
                   )}
               </div>
           </div>
 
-          {/* Right Column: Stats Overview (Dynamic based on viewLevel) */}
+          {/* Right Column: Manuals & Links */}
           <div className="space-y-6">
-             <h2 className="text-xl font-bold text-gray-800">
-                 สถิติ ({viewLevel === 'cluster' ? 'Network' : 'District'})
+             <h2 className="text-xl font-bold text-gray-800 flex items-center">
+                 <Book className="w-6 h-6 mr-2 text-green-600" />
+                 คู่มือการใช้งาน
              </h2>
              
              <div className="grid grid-cols-1 gap-4">
-                <StatCard 
-                    title="ทีมทั้งหมด" 
-                    value={filteredTeams.length} 
-                    icon={Users} 
-                    colorClass="bg-blue-500" 
-                />
-                <StatCard 
-                    title="โรงเรียน" 
-                    value={uniqueSchoolCount} 
-                    icon={School} 
-                    colorClass="bg-indigo-500" 
-                />
-                <StatCard 
-                    title="รายการแข่งขัน" 
-                    value={uniqueActivityCount} 
-                    icon={Trophy} 
-                    colorClass="bg-amber-500" 
-                />
+                {manualList.length > 0 ? (
+                    manualList.map(item => (
+                        <div key={item.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 hover:border-green-200 transition-colors group">
+                            <div className="flex items-start">
+                                <div className="p-3 bg-green-50 text-green-600 rounded-lg mr-3 group-hover:bg-green-100 transition-colors">
+                                    <FileText className="w-6 h-6" />
+                                </div>
+                                <div className="flex-1">
+                                    <h4 className="font-bold text-gray-800 text-sm mb-1 group-hover:text-green-700 transition-colors">{item.title}</h4>
+                                    <p className="text-xs text-gray-500 line-clamp-2">{item.content}</p>
+                                    {item.link && (
+                                        <a href={item.link} target="_blank" rel="noreferrer" className="text-xs font-bold text-green-600 mt-2 inline-block hover:underline">
+                                            เปิดคู่มือ &rarr;
+                                        </a>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    ))
+                ) : (
+                    <div className="text-center py-8 bg-white rounded-xl border border-dashed border-gray-200 text-gray-400 text-sm">
+                        ยังไม่มีคู่มือ
+                    </div>
+                )}
              </div>
 
-             <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-                <h3 className="text-sm font-semibold text-gray-700 mb-4">สถานะการลงทะเบียน</h3>
-                <div className="h-48">
-                    <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                        <Pie
-                        data={statusData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={40}
-                        outerRadius={70}
-                        fill="#8884d8"
-                        paddingAngle={5}
-                        dataKey="value"
-                        >
-                        {statusData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                        ))}
-                        </Pie>
-                        <Tooltip contentStyle={{fontFamily: 'Kanit', fontSize: '12px'}} />
-                        <Legend iconType="circle" wrapperStyle={{fontSize: '11px'}} />
-                    </PieChart>
-                    </ResponsiveContainer>
-                </div>
+             {/* Quick Links / Resources Placeholder */}
+             <div className="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-xl p-5 border border-indigo-100">
+                 <h3 className="font-bold text-indigo-800 mb-3 text-sm">แหล่งข้อมูลเพิ่มเติม</h3>
+                 <ul className="space-y-2 text-sm text-indigo-600">
+                     <li>• เกณฑ์การแข่งขันศิลปหัตถกรรม ครั้งที่ 71</li>
+                     <li>• ปฏิทินการดำเนินงาน</li>
+                     <li>• ติดต่อฝ่ายเทคนิค</li>
+                 </ul>
              </div>
           </div>
       </div>
 
       {/* Admin Add News Modal */}
       {showAddNews && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-              <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
-                  <h3 className="text-lg font-bold text-gray-900 mb-4">เพิ่มข่าว/คู่มือ</h3>
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-in fade-in zoom-in duration-200">
+                  <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center">
+                      <Plus className="w-5 h-5 mr-2 text-blue-600" />
+                      เพิ่มข่าว/คู่มือ
+                  </h3>
                   <form onSubmit={handleAddNews} className="space-y-4">
                       <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">หัวข้อ</label>
@@ -219,7 +301,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
                       </div>
                       <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">ประเภท</label>
-                          <select className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" value={newType} onChange={e => setNewType(e.target.value as any)}>
+                          <select className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white" value={newType} onChange={e => setNewType(e.target.value as any)}>
                               <option value="news">ข่าวประชาสัมพันธ์</option>
                               <option value="manual">คู่มือการใช้งาน</option>
                           </select>
@@ -232,9 +314,9 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
                           <label className="block text-sm font-medium text-gray-700 mb-1">ลิงก์ (ถ้ามี)</label>
                           <input type="url" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="https://..." value={newLink} onChange={e => setNewLink(e.target.value)} />
                       </div>
-                      <div className="flex justify-end gap-2 pt-2">
-                          <button type="button" onClick={() => setShowAddNews(false)} className="px-4 py-2 text-gray-600 text-sm hover:bg-gray-100 rounded-lg">ยกเลิก</button>
-                          <button type="submit" className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700">บันทึก</button>
+                      <div className="flex justify-end gap-2 pt-2 border-t border-gray-100 mt-4">
+                          <button type="button" onClick={() => setShowAddNews(false)} className="px-4 py-2 text-gray-600 text-sm hover:bg-gray-100 rounded-lg font-medium">ยกเลิก</button>
+                          <button type="submit" className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 font-bold shadow-sm">บันทึก</button>
                       </div>
                   </form>
               </div>
