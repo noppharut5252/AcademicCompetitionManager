@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useRef } from 'react';
 import { AppData, Judge, User, Team } from '../types';
-import { Search, Plus, Edit2, Trash2, Gavel, Mail, Phone, School, MapPin, Loader2, Save, X, LayoutGrid, AlertTriangle, CheckCircle, Users, Briefcase, ChevronDown, ChevronUp, AlertOctagon, UserCheck, Camera, Copy, Trophy, Filter, Layers, Bookmark } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, Gavel, Mail, Phone, School, MapPin, Loader2, Save, X, LayoutGrid, AlertTriangle, CheckCircle, Users, Briefcase, ChevronDown, ChevronUp, AlertOctagon, UserCheck, Camera, Copy, Trophy, Filter, Layers, ChevronRight, Hash, Eye, EyeOff } from 'lucide-react';
 import SearchableSelect from './SearchableSelect';
 import ConfirmationModal from './ConfirmationModal';
 import { saveJudge, deleteJudge, uploadImage } from '../services/api';
@@ -22,8 +22,13 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
   const [activeTab, setActiveTab] = useState<'dashboard' | 'management' | 'directory'>('management');
   const [viewScope, setViewScope] = useState<'cluster' | 'area'>('area'); 
   const [searchTerm, setSearchTerm] = useState('');
-  const [clusterFilter, setClusterFilter] = useState<string>(''); // New: Filter by Cluster
+  const [clusterFilter, setClusterFilter] = useState<string>('');
   
+  // New UI States
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
+  const [collapsedClusters, setCollapsedClusters] = useState<Set<string>>(new Set()); // For inside activity view
+  const [quickFilter, setQuickFilter] = useState<'all' | 'external' | 'conflict' | 'missing'>('all');
+
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -43,7 +48,6 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
 
   const checkConflict = (judge: Judge, competingSchoolNames: Set<string>): ConflictData => {
       const judgeSchool = judge.schoolName.trim().toLowerCase();
-      // Heuristic: If judgeSchool is empty, assume no conflict or check specifically
       if (!judgeSchool) return { hasConflict: false, schoolName: '' };
 
       for (let school of competingSchoolNames) {
@@ -54,43 +58,44 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
       return { hasConflict: false, schoolName: '' };
   };
 
-  // Grouping Logic
+  // Grouping Logic (Calculates Judges AND Teams)
   const activityGroups = useMemo(() => {
-      // Structure: Activity -> (Area Data OR Cluster Data Map)
       const groups: Record<string, { 
           activityName: string, 
           areaJudges: Judge[],
           areaSchools: Set<string>,
           areaConflicts: number,
-          // Map of ClusterID -> Data
+          areaTeamCount: number,
           clusters: Record<string, {
               judges: Judge[],
               competingSchools: Set<string>,
-              conflicts: number
+              conflicts: number,
+              teamCount: number
           }>
       }> = {};
 
-      // 1. Initialize Groups
+      // 1. Initialize
       data.activities.forEach(act => {
           groups[act.id] = {
               activityName: act.name,
               areaJudges: [],
               areaSchools: new Set(),
               areaConflicts: 0,
+              areaTeamCount: 0,
               clusters: {}
           };
-          
-          // Always initialize all known clusters to ensure they exist in the map
+          // Always init clusters to ensure mapping exists
           data.clusters.forEach(c => {
               groups[act.id].clusters[c.ClusterID] = {
                   judges: [],
                   competingSchools: new Set(),
-                  conflicts: 0
+                  conflicts: 0,
+                  teamCount: 0
               };
           });
       });
 
-      // 2. Map Teams to Schools (Area vs Cluster)
+      // 2. Map Teams
       data.teams.forEach(team => {
           if (!groups[team.activityId]) return;
           
@@ -98,15 +103,17 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
           const schoolName = school?.SchoolName || team.schoolId;
           const clusterId = school?.SchoolCluster;
 
-          // Area Logic: Qualified Teams only
+          // Area Stats (Qualified Only)
           const isQualified = String(team.rank) === '1' && String(team.flag).toUpperCase() === 'TRUE';
           if (isQualified) {
               groups[team.activityId].areaSchools.add(schoolName);
+              groups[team.activityId].areaTeamCount++;
           }
 
-          // Cluster Logic: All teams in that cluster
+          // Cluster Stats (All Teams)
           if (clusterId && groups[team.activityId].clusters[clusterId]) {
               groups[team.activityId].clusters[clusterId].competingSchools.add(schoolName);
+              groups[team.activityId].clusters[clusterId].teamCount++;
           }
       });
 
@@ -114,42 +121,27 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
       data.judges.forEach(judge => {
           if (!groups[judge.activityId]) return;
 
-          // Robustness: Handle legacy data or missing scope
           const rawScope = (judge.stageScope || '').toLowerCase().trim();
           const jClusterKey = (judge.clusterKey || '').trim();
           
-          // Determine effective scope: 
-          // If explicitly 'area', or empty scope but no cluster key => Area
-          // Otherwise => Cluster
-          const isArea = rawScope === 'area' || (rawScope === '' && !jClusterKey);
+          // Strict Scope Logic
+          const isArea = rawScope === 'area';
           
           if (isArea) {
               groups[judge.activityId].areaJudges.push(judge);
               const conflict = checkConflict(judge, groups[judge.activityId].areaSchools);
               if (conflict.hasConflict) groups[judge.activityId].areaConflicts++;
           } else {
-              // Cluster Scope
+              // Cluster Scope (default if not area)
               if (jClusterKey) {
-                  // Ensure cluster entry exists (creates entry if key is valid but somehow missed in init, or if key is non-standard)
-                  if (!groups[judge.activityId].clusters[jClusterKey]) {
-                      // Try to find if it matches case-insensitively with known clusters
-                      const matchedCluster = data.clusters.find(c => c.ClusterID.toLowerCase() === jClusterKey.toLowerCase());
-                      const effectiveKey = matchedCluster ? matchedCluster.ClusterID : jClusterKey;
-                      
-                      if (!groups[judge.activityId].clusters[effectiveKey]) {
-                           groups[judge.activityId].clusters[effectiveKey] = { judges: [], competingSchools: new Set(), conflicts: 0 };
-                      }
-                      groups[judge.activityId].clusters[effectiveKey].judges.push(judge);
-                      
-                      const clusterData = groups[judge.activityId].clusters[effectiveKey];
-                      const conflict = checkConflict(judge, clusterData.competingSchools);
-                      if (conflict.hasConflict) clusterData.conflicts++;
-                  } else {
-                      groups[judge.activityId].clusters[jClusterKey].judges.push(judge);
-                      
-                      const clusterData = groups[judge.activityId].clusters[jClusterKey];
-                      const conflict = checkConflict(judge, clusterData.competingSchools);
-                      if (conflict.hasConflict) clusterData.conflicts++;
+                  // Robust Key Matching
+                  const effectiveKey = data.clusters.find(c => c.ClusterID.toLowerCase() === jClusterKey.toLowerCase())?.ClusterID || jClusterKey;
+                  
+                  if (groups[judge.activityId].clusters[effectiveKey]) {
+                      const cData = groups[judge.activityId].clusters[effectiveKey];
+                      cData.judges.push(judge);
+                      const conflict = checkConflict(judge, cData.competingSchools);
+                      if (conflict.hasConflict) cData.conflicts++;
                   }
               }
           }
@@ -163,7 +155,6 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
       let external = 0;
       let conflicts = 0;
       
-      // Calculate based on current viewScope and filter
       data.activities.forEach(act => {
           const group = activityGroups[act.id];
           
@@ -174,10 +165,8 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                   if (!data.schools.some(s => s.SchoolID === j.schoolId)) external++;
               });
           } else {
-              // Cluster Mode
               Object.entries(group.clusters).forEach(([cId, cData]) => {
-                  if (clusterFilter && clusterFilter !== cId) return; // Skip if filtered
-                  
+                  if (clusterFilter && clusterFilter !== cId) return;
                   total += cData.judges.length;
                   conflicts += cData.conflicts;
                   cData.judges.forEach(j => {
@@ -190,32 +179,80 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
       return { total, external, conflicts };
   }, [activityGroups, viewScope, clusterFilter, data.schools, data.activities]);
 
-  // For "Select from Cluster" feature
   const getClusterJudgesForActivity = (activityId: string) => {
       return data.judges.filter(j => j.activityId === activityId && j.stageScope === 'cluster');
   };
 
-  const filteredDirectory = useMemo(() => {
-      return data.judges.filter(judge => {
-          if (judge.stageScope !== viewScope) return false;
-          if (viewScope === 'cluster' && clusterFilter && judge.clusterKey !== clusterFilter) return false;
-          
-          const matchesSearch = 
-            judge.judgeName.toLowerCase().includes(searchTerm.toLowerCase()) || 
-            judge.schoolName.toLowerCase().includes(searchTerm.toLowerCase());
-          
-          if (user?.level === 'group_admin') {
-              const userSchool = data.schools.find(s => s.SchoolID === user.SchoolID);
-              if (userSchool && judge.clusterKey !== userSchool.SchoolCluster) return false;
-          }
-          return matchesSearch;
-      });
-  }, [data.judges, searchTerm, user, viewScope, clusterFilter]);
+  // --- Aggregated Directory Logic ---
+  const aggregatedDirectory = useMemo(() => {
+      // Map: JudgeUniqueKey -> { details, activities: [] }
+      const map = new Map<string, { judge: Judge, activities: { name: string, role: string, scope: string }[] }>();
 
-  // Group filtered activities by category
+      data.judges.forEach(judge => {
+          // Strict Filter
+          const scope = judge.stageScope || 'cluster';
+          if (viewScope === 'area' && scope !== 'area') return;
+          if (viewScope === 'cluster' && scope === 'area') return; // Hide area judges in cluster view
+          
+          // Cluster Filter
+          if (viewScope === 'cluster' && clusterFilter && judge.clusterKey !== clusterFilter) return;
+          if (isGroupAdmin) {
+              const userSchool = data.schools.find(s => s.SchoolID === user?.SchoolID);
+              if (userSchool && judge.clusterKey !== userSchool.SchoolCluster) return;
+          }
+
+          // Unique Key: Name + School
+          const key = `${judge.judgeName.trim()}_${judge.schoolName.trim()}`;
+          
+          if (!map.has(key)) {
+              map.set(key, { judge, activities: [] });
+          }
+          
+          const actName = data.activities.find(a => a.id === judge.activityId)?.name || judge.activityId;
+          map.get(key)?.activities.push({ 
+              name: actName, 
+              role: judge.role,
+              scope: scope
+          });
+      });
+
+      // Convert to Array & Filter Search
+      return Array.from(map.values()).filter(item => {
+          const searchLower = searchTerm.toLowerCase();
+          return item.judge.judgeName.toLowerCase().includes(searchLower) ||
+                 item.judge.schoolName.toLowerCase().includes(searchLower) ||
+                 item.activities.some(a => a.name.toLowerCase().includes(searchLower));
+      }).sort((a, b) => a.judge.judgeName.localeCompare(b.judge.judgeName));
+
+  }, [data.judges, data.activities, viewScope, clusterFilter, searchTerm, user, isGroupAdmin]);
+
+
+  // Filtered Activities for Management View
   const filteredActivities = useMemo(() => {
-      return data.activities.filter(act => act.name.toLowerCase().includes(searchTerm.toLowerCase()));
-  }, [data.activities, searchTerm]);
+      let acts = data.activities.filter(act => act.name.toLowerCase().includes(searchTerm.toLowerCase()));
+      
+      // Quick Filters Logic
+      if (quickFilter !== 'all') {
+          acts = acts.filter(act => {
+              const group = activityGroups[act.id];
+              let hasMatch = false;
+
+              if (viewScope === 'area') {
+                  if (quickFilter === 'conflict') hasMatch = group.areaConflicts > 0;
+                  if (quickFilter === 'external') hasMatch = group.areaJudges.some(j => !data.schools.some(s => s.SchoolID === j.schoolId));
+                  if (quickFilter === 'missing') hasMatch = group.areaJudges.length === 0;
+              } else {
+                  // Cluster Check
+                  const clusters = Object.values(group.clusters);
+                  if (quickFilter === 'conflict') hasMatch = clusters.some(c => c.conflicts > 0);
+                  if (quickFilter === 'external') hasMatch = clusters.some(c => c.judges.some(j => !data.schools.some(s => s.SchoolID === j.schoolId)));
+                  if (quickFilter === 'missing') hasMatch = clusters.some(c => c.judges.length === 0 && c.competingSchools.size > 0); // Missing only if there are teams
+              }
+              return hasMatch;
+          });
+      }
+      return acts;
+  }, [data.activities, searchTerm, quickFilter, activityGroups, viewScope, data.schools]);
 
   const categories = useMemo(() => {
       return Array.from(new Set(filteredActivities.map(a => a.category))).sort();
@@ -236,13 +273,11 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
       let initialClusterKey = preSelectedCluster || '';
       let initialClusterLabel = '';
 
-      // If user is group admin, auto-select their cluster
       if (isGroupAdmin && !initialClusterKey) {
           const userSchool = data.schools.find(s => s.SchoolID === user?.SchoolID);
           initialClusterKey = userSchool?.SchoolCluster || '';
       }
       
-      // If we have a key, find label
       if (initialClusterKey) {
           const c = data.clusters.find(cl => cl.ClusterID === initialClusterKey);
           initialClusterLabel = c?.ClusterName || '';
@@ -377,6 +412,21 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
       }
   };
 
+  const toggleCategory = (cat: string) => {
+      const newSet = new Set(collapsedCategories);
+      if (newSet.has(cat)) newSet.delete(cat);
+      else newSet.add(cat);
+      setCollapsedCategories(newSet);
+  };
+
+  const toggleCluster = (activityId: string, clusterId: string) => {
+      const key = `${activityId}-${clusterId}`;
+      const newSet = new Set(collapsedClusters);
+      if (newSet.has(key)) newSet.delete(key);
+      else newSet.add(key);
+      setCollapsedClusters(newSet);
+  };
+
   if (!canManage) {
       return <div className="text-center py-20 text-gray-500">คุณไม่มีสิทธิ์เข้าถึงหน้านี้</div>;
   }
@@ -424,7 +474,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                     onClick={() => setActiveTab('directory')}
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center ${activeTab === 'directory' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                 >
-                    <Users className="w-4 h-4 mr-2" /> รายชื่อรวม
+                    <Users className="w-4 h-4 mr-2" /> รายชื่อรวม (Directory)
                 </button>
                 <button
                     onClick={() => setActiveTab('dashboard')}
@@ -463,6 +513,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
         {/* Management Content */}
         {activeTab === 'management' && (
             <div className="space-y-4">
+                {/* Search & Main Filter */}
                 <div className="flex flex-col md:flex-row gap-4 mb-4">
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
@@ -475,9 +526,9 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                         />
                     </div>
                     
-                    {/* Cluster Filter - Only show in Cluster Mode */}
+                    {/* Flexible Cluster Filter - Auto Width */}
                     {viewScope === 'cluster' && !isGroupAdmin && (
-                        <div className="w-full md:w-64">
+                        <div className="w-full md:w-auto min-w-[300px]">
                             <SearchableSelect 
                                 options={[{ label: 'ทุกกลุ่มเครือข่าย', value: '' }, ...data.clusters.map(c => ({ label: c.ClusterName, value: c.ClusterID }))]}
                                 value={clusterFilter}
@@ -489,172 +540,212 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                     )}
                 </div>
 
-                <div className="space-y-8">
-                    {categories.map(category => (
-                        <div key={category} className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                            {/* Category Header */}
-                            <div className="flex items-center gap-2 mb-3 pb-2 border-b border-gray-200">
-                                <span className="px-3 py-1 bg-blue-50 text-blue-700 rounded-lg text-sm font-bold border border-blue-100 shadow-sm flex items-center">
-                                    <Layers className="w-4 h-4 mr-2" />
-                                    {category}
-                                </span>
-                                <span className="text-xs text-gray-400">
-                                    ({filteredActivities.filter(a => a.category === category).length} รายการ)
-                                </span>
-                            </div>
-                            
-                            <div className="space-y-4">
-                                {filteredActivities
-                                    .filter(a => a.category === category)
-                                    .map(act => {
-                                        const group = activityGroups[act.id];
-                                        const isOpen = expandedActivity === act.id;
-                                        
-                                        // Counts depends on scope
-                                        let judgeCount = 0;
-                                        let conflictCount = 0;
-                                        if (viewScope === 'area') {
-                                            judgeCount = group.areaJudges.length;
-                                            conflictCount = group.areaConflicts;
-                                        } else {
-                                            // Sum up visible clusters
-                                            Object.entries(group.clusters).forEach(([cId, cData]) => {
-                                                if (!clusterFilter || clusterFilter === cId) {
-                                                    judgeCount += cData.judges.length;
-                                                    conflictCount += cData.conflicts;
-                                                }
-                                            });
-                                        }
+                {/* Quick Filters */}
+                <div className="flex gap-2 pb-2 overflow-x-auto no-scrollbar">
+                    <button onClick={() => setQuickFilter('all')} className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all border whitespace-nowrap ${quickFilter === 'all' ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>ทั้งหมด</button>
+                    <button onClick={() => setQuickFilter('external')} className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all border whitespace-nowrap ${quickFilter === 'external' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-blue-600 border-blue-100 hover:bg-blue-50'}`}>กรรมการภายนอก</button>
+                    <button onClick={() => setQuickFilter('conflict')} className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all border whitespace-nowrap ${quickFilter === 'conflict' ? 'bg-red-600 text-white border-red-600' : 'bg-white text-red-600 border-red-100 hover:bg-red-50'}`}>มีข้อขัดแย้ง (Conflict)</button>
+                    <button onClick={() => setQuickFilter('missing')} className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all border whitespace-nowrap ${quickFilter === 'missing' ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-orange-500 border-orange-100 hover:bg-orange-50'}`}>ยังไม่มีกรรมการ</button>
+                </div>
 
-                                        const hasConflict = conflictCount > 0;
+                <div className="space-y-6">
+                    {categories.map(category => {
+                        const isCollapsed = collapsedCategories.has(category);
+                        const categoryActivities = filteredActivities.filter(a => a.category === category);
+                        
+                        if (categoryActivities.length === 0) return null;
 
-                                        return (
-                                            <div key={act.id} className={`bg-white rounded-xl shadow-sm border transition-all ${hasConflict ? 'border-red-200' : 'border-gray-200'}`}>
-                                                <div 
-                                                    className={`p-4 flex flex-col md:flex-row items-start md:items-center justify-between cursor-pointer ${isOpen ? 'bg-gray-50 rounded-t-xl' : ''}`}
-                                                    onClick={() => setExpandedActivity(isOpen ? null : act.id)}
-                                                >
-                                                    <div className="flex items-center flex-1">
-                                                        <div className={`p-2 rounded-lg mr-3 ${judgeCount > 0 ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
-                                                            <Gavel className="w-5 h-5" />
-                                                        </div>
-                                                        <div>
-                                                            <h3 className="font-bold text-gray-800 text-sm md:text-base">{act.name}</h3>
-                                                            <div className="flex items-center gap-3 text-xs text-gray-500 mt-1">
-                                                                <span>กรรมการ ({viewScope === 'area' ? 'เขต' : 'กลุ่ม'}): <b>{judgeCount}</b> คน</span>
-                                                                {hasConflict && (
-                                                                    <span className="flex items-center text-red-600 font-bold bg-red-50 px-2 py-0.5 rounded">
-                                                                        <AlertTriangle className="w-3 h-3 mr-1" /> พบความขัดแย้ง
-                                                                    </span>
-                                                                )}
+                        return (
+                            <div key={category} className="animate-in fade-in slide-in-from-bottom-2 duration-500 border border-gray-200 rounded-xl bg-white overflow-hidden shadow-sm">
+                                {/* Collapsible Category Header */}
+                                <div 
+                                    className="flex items-center justify-between px-4 py-3 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors"
+                                    onClick={() => toggleCategory(category)}
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <span className="px-2 py-1 bg-white text-blue-700 rounded-md text-xs font-bold border border-blue-100 shadow-sm flex items-center">
+                                            <Layers className="w-3 h-3 mr-1.5" />
+                                            {category}
+                                        </span>
+                                        <span className="text-xs text-gray-500">
+                                            ({categoryActivities.length} รายการ)
+                                        </span>
+                                    </div>
+                                    {isCollapsed ? <ChevronRight className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                                </div>
+                                
+                                {!isCollapsed && (
+                                    <div className="p-4 space-y-4 bg-white/50">
+                                        {categoryActivities.map(act => {
+                                            const group = activityGroups[act.id];
+                                            const isOpen = expandedActivity === act.id;
+                                            
+                                            // Counts depends on scope
+                                            let judgeCount = 0;
+                                            let conflictCount = 0;
+                                            let teamCount = 0;
+
+                                            if (viewScope === 'area') {
+                                                judgeCount = group.areaJudges.length;
+                                                conflictCount = group.areaConflicts;
+                                                teamCount = group.areaTeamCount;
+                                            } else {
+                                                // Sum up visible clusters
+                                                Object.entries(group.clusters).forEach(([cId, cData]) => {
+                                                    if (!clusterFilter || clusterFilter === cId) {
+                                                        judgeCount += cData.judges.length;
+                                                        conflictCount += cData.conflicts;
+                                                        teamCount += cData.teamCount;
+                                                    }
+                                                });
+                                            }
+
+                                            const hasConflict = conflictCount > 0;
+
+                                            return (
+                                                <div key={act.id} className={`bg-white rounded-lg shadow-sm border transition-all hover:shadow-md ${hasConflict ? 'border-red-200' : 'border-gray-200'}`}>
+                                                    <div 
+                                                        className={`p-3 flex flex-col md:flex-row items-start md:items-center justify-between cursor-pointer ${isOpen ? 'bg-blue-50/30 rounded-t-lg' : ''}`}
+                                                        onClick={() => setExpandedActivity(isOpen ? null : act.id)}
+                                                    >
+                                                        <div className="flex items-center flex-1 min-w-0">
+                                                            <div className={`p-2 rounded-lg mr-3 shrink-0 ${judgeCount > 0 ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
+                                                                <Gavel className="w-4 h-4" />
+                                                            </div>
+                                                            <div className="min-w-0">
+                                                                <h3 className="font-bold text-gray-800 text-sm truncate pr-2" title={act.name}>{act.name}</h3>
+                                                                <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500 mt-0.5">
+                                                                    <span className="flex items-center"><UserCheck className="w-3 h-3 mr-1"/> {judgeCount} กรรมการ</span>
+                                                                    <span className="text-gray-300">|</span>
+                                                                    <span className="flex items-center"><School className="w-3 h-3 mr-1"/> {teamCount} ทีม</span>
+                                                                    {hasConflict && (
+                                                                        <span className="flex items-center text-red-600 font-bold bg-red-50 px-2 py-0.5 rounded ml-2">
+                                                                            <AlertTriangle className="w-3 h-3 mr-1" /> พบความขัดแย้ง
+                                                                        </span>
+                                                                    )}
+                                                                </div>
                                                             </div>
                                                         </div>
+                                                        <div className="mt-2 md:mt-0 flex items-center gap-2 self-end md:self-center">
+                                                            {isOpen ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                                                        </div>
                                                     </div>
-                                                    <div className="mt-2 md:mt-0 flex items-center gap-2">
-                                                        {isOpen ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
-                                                    </div>
-                                                </div>
 
-                                                {isOpen && (
-                                                    <div className="p-4 border-t border-gray-100 animate-in slide-in-from-top-2">
-                                                        {viewScope === 'area' ? (
-                                                            // --- AREA VIEW ---
-                                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                                                <div className="md:col-span-1 bg-gray-50 p-4 rounded-lg border border-gray-200">
-                                                                    <h4 className="text-xs font-bold text-gray-500 uppercase mb-3 flex items-center">
-                                                                        <School className="w-3 h-3 mr-1" /> โรงเรียนที่เข้าแข่งขัน (Qualified)
-                                                                    </h4>
-                                                                    <div className="flex flex-wrap gap-2">
-                                                                        {Array.from(group.areaSchools).length > 0 ? Array.from(group.areaSchools).map(school => (
-                                                                            <span key={school} className="text-xs bg-white border border-gray-300 px-2 py-1 rounded text-gray-600">
-                                                                                {school}
-                                                                            </span>
-                                                                        )) : <span className="text-xs text-gray-400 italic">ไม่มีทีมเข้าแข่งขัน</span>}
-                                                                    </div>
-                                                                </div>
-                                                                <div className="md:col-span-2">
-                                                                    <div className="flex justify-between items-center mb-3">
-                                                                        <h4 className="text-xs font-bold text-gray-500 uppercase flex items-center">
-                                                                            <UserCheck className="w-3 h-3 mr-1" /> รายชื่อกรรมการ (ระดับเขต)
+                                                    {isOpen && (
+                                                        <div className="p-4 border-t border-gray-100 animate-in slide-in-from-top-2">
+                                                            {viewScope === 'area' ? (
+                                                                // --- AREA VIEW ---
+                                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                                                    <div className="md:col-span-1 bg-gray-50 p-4 rounded-lg border border-gray-200 h-fit">
+                                                                        <h4 className="text-xs font-bold text-gray-500 uppercase mb-3 flex items-center">
+                                                                            <School className="w-3 h-3 mr-1" /> ทีมแข่งขัน (Qualified: {group.areaSchools.size})
                                                                         </h4>
-                                                                        <button 
-                                                                            onClick={(e) => { e.stopPropagation(); handleAdd(act.id); }}
-                                                                            className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded hover:bg-blue-100 font-medium flex items-center"
-                                                                        >
-                                                                            <Plus className="w-3 h-3 mr-1" /> เพิ่ม
-                                                                        </button>
+                                                                        <div className="flex flex-wrap gap-2">
+                                                                            {Array.from(group.areaSchools).length > 0 ? Array.from(group.areaSchools).map(school => (
+                                                                                <span key={school} className="text-[10px] bg-white border border-gray-300 px-2 py-1 rounded text-gray-600">
+                                                                                    {school}
+                                                                                </span>
+                                                                            )) : <span className="text-xs text-gray-400 italic">ไม่มีทีมเข้าแข่งขัน</span>}
+                                                                        </div>
                                                                     </div>
-                                                                    <div className="space-y-2">
-                                                                        {group.areaJudges.map(judge => renderJudgeRow(judge, group.areaSchools))}
-                                                                        {group.areaJudges.length === 0 && <div className="text-center py-6 text-gray-400 text-xs border-2 border-dashed rounded">ยังไม่มีกรรมการ</div>}
+                                                                    <div className="md:col-span-2">
+                                                                        <div className="flex justify-between items-center mb-3">
+                                                                            <h4 className="text-xs font-bold text-gray-500 uppercase flex items-center">
+                                                                                <UserCheck className="w-3 h-3 mr-1" /> รายชื่อกรรมการ (ระดับเขต)
+                                                                            </h4>
+                                                                            <button 
+                                                                                onClick={(e) => { e.stopPropagation(); handleAdd(act.id); }}
+                                                                                className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded hover:bg-blue-100 font-medium flex items-center"
+                                                                            >
+                                                                                <Plus className="w-3 h-3 mr-1" /> เพิ่ม
+                                                                            </button>
+                                                                        </div>
+                                                                        <div className="space-y-2">
+                                                                            {group.areaJudges.map(judge => renderJudgeRow(judge, group.areaSchools))}
+                                                                            {group.areaJudges.length === 0 && <div className="text-center py-6 text-gray-400 text-xs border-2 border-dashed rounded">ยังไม่มีกรรมการ</div>}
+                                                                        </div>
                                                                     </div>
                                                                 </div>
-                                                            </div>
-                                                        ) : (
-                                                            // --- CLUSTER VIEW (Grouped) ---
-                                                            <div className="space-y-6">
-                                                                {data.clusters.map(cluster => {
-                                                                    if (clusterFilter && cluster.ClusterID !== clusterFilter) return null;
-                                                                    const cData = group.clusters[cluster.ClusterID];
-                                                                    
-                                                                    // Check logic: Ensure we display clusters that have data, or show empty state if user is filtering
-                                                                    // Note: group.clusters is pre-initialized, so cData always exists.
-                                                                    if (!cData) return null;
-                                                                    
-                                                                    // Only hide if absolutely no data AND no filter active (reduce noise)
-                                                                    if (!clusterFilter && cData.judges.length === 0 && cData.competingSchools.size === 0) return null;
+                                                            ) : (
+                                                                // --- CLUSTER VIEW (Collapsible Groups) ---
+                                                                <div className="space-y-3">
+                                                                    {data.clusters.map(cluster => {
+                                                                        if (clusterFilter && cluster.ClusterID !== clusterFilter) return null;
+                                                                        const cData = group.clusters[cluster.ClusterID];
+                                                                        if (!cData) return null;
+                                                                        // Logic: Hide completely empty clusters IF no filter is active, to reduce noise
+                                                                        if (!clusterFilter && cData.judges.length === 0 && cData.competingSchools.size === 0) return null;
 
-                                                                    return (
-                                                                        <div key={cluster.ClusterID} className="border border-blue-100 rounded-xl overflow-hidden">
-                                                                            <div className="bg-blue-50/50 px-4 py-2 border-b border-blue-100 flex justify-between items-center">
-                                                                                <span className="font-bold text-blue-800 text-sm flex items-center">
-                                                                                    <LayoutGrid className="w-3.5 h-3.5 mr-2" /> {cluster.ClusterName}
-                                                                                </span>
-                                                                                <button 
-                                                                                    onClick={(e) => { e.stopPropagation(); handleAdd(act.id, cluster.ClusterID); }}
-                                                                                    className="text-[10px] bg-white border border-blue-200 text-blue-600 px-2 py-1 rounded hover:bg-blue-50 flex items-center"
+                                                                        const isClusterCollapsed = collapsedClusters.has(`${act.id}-${cluster.ClusterID}`);
+
+                                                                        return (
+                                                                            <div key={cluster.ClusterID} className="border border-blue-100 rounded-lg overflow-hidden">
+                                                                                {/* Cluster Header */}
+                                                                                <div 
+                                                                                    className="bg-blue-50/50 px-4 py-2 flex justify-between items-center cursor-pointer hover:bg-blue-50"
+                                                                                    onClick={() => toggleCluster(act.id, cluster.ClusterID)}
                                                                                 >
-                                                                                    <Plus className="w-3 h-3 mr-1" /> เพิ่มกรรมการ
-                                                                                </button>
-                                                                            </div>
-                                                                            <div className="p-3 grid grid-cols-1 md:grid-cols-3 gap-4">
-                                                                                <div className="md:col-span-1 bg-white p-3 rounded-lg border border-gray-100">
-                                                                                    <h5 className="text-[10px] font-bold text-gray-400 uppercase mb-2 flex items-center">
-                                                                                        <School className="w-3 h-3 mr-1" /> ทีมที่เข้าแข่งขัน
-                                                                                    </h5>
-                                                                                    <div className="flex flex-wrap gap-1">
-                                                                                        {Array.from(cData.competingSchools).length > 0 ? Array.from(cData.competingSchools).map(s => (
-                                                                                            <span key={s} className="text-[10px] bg-gray-50 border border-gray-200 px-1.5 py-0.5 rounded text-gray-600">{s}</span>
-                                                                                        )) : <span className="text-[10px] text-gray-400 italic">ไม่มีทีม</span>}
+                                                                                    <div className="flex items-center gap-2">
+                                                                                        {isClusterCollapsed ? <ChevronRight className="w-4 h-4 text-blue-400" /> : <ChevronDown className="w-4 h-4 text-blue-400" />}
+                                                                                        <span className="font-bold text-blue-800 text-xs flex items-center">
+                                                                                            <LayoutGrid className="w-3.5 h-3.5 mr-2" /> {cluster.ClusterName}
+                                                                                        </span>
+                                                                                        <span className="text-[10px] text-gray-500 bg-white px-1.5 py-0.5 rounded border border-blue-100">
+                                                                                            {cData.judges.length} คน / {cData.teamCount} ทีม
+                                                                                        </span>
                                                                                     </div>
+                                                                                    {!isClusterCollapsed && (
+                                                                                        <button 
+                                                                                            onClick={(e) => { e.stopPropagation(); handleAdd(act.id, cluster.ClusterID); }}
+                                                                                            className="text-[10px] bg-white border border-blue-200 text-blue-600 px-2 py-1 rounded hover:bg-blue-100 flex items-center"
+                                                                                        >
+                                                                                            <Plus className="w-3 h-3 mr-1" /> เพิ่ม
+                                                                                        </button>
+                                                                                    )}
                                                                                 </div>
-                                                                                <div className="md:col-span-2">
-                                                                                    <h5 className="text-[10px] font-bold text-gray-400 uppercase mb-2 flex items-center">
-                                                                                        <UserCheck className="w-3 h-3 mr-1" /> รายชื่อกรรมการ ({cData.judges.length} คน)
-                                                                                    </h5>
-                                                                                    <div className="space-y-2">
-                                                                                        {cData.judges.map(j => renderJudgeRow(j, cData.competingSchools))}
-                                                                                        {cData.judges.length === 0 && <div className="text-xs text-gray-400 italic border-2 border-dashed border-gray-100 rounded-lg p-2 text-center">ยังไม่มีกรรมการในกลุ่มนี้</div>}
+
+                                                                                {/* Cluster Content */}
+                                                                                {!isClusterCollapsed && (
+                                                                                    <div className="p-3 grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-blue-50 animate-in fade-in">
+                                                                                        <div className="md:col-span-1 bg-white p-3 rounded-lg border border-gray-100 h-fit">
+                                                                                            <h5 className="text-[10px] font-bold text-gray-400 uppercase mb-2 flex items-center">
+                                                                                                <School className="w-3 h-3 mr-1" /> ทีมที่เข้าแข่งขัน ({cData.competingSchools.size})
+                                                                                            </h5>
+                                                                                            <div className="flex flex-wrap gap-1">
+                                                                                                {Array.from(cData.competingSchools).length > 0 ? Array.from(cData.competingSchools).map(s => (
+                                                                                                    <span key={s} className="text-[10px] bg-gray-50 border border-gray-200 px-1.5 py-0.5 rounded text-gray-600">{s}</span>
+                                                                                                )) : <span className="text-[10px] text-gray-400 italic">ไม่มีทีม</span>}
+                                                                                            </div>
+                                                                                        </div>
+                                                                                        <div className="md:col-span-2">
+                                                                                            <h5 className="text-[10px] font-bold text-gray-400 uppercase mb-2 flex items-center">
+                                                                                                <UserCheck className="w-3 h-3 mr-1" /> รายชื่อกรรมการ
+                                                                                            </h5>
+                                                                                            <div className="space-y-2">
+                                                                                                {cData.judges.map(j => renderJudgeRow(j, cData.competingSchools))}
+                                                                                                {cData.judges.length === 0 && <div className="text-xs text-gray-400 italic border-2 border-dashed border-gray-100 rounded-lg p-2 text-center">ยังไม่มีกรรมการในกลุ่มนี้</div>}
+                                                                                            </div>
+                                                                                        </div>
                                                                                     </div>
-                                                                                </div>
+                                                                                )}
                                                                             </div>
-                                                                        </div>
-                                                                    );
-                                                                })}
-                                                                {(Object.keys(group.clusters).length === 0 || (!clusterFilter && Object.values(group.clusters).every(c => c.judges.length === 0 && c.competingSchools.size === 0))) && (
-                                                                    <div className="text-center py-8 text-gray-400 text-xs">ไม่มีข้อมูลในระดับกลุ่มเครือข่ายสำหรับกิจกรรมนี้</div>
-                                                                )}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        );
-                                    })
-                                }
+                                                                        );
+                                                                    })}
+                                                                    {(Object.keys(group.clusters).length === 0 || (!clusterFilter && Object.values(group.clusters).every(c => c.judges.length === 0 && c.competingSchools.size === 0))) && (
+                                                                        <div className="text-center py-8 text-gray-400 text-xs">ไม่มีข้อมูลในระดับกลุ่มเครือข่ายสำหรับกิจกรรมนี้</div>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                     
                     {filteredActivities.length === 0 && (
                         <div className="text-center py-10 text-gray-400">ไม่พบกิจกรรมที่ค้นหา</div>
@@ -663,64 +754,102 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
             </div>
         )}
 
-        {/* Directory Content */}
+        {/* Directory Content (Aggregated) */}
         {activeTab === 'directory' && (
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="p-4 border-b border-gray-100">
-                    <div className="relative max-w-sm">
+                <div className="p-4 border-b border-gray-100 bg-gray-50 flex flex-col md:flex-row gap-4 items-center">
+                    <div className="relative flex-1 w-full">
                         <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
                         <input 
                             type="text" 
                             className="block w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:outline-none"
-                            placeholder="ค้นหาชื่อ, โรงเรียน..."
+                            placeholder="ค้นหาชื่อ, โรงเรียน, กิจกรรม..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
                     </div>
+                    {/* Cluster Filter in Directory */}
+                    {viewScope === 'cluster' && !isGroupAdmin && (
+                        <div className="w-full md:w-auto min-w-[250px]">
+                            <SearchableSelect 
+                                options={[{ label: 'ทุกกลุ่มเครือข่าย', value: '' }, ...data.clusters.map(c => ({ label: c.ClusterName, value: c.ClusterID }))]}
+                                value={clusterFilter}
+                                onChange={setClusterFilter}
+                                placeholder="กรองตามกลุ่มเครือข่าย"
+                                icon={<Filter className="w-4 h-4"/>}
+                            />
+                        </div>
+                    )}
                 </div>
                 <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
+                        <thead className="bg-white">
                             <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">รูปถ่าย</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ชื่อ - สกุล</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">กิจกรรม</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">สังกัด</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ติดต่อ</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">กรรมการ (Judge)</th>
+                                <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-[40%]">กิจกรรมที่ตัดสิน (Assigned Activities)</th>
+                                <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">สังกัด/ติดต่อ</th>
+                                <th className="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200 bg-white">
-                            {filteredDirectory.map((judge, idx) => {
-                                const activityName = data.activities.find(a => a.id === judge.activityId)?.name || judge.activityId;
+                            {aggregatedDirectory.map((item, idx) => {
+                                // item contains { judge: Judge, activities: [] }
+                                const { judge, activities } = item;
+                                
                                 return (
-                                    <tr key={judge.id || idx} className="hover:bg-gray-50">
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <img src={judge.photoUrl || "https://cdn-icons-png.flaticon.com/512/3135/3135768.png"} className="w-8 h-8 rounded-full object-cover border" alt="" />
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="text-sm font-medium text-gray-900">{judge.judgeName}</div>
-                                            <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">{judge.role}</span>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <div className="text-sm text-gray-900 line-clamp-1">{activityName}</div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="text-sm text-gray-900 flex items-center">
-                                                {data.schools.some(s => s.SchoolID === judge.schoolId) ? <School className="w-3 h-3 mr-1 text-gray-400"/> : <Briefcase className="w-3 h-3 mr-1 text-orange-400"/>}
-                                                {judge.schoolName}
+                                    <tr key={`${judge.judgeName}_${idx}`} className="hover:bg-gray-50 group">
+                                        <td className="px-6 py-4 whitespace-nowrap align-top">
+                                            <div className="flex items-start">
+                                                <img src={judge.photoUrl || "https://cdn-icons-png.flaticon.com/512/3135/3135768.png"} className="w-10 h-10 rounded-full object-cover border mr-3" alt="" />
+                                                <div>
+                                                    <div className="text-sm font-bold text-gray-900">{judge.judgeName}</div>
+                                                    <div className="text-xs text-gray-500">{judge.role}</div>
+                                                    {viewScope === 'cluster' && (
+                                                        <div className="text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded mt-1 w-fit">
+                                                            {judge.clusterLabel || judge.clusterKey}
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="text-sm text-gray-600 flex items-center"><Phone className="w-3 h-3 mr-1"/> {judge.phone || '-'}</div>
+                                        <td className="px-6 py-4 align-top">
+                                            <div className="flex flex-col gap-1">
+                                                {activities.map((act, i) => (
+                                                    <div key={i} className="flex items-center text-xs text-gray-700 bg-gray-50 px-2 py-1.5 rounded border border-gray-100">
+                                                        <Gavel className="w-3 h-3 mr-1.5 text-gray-400" />
+                                                        <span className="font-medium">{act.name}</span>
+                                                        <span className="ml-auto text-[10px] text-gray-400 border-l pl-2 border-gray-300">{act.role}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                            <button onClick={() => handleEdit(judge)} className="text-blue-600 hover:text-blue-900 mr-3"><Edit2 className="w-4 h-4"/></button>
-                                            <button onClick={() => setConfirmDelete({ isOpen: true, id: judge.id })} className="text-red-600 hover:text-red-900"><Trash2 className="w-4 h-4"/></button>
+                                        <td className="px-6 py-4 whitespace-nowrap align-top">
+                                            <div className="text-sm text-gray-900 flex items-center mb-1">
+                                                {data.schools.some(s => s.SchoolID === judge.schoolId) ? <School className="w-3 h-3 mr-1.5 text-gray-400"/> : <Briefcase className="w-3 h-3 mr-1.5 text-orange-400"/>}
+                                                <span className="truncate max-w-[150px]">{judge.schoolName}</span>
+                                            </div>
+                                            <div className="text-xs text-gray-500 flex items-center">
+                                                <Phone className="w-3 h-3 mr-1.5"/> {judge.phone || '-'}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium align-top">
+                                            {/* In Aggregated View, Editing is tricky because one row represents multiple entries. 
+                                                We'll simplify by allowing Edit on the primary entry (or showing a note). 
+                                                For now, we just link to the first one found for editing profile details. */}
+                                            <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <button onClick={() => handleEdit(judge)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded" title="แก้ไขข้อมูลหลัก"><Edit2 className="w-4 h-4"/></button>
+                                            </div>
                                         </td>
                                     </tr>
                                 );
                             })}
+                            {aggregatedDirectory.length === 0 && (
+                                <tr>
+                                    <td colSpan={4} className="px-6 py-12 text-center text-gray-400">
+                                        ไม่พบข้อมูลกรรมการ
+                                    </td>
+                                </tr>
+                            )}
                         </tbody>
                     </table>
                 </div>
