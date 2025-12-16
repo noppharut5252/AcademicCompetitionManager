@@ -204,7 +204,14 @@ const VenueScheduleModal = ({ venue, isOpen, onClose }: { venue: Venue, isOpen: 
     );
 };
 
-const VenueCard = ({ venue, isAdmin, onEdit, onViewSchedule }: { venue: Venue, isAdmin: boolean, onEdit: (v: Venue) => void, onViewSchedule: (v: Venue) => void }) => {
+interface VenueCardProps {
+    venue: Venue;
+    isAdmin: boolean;
+    onEdit: (v: Venue) => void;
+    onViewSchedule: (v: Venue) => void;
+}
+
+const VenueCard: React.FC<VenueCardProps> = ({ venue, isAdmin, onEdit, onViewSchedule }) => {
     
     const allSchedules = venue.scheduledActivities || [];
     const PREVIEW_LIMIT = 3;
@@ -872,3 +879,4 @@ const VenuesView: React.FC<VenuesViewProps> = ({ data, user }) => {
 };
 
 export default VenuesView;
+
