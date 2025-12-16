@@ -1,11 +1,11 @@
 
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { AppData, Venue, VenueSchedule } from '../types';
 import { MapPin, Calendar, Plus, Edit2, Trash2, Navigation, Info, ExternalLink, X, Save, CheckCircle, Utensils, Wifi, Car, Wind, Clock, Building, Layers, Map, AlertCircle, Search, LayoutGrid, Camera, Loader2, Upload, ImageIcon, List, ArrowRight, Trophy, Share2 } from 'lucide-react';
 import SearchableSelect from './SearchableSelect';
 import { saveVenue, deleteVenue, uploadImage } from '../services/api';
 import { resizeImage } from '../services/utils';
-import { shareVenue } from '../services/liff';
+import { shareVenue, shareSchedule } from '../services/liff';
 
 interface VenuesViewProps {
   data: AppData;
@@ -21,6 +21,40 @@ const FACILITY_ICONS: Record<string, React.ReactNode> = {
     'ห้องแอร์': <Wind className="w-4 h-4" />,
     'Wifi': <Wifi className="w-4 h-4" />,
     'Free Wifi': <Wifi className="w-4 h-4" />,
+};
+
+// Internal Toast Component
+const Toast = ({ message, type, isVisible, onClose }: { message: string, type: 'success' | 'error' | 'info', isVisible: boolean, onClose: () => void }) => {
+    useEffect(() => {
+        if (isVisible) {
+            const timer = setTimeout(onClose, 3000);
+            return () => clearTimeout(timer);
+        }
+    }, [isVisible, onClose]);
+
+    if (!isVisible) return null;
+
+    const styles = {
+        success: 'bg-green-600 text-white',
+        error: 'bg-red-600 text-white',
+        info: 'bg-blue-600 text-white'
+    };
+
+    const icons = {
+        success: <CheckCircle className="w-5 h-5" />,
+        error: <AlertCircle className="w-5 h-5" />,
+        info: <Info className="w-5 h-5" />
+    };
+
+    return (
+        <div className={`fixed top-6 right-6 z-[250] flex items-center p-4 rounded-xl shadow-xl transition-all duration-500 transform translate-y-0 ${styles[type]} animate-in slide-in-from-top-5 fade-in`}>
+            <div className="mr-3">{icons[type]}</div>
+            <div className="font-medium text-sm">{message}</div>
+            <button onClick={onClose} className="ml-4 p-1 hover:bg-white/20 rounded-full transition-colors">
+                <X className="w-4 h-4" />
+            </button>
+        </div>
+    );
 };
 
 // --- New Component: Full Schedule Modal ---
@@ -53,6 +87,21 @@ const VenueScheduleModal = ({ venue, isOpen, onClose }: { venue: Venue, isOpen: 
     }, [venue.scheduledActivities, searchTerm]);
 
     const sortedDates = Object.keys(groupedSchedules).sort();
+
+    const handleShareSchedule = async (sch: VenueSchedule) => {
+        try {
+            await shareSchedule(
+                sch.activityName || 'กิจกรรม',
+                venue.name,
+                `${sch.building || ''} ${sch.floor || ''} ${sch.room || ''}`.trim(),
+                sch.date,
+                sch.timeRange,
+                venue.locationUrl
+            );
+        } catch(e) {
+            alert('ไม่สามารถแชร์ได้');
+        }
+    };
 
     if (!isOpen) return null;
 
@@ -97,7 +146,7 @@ const VenueScheduleModal = ({ venue, isOpen, onClose }: { venue: Venue, isOpen: 
                                     </div>
                                     <div className="divide-y divide-gray-100">
                                         {groupedSchedules[date].map((sch, idx) => (
-                                            <div key={idx} className="p-3 hover:bg-gray-50 transition-colors flex flex-col gap-3">
+                                            <div key={idx} className="p-3 hover:bg-gray-50 transition-colors flex flex-col gap-3 relative group">
                                                 <div className="flex items-start gap-3">
                                                     <div className="sm:w-24 shrink-0 flex flex-col gap-1">
                                                         <div className="text-orange-600 font-medium text-xs sm:text-sm bg-orange-50 px-2 py-1 rounded w-fit">
@@ -110,7 +159,7 @@ const VenueScheduleModal = ({ venue, isOpen, onClose }: { venue: Venue, isOpen: 
                                                             </div>
                                                         )}
                                                     </div>
-                                                    <div className="flex-1 min-w-0">
+                                                    <div className="flex-1 min-w-0 pr-8">
                                                         <div className="font-bold text-gray-900 text-sm">{sch.activityName}</div>
                                                         <div className="flex items-center text-xs text-gray-500 mt-1">
                                                             <MapPin className="w-3.5 h-3.5 mr-1" />
@@ -122,6 +171,14 @@ const VenueScheduleModal = ({ venue, isOpen, onClose }: { venue: Venue, isOpen: 
                                                             </div>
                                                         )}
                                                     </div>
+                                                    {/* Share Button for specific schedule */}
+                                                    <button 
+                                                        onClick={() => handleShareSchedule(sch)}
+                                                        className="absolute top-3 right-3 p-1.5 bg-gray-100 text-gray-500 rounded-full hover:bg-green-50 hover:text-green-600 transition-colors"
+                                                        title="แชร์กำหนดการนี้"
+                                                    >
+                                                        <Share2 className="w-4 h-4" />
+                                                    </button>
                                                 </div>
                                                 {/* Image Preview for specific schedule */}
                                                 {sch.imageUrl && (
@@ -149,9 +206,7 @@ const VenueScheduleModal = ({ venue, isOpen, onClose }: { venue: Venue, isOpen: 
 
 const VenueCard = ({ venue, isAdmin, onEdit, onViewSchedule }: { venue: Venue, isAdmin: boolean, onEdit: (v: Venue) => void, onViewSchedule: (v: Venue) => void }) => {
     
-    // Flatten schedules for preview limit
     const allSchedules = venue.scheduledActivities || [];
-    // Show only first 3 items in card to prevent clutter
     const PREVIEW_LIMIT = 3;
     const previewSchedules = allSchedules.slice(0, PREVIEW_LIMIT);
     const hiddenCount = Math.max(0, allSchedules.length - PREVIEW_LIMIT);
@@ -289,11 +344,14 @@ const VenueCard = ({ venue, isAdmin, onEdit, onViewSchedule }: { venue: Venue, i
     );
 };
 
-const VenueModal = ({ venue, isOpen, onClose, onSave, onDelete, activities }: { venue: Venue | null, isOpen: boolean, onClose: () => void, onSave: (v: Venue) => void, onDelete: (id: string) => void, activities: any[] }) => {
+const VenueModal = ({ venue, isOpen, onClose, onSave, onDelete, activities }: { venue: Venue | null, isOpen: boolean, onClose: () => void, onSave: (v: Venue) => Promise<boolean>, onDelete: (id: string) => void, activities: any[] }) => {
     const [formData, setFormData] = useState<Partial<Venue>>({
         name: '', description: '', locationUrl: '', imageUrl: '', facilities: [], contactInfo: '', scheduledActivities: []
     });
     
+    // Internal Saving State for the Modal
+    const [isSaving, setIsSaving] = useState(false);
+
     // Schedule Editing State
     const [scheduleEditIndex, setScheduleEditIndex] = useState<number | null>(null);
     const [newSchedule, setNewSchedule] = useState<VenueSchedule>({
@@ -379,7 +437,7 @@ const VenueModal = ({ venue, isOpen, onClose, onSave, onDelete, activities }: { 
     };
 
     // --- Schedule Logic (Immediate Save) ---
-    const addOrUpdateSchedule = () => {
+    const addOrUpdateSchedule = async () => {
         if (!newSchedule.activityId || !newSchedule.date) {
             alert('กรุณาเลือกรายการแข่งขันและระบุวันที่');
             return;
@@ -390,21 +448,17 @@ const VenueModal = ({ venue, isOpen, onClose, onSave, onDelete, activities }: { 
         const currentList = [...(formData.scheduledActivities || [])];
 
         if (scheduleEditIndex !== null) {
-            // Update Existing
             currentList[scheduleEditIndex] = entry;
             setScheduleEditIndex(null);
         } else {
-            // Add New
             currentList.push(entry);
         }
 
         const updatedVenue = { ...formData, scheduledActivities: currentList } as Venue;
-        setFormData(updatedVenue); // Update local state
+        setFormData(updatedVenue);
         
         // Immediate Save to Backend
-        // If it's a new venue, ID might be generated in parent, handled by onSave logic usually
-        // But for safety, onSave handles ID generation if missing
-        onSave(updatedVenue); 
+        await onSave(updatedVenue); 
         
         // Reset form
         setNewSchedule({ 
@@ -434,16 +488,22 @@ const VenueModal = ({ venue, isOpen, onClose, onSave, onDelete, activities }: { 
         });
     };
 
-    const removeSchedule = (index: number) => {
+    const removeSchedule = async (index: number) => {
         if (!confirm('ยืนยันการลบรายการนี้?')) return;
         const updatedList = [...(formData.scheduledActivities || [])];
         updatedList.splice(index, 1);
         
         const updatedVenue = { ...formData, scheduledActivities: updatedList } as Venue;
         setFormData(updatedVenue);
-        onSave(updatedVenue); // Immediate Save
+        await onSave(updatedVenue); // Immediate Save
 
         if (scheduleEditIndex === index) cancelScheduleEdit();
+    };
+
+    const handleMainSave = async () => {
+        setIsSaving(true);
+        await onSave(formData as Venue);
+        setIsSaving(false);
     };
 
     if (!isOpen) return null;
@@ -652,8 +712,13 @@ const VenueModal = ({ venue, isOpen, onClose, onSave, onDelete, activities }: { 
                     ) : <div></div>}
                     <div className="flex gap-2">
                         <button onClick={onClose} className="px-4 py-2 text-gray-600 text-sm hover:bg-gray-200 rounded-lg">ปิด</button>
-                        <button onClick={() => onSave(formData as Venue)} className="px-6 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 shadow-sm flex items-center">
-                            <Save className="w-4 h-4 mr-2" /> บันทึกข้อมูลหลัก
+                        <button 
+                            onClick={handleMainSave} 
+                            disabled={isSaving}
+                            className="px-6 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 shadow-sm flex items-center disabled:opacity-70"
+                        >
+                            {isSaving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
+                            บันทึกข้อมูลหลัก
                         </button>
                     </div>
                 </div>
@@ -668,10 +733,15 @@ const VenuesView: React.FC<VenuesViewProps> = ({ data, user }) => {
   
   // New State for Viewing Schedule
   const [scheduleVenue, setScheduleVenue] = useState<Venue | null>(null);
+  const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info', isVisible: boolean }>({ message: '', type: 'info', isVisible: false });
   
   const [localVenues, setLocalVenues] = useState<Venue[]>(data.venues || []);
 
   const canManage = ['admin', 'area', 'group_admin'].includes(user?.level?.toLowerCase());
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info') => {
+      setToast({ message, type, isVisible: true });
+  };
 
   const handleEdit = (v: Venue) => {
       setEditingVenue(v);
@@ -683,34 +753,32 @@ const VenuesView: React.FC<VenuesViewProps> = ({ data, user }) => {
       setIsModalOpen(true);
   };
 
-  const handleSave = async (venueData: Venue) => {
-      // 1. Determine ID and Final Object
-      let finalVenue = { ...venueData };
-      if (!finalVenue.id) {
-          finalVenue.id = `V${Date.now()}`;
-      }
+  const handleSave = async (venueData: Venue): Promise<boolean> => {
+      try {
+        // 1. Determine ID and Final Object
+        let finalVenue = { ...venueData };
+        if (!finalVenue.id) {
+            finalVenue.id = `V${Date.now()}`;
+        }
 
-      // 2. Optimistic Update
-      let updatedList = [];
-      const exists = localVenues.some(v => v.id === finalVenue.id);
-      if (exists) {
-          updatedList = localVenues.map(v => v.id === finalVenue.id ? finalVenue : v);
-      } else {
-          updatedList = [...localVenues, finalVenue];
+        // 2. Optimistic Update
+        let updatedList = [];
+        const exists = localVenues.some(v => v.id === finalVenue.id);
+        if (exists) {
+            updatedList = localVenues.map(v => v.id === finalVenue.id ? finalVenue : v);
+        } else {
+            updatedList = [...localVenues, finalVenue];
+        }
+        setLocalVenues(updatedList);
+        
+        // 3. Call API with the Correct Object (Including ID)
+        await saveVenue(finalVenue);
+        showToast('บันทึกข้อมูลสำเร็จ', 'success');
+        return true;
+      } catch (err) {
+        showToast('เกิดข้อผิดพลาดในการบันทึก', 'error');
+        return false;
       }
-      setLocalVenues(updatedList);
-      
-      // Close modal ONLY if it was a main save (not triggered by schedule update)
-      // Actually, if called from schedule update, we want to keep modal open usually?
-      // But the requirement says "Instant Save" inside schedule. 
-      // If we are in the modal, we just update state. 
-      // Let's rely on the Modal's internal state for UI and this parent function for syncing data.
-      
-      // Note: We don't close modal here automatically to allow continuous editing. 
-      // The Modal calls onClose when user clicks "Close" or "Cancel".
-      
-      // 3. Call API with the Correct Object (Including ID)
-      await saveVenue(finalVenue);
   };
 
   const handleDelete = async (id: string) => {
@@ -718,12 +786,14 @@ const VenuesView: React.FC<VenuesViewProps> = ({ data, user }) => {
       
       setLocalVenues(prev => prev.filter(v => v.id !== id));
       setIsModalOpen(false);
+      showToast('ลบข้อมูลเรียบร้อยแล้ว', 'success');
       
       await deleteVenue(id);
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500 pb-20">
+    <div className="space-y-6 animate-in fade-in duration-500 pb-20 relative">
+        <Toast message={toast.message} type={toast.type} isVisible={toast.isVisible} onClose={() => setToast(prev => ({...prev, isVisible: false}))} />
         
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
