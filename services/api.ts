@@ -203,6 +203,24 @@ export const uploadImage = async (base64Image: string, filename: string = 'uploa
     }
 }
 
+export const addAnnouncement = async (title: string, content: string, type: 'news' | 'manual', link: string = '', author: string = 'Admin'): Promise<boolean> => {
+    try {
+        const response = await fetch(`${API_URL}?action=addAnnouncement`, {
+            method: 'POST',
+            mode: 'cors',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify({ title, content, type, link, author })
+        });
+        
+        if (!response.ok) return false;
+        const result = await response.json();
+        return result.status === 'success';
+    } catch (e) {
+        console.error("Add Announcement failed", e);
+        return false;
+    }
+};
+
 // --- Certificate Config API ---
 
 export const getCertificateConfig = async (): Promise<Record<string, CertificateTemplate>> => {
