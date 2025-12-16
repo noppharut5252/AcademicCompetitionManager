@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { AppData, Judge, User, Team, JudgeConfig } from '../types';
+import { AppData, Judge, User, JudgeConfig, SchoolCluster } from '../types';
 import { Search, Plus, Edit2, Trash2, Gavel, Mail, Phone, School, MapPin, Loader2, Save, X, LayoutGrid, AlertTriangle, CheckCircle, Users, Briefcase, ChevronDown, ChevronUp, AlertOctagon, UserCheck, Camera, Copy, Trophy, Filter, Layers, ChevronRight, Hash, Eye, EyeOff, ChevronsUpDown, ChevronLeft, ListChecks, ArrowRight, Import, AlertCircle, Printer, FileText, Files, Settings, ScrollText, ArrowUpFromLine, ArrowDownToLine, MoveHorizontal, Image as ImageIcon, Upload } from 'lucide-react';
 import SearchableSelect from './SearchableSelect';
 import ConfirmationModal from './ConfirmationModal';
@@ -132,9 +132,32 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
   const isAdminOrArea = userRole === 'admin' || userRole === 'area';
   const isGroupAdmin = userRole === 'group_admin';
   const isUserOrSchoolAdmin = userRole === 'school_admin' || userRole === 'user';
-  const canManage = isAdminOrArea || isGroupAdmin;
+  // Guest is user === undefined or isGuest === true
+
   const userSchool = data.schools.find(s => s.SchoolID === user?.SchoolID);
   const userClusterID = userSchool?.SchoolCluster;
+
+  // Logic: Can Modify?
+  // 1. Admin/Area can always modify everything.
+  // 2. Group Admin can ONLY modify Cluster Scope AND their own Cluster Key.
+  // 3. Others (School, User, Guest) cannot modify anything.
+  const canModifyJudge = (judge: Judge) => {
+      if (isAdminOrArea) return true;
+      if (isGroupAdmin) {
+          // Can modify only if scope is cluster AND belongs to their cluster
+          return judge.stageScope !== 'area' && judge.clusterKey === userClusterID;
+      }
+      return false;
+  };
+
+  const canAddJudge = () => {
+      if (isAdminOrArea) return true;
+      if (isGroupAdmin && viewScope === 'cluster') return true;
+      return false;
+  };
+
+  // Only Admin/Area/GroupAdmin can access settings
+  const canManageSettings = isAdminOrArea || isGroupAdmin;
 
   // The ID currently being edited in the settings modal
   const [selectedConfigContext, setSelectedConfigContext] = useState<string>(isAdminOrArea ? 'area' : (userClusterID || 'area'));
@@ -254,8 +277,6 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
   };
 
   const handleConfigContextChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-      // Save current temp state to map before switching (optional, but good UX if user switches without saving?)
-      // Actually, standard is explicit save. So just switch and load.
       setSelectedConfigContext(e.target.value);
   };
 
@@ -383,15 +404,14 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
           
           const isArea = rawScope === 'area';
           
-          // Visibility Check based on Role
           let isVisible = true;
-          if (isGroupAdmin || isUserOrSchoolAdmin) {
-              if (isArea) {
-                  // Admin/Area scope is generally public/visible
-              } else {
-                  // Cluster scope: Only visible if matches user's cluster
+          
+          if (!isArea) {
+              // Cluster Level check
+              if (isGroupAdmin) {
                   if (effectiveKey !== userClusterID) isVisible = false;
               }
+              // Others see all (Read Only for Guest/User)
           }
 
           if (!isVisible) return;
@@ -412,7 +432,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
           }
       });
       return groups;
-  }, [data.activities, data.teams, data.judges, data.schools, data.clusters, userRole, userClusterID]);
+  }, [data.activities, data.teams, data.judges, data.schools, data.clusters, userRole, userClusterID, isAdminOrArea, user, isGroupAdmin]);
 
   const dashboardStats = useMemo(() => {
       let total = 0;
@@ -430,8 +450,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
           } else {
               Object.entries(group.clusters).forEach(([cId, cData]) => {
                   if (clusterFilter && clusterFilter !== cId) return;
-                  // Additional Filter for Role
-                  if ((isGroupAdmin || isUserOrSchoolAdmin) && cId !== userClusterID) return;
+                  if (isGroupAdmin && cId !== userClusterID) return;
 
                   total += cData.judges.length;
                   conflicts += cData.conflicts;
@@ -442,34 +461,10 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
           }
       });
       return { total, external, conflicts };
-  }, [activityGroups, viewScope, clusterFilter, data.activities, isGroupAdmin, isUserOrSchoolAdmin, userClusterID]);
-
-  const getClusterJudgesForActivity = (activityId: string) => {
-      // Return unique judges by name
-      const candidates = data.judges.filter(j => j.activityId === activityId && j.stageScope === 'cluster');
-      const unique = new Map();
-      candidates.forEach(c => {
-          if (!unique.has(c.judgeName)) unique.set(c.judgeName, c);
-      });
-      return Array.from(unique.values());
-  };
-
-  const isConflictWithArea = (judgeSchool: string, activityId: string) => {
-      if (!judgeSchool || !activityId) return false;
-      const group = activityGroups[activityId];
-      if (!group) return false;
-      
-      const target = judgeSchool.trim().toLowerCase();
-      if (target === 'external' || target === '__external__') return false;
-
-      for (const s of group.areaSchools) {
-          if (s.trim().toLowerCase() === target) return true;
-      }
-      return false;
-  };
+  }, [activityGroups, viewScope, clusterFilter, data.activities, isGroupAdmin, userClusterID]);
 
   // --- Aggregated Directory Logic ---
-  const aggregatedDirectory = useMemo(() => {
+  const aggregatedDirectory = useMemo<{ judge: Judge, activities: { name: string, role: string, scope: string }[] }[]>(() => {
       const map = new Map<string, { judge: Judge, activities: { name: string, role: string, scope: string }[] }>();
 
       data.judges.forEach(judge => {
@@ -483,8 +478,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
               if (jKey.toLowerCase() !== fKey.toLowerCase()) return;
           }
 
-          // Strict Role Filtering
-          if (isGroupAdmin || isUserOrSchoolAdmin) {
+          if (isGroupAdmin) {
               if (scope !== 'area' && judge.clusterKey !== userClusterID) return;
           }
 
@@ -511,7 +505,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
           );
       }
       return results.sort((a, b) => a.judge.judgeName.localeCompare(b.judge.judgeName));
-  }, [data.judges, data.activities, viewScope, clusterFilter, searchTerm, user, isGroupAdmin, isUserOrSchoolAdmin, userClusterID, data.schools]);
+  }, [data.judges, data.activities, viewScope, clusterFilter, searchTerm, user, isAdminOrArea, userClusterID, data.schools, isGroupAdmin]);
 
   const totalDirPages = Math.ceil(aggregatedDirectory.length / dirPerPage);
   const paginatedDirectory = aggregatedDirectory.slice(
@@ -555,7 +549,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
           });
       }
       return acts;
-  }, [data.activities, searchTerm, quickFilter, activityGroups, viewScope, data.schools, clusterFilter]);
+  }, [data.activities, searchTerm, quickFilter, activityGroups, viewScope, clusterFilter]);
 
   const categories = useMemo(() => {
       return Array.from(new Set(filteredActivities.map(a => a.category))).sort();
@@ -572,9 +566,9 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
 
   const toggleAllCategories = () => {
       if (expandedCategories.size > 0) {
-          setExpandedCategories(new Set()); // Collapse All
+          setExpandedCategories(new Set<string>()); // Collapse All
       } else {
-          setExpandedCategories(new Set(categories)); // Expand All
+          setExpandedCategories(new Set<string>(categories)); // Expand All
       }
   };
 
@@ -1184,13 +1178,67 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
       setIsGeneratingPrint(false);
   };
 
-  if (!canManage) {
-      return <div className="text-center py-20 text-gray-500">คุณไม่มีสิทธิ์เข้าถึงหน้านี้</div>;
-  }
+  const isConflictWithArea = (schoolName: string, activityId: string) => {
+      if (!activityId || !schoolName) return false;
+      const group = activityGroups[activityId];
+      if (!group) return false;
+      
+      const judgeSchool = schoolName.trim().toLowerCase();
+      // group.areaSchools is a Set<string>
+      for (let school of Array.from(group.areaSchools)) {
+          if (judgeSchool === school.trim().toLowerCase()) {
+              return true;
+          }
+      }
+      return false;
+  };
 
-  // Candidates Calculation for Import
-  // Note: Removed the variable declaration here because we've already defined 'candidates' and 'filteredCandidates' using useMemo above.
-  // Using those memoized values directly in the JSX.
+  // Helper to render Judge Row
+  function renderJudgeRow(judge: Judge, contextSchools: Set<string>) {
+      const conflict = checkConflict(judge, contextSchools);
+      const canEdit = canModifyJudge(judge);
+
+      return (
+          <div key={judge.id} className={`flex items-center justify-between p-3 rounded-lg border text-sm ${conflict.hasConflict ? 'bg-red-50 border-red-200' : 'bg-white border-gray-200'}`}>
+              <div className="flex items-center">
+                  <img 
+                      src={judge.photoUrl || "https://cdn-icons-png.flaticon.com/512/3135/3135768.png"} 
+                      className="w-10 h-10 rounded-full object-cover border border-gray-200 mr-3 bg-gray-50"
+                      alt="Judge"
+                  />
+                  <div>
+                      <div className="font-bold text-gray-900 flex items-center">
+                          {judge.judgeName}
+                          <span className="ml-2 text-[10px] font-normal text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">{judge.role}</span>
+                      </div>
+                      <div className="text-xs text-gray-500 flex items-center mt-0.5">
+                          {judge.schoolId !== '__EXTERNAL__' ? <School className="w-3 h-3 mr-1" /> : <Briefcase className="w-3 h-3 mr-1 text-orange-400" />}
+                          {judge.schoolName || 'ไม่ระบุสังกัด'}
+                          {/* Show Network/Cluster for context */}
+                          {judge.clusterLabel && (
+                              <span className="ml-2 text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 flex items-center">
+                                  <LayoutGrid className="w-3 h-3 mr-1" /> {judge.clusterLabel}
+                              </span>
+                          )}
+                          {conflict.hasConflict && (
+                              <span className="ml-2 text-red-600 font-bold flex items-center">
+                                  <AlertOctagon className="w-3 h-3 mr-1" /> ตรงกับทีมแข่ง
+                              </span>
+                          )}
+                      </div>
+                  </div>
+              </div>
+              <div className="flex items-center gap-1">
+                  {canEdit && (
+                      <>
+                        <button onClick={() => handleEdit(judge)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"><Edit2 className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => setConfirmDelete({ isOpen: true, id: judge.id })} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 className="w-3.5 h-3.5" /></button>
+                      </>
+                  )}
+              </div>
+          </div>
+      );
+  }
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20 relative">
@@ -1255,12 +1303,14 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                 >
                     <Printer className="w-4 h-4 mr-2" /> พิมพ์ใบรายชื่อ
                 </button>
-                <button 
-                    onClick={() => handleAdd(undefined, clusterFilter)}
-                    className={`flex items-center px-4 py-2 text-white rounded-lg transition-colors shadow-sm font-medium text-sm ${viewScope === 'area' ? 'bg-purple-600 hover:bg-purple-700' : 'bg-blue-600 hover:bg-blue-700'}`}
-                >
-                    <Plus className="w-4 h-4 mr-2" /> เพิ่มกรรมการ ({viewScope === 'area' ? 'เขต' : 'กลุ่ม'})
-                </button>
+                {canAddJudge() && (
+                    <button 
+                        onClick={() => handleAdd(undefined, clusterFilter)}
+                        className={`flex items-center px-4 py-2 text-white rounded-lg transition-colors shadow-sm font-medium text-sm ${viewScope === 'area' ? 'bg-purple-600 hover:bg-purple-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+                    >
+                        <Plus className="w-4 h-4 mr-2" /> เพิ่มกรรมการ ({viewScope === 'area' ? 'เขต' : 'กลุ่ม'})
+                    </button>
+                )}
             </div>
         </div>
 
@@ -1316,13 +1366,15 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                                     <div className="text-xs text-gray-500 mt-1">รูปแบบหนังสือราชการ (ตราครุฑ) พร้อมจำนวนทีม</div>
                                 </div>
                             </button>
-                            <button 
-                                onClick={(e) => { e.stopPropagation(); setShowOfficialSettings(true); }}
-                                className="absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-white border border-gray-200 text-gray-500 hover:text-blue-600 hover:border-blue-300 shadow-sm"
-                                title="ตั้งค่ารูปแบบคำสั่ง"
-                            >
-                                <Settings className="w-4 h-4" />
-                            </button>
+                            {canManageSettings && (
+                                <button 
+                                    onClick={(e) => { e.stopPropagation(); setShowOfficialSettings(true); }}
+                                    className="absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-white border border-gray-200 text-gray-500 hover:text-blue-600 hover:border-blue-300 shadow-sm"
+                                    title="ตั้งค่ารูปแบบคำสั่ง"
+                                >
+                                    <Settings className="w-4 h-4" />
+                                </button>
+                            )}
                         </div>
                     </div>
                     {isGeneratingPrint && (
@@ -1360,7 +1412,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                             >
                                 {isAdminOrArea && <option value="area">ระดับเขตพื้นที่การศึกษา (District)</option>}
                                 <optgroup label="ระดับกลุ่มเครือข่าย (Clusters)">
-                                    {data.clusters.map(c => {
+                                    {data.clusters.map((c: SchoolCluster) => {
                                         if (isGroupAdmin && c.ClusterID !== userClusterID) return null;
                                         return <option key={c.ClusterID} value={c.ClusterID}>{c.ClusterName}</option>;
                                     })}
@@ -1593,7 +1645,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                                             } else {
                                                 Object.entries(group.clusters).forEach(([cId, cData]) => {
                                                     if (!clusterFilter || clusterFilter === cId) {
-                                                        if ((isGroupAdmin || isUserOrSchoolAdmin) && cId !== userClusterID) return;
+                                                        if (isGroupAdmin && cId !== userClusterID) return;
                                                         judgeCount += cData.judges.length;
                                                         conflictCount += cData.conflicts;
                                                         teamCount += cData.teamCount;
@@ -1649,7 +1701,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                                                                     <div className="md:col-span-2">
                                                                         <div className="flex justify-between items-center mb-3">
                                                                             <h4 className="text-xs font-bold text-gray-500 uppercase flex items-center"><UserCheck className="w-3 h-3 mr-1" /> รายชื่อกรรมการ (ระดับเขต)</h4>
-                                                                            {canManage && <button onClick={(e) => { e.stopPropagation(); handleAdd(act.id); }} className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded hover:bg-blue-100 font-medium flex items-center"><Plus className="w-3 h-3 mr-1" /> เพิ่ม</button>}
+                                                                            {canAddJudge() && <button onClick={(e) => { e.stopPropagation(); handleAdd(act.id); }} className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded hover:bg-blue-100 font-medium flex items-center"><Plus className="w-3 h-3 mr-1" /> เพิ่ม</button>}
                                                                         </div>
                                                                         <div className="space-y-2">
                                                                             {sortJudgesByRole(group.areaJudges).map(judge => renderJudgeRow(judge, group.areaSchools))}
@@ -1662,7 +1714,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                                                                 <div className="space-y-3">
                                                                     {data.clusters.map(cluster => {
                                                                         if (clusterFilter && cluster.ClusterID !== clusterFilter) return null;
-                                                                        if ((isGroupAdmin || isUserOrSchoolAdmin) && cluster.ClusterID !== userClusterID) return null;
+                                                                        if (isGroupAdmin && cluster.ClusterID !== userClusterID) return null;
 
                                                                         const cData = group.clusters[cluster.ClusterID];
                                                                         if (!cData || (!clusterFilter && cData.judges.length === 0 && cData.competingSchools.size === 0)) return null;
@@ -1679,7 +1731,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                                                                                         <span className="font-bold text-blue-800 text-xs flex items-center"><LayoutGrid className="w-3.5 h-3.5 mr-2" /> {cluster.ClusterName}</span>
                                                                                         <span className="text-[10px] text-gray-500 bg-white px-1.5 py-0.5 rounded border border-blue-100">{cData.judges.length} คน / {cData.teamCount} ทีม</span>
                                                                                     </div>
-                                                                                    {!isClusterCollapsed && canManage && (
+                                                                                    {!isClusterCollapsed && canAddJudge() && (
                                                                                         <button onClick={(e) => { e.stopPropagation(); handleAdd(act.id, cluster.ClusterID); }} className="text-[10px] bg-white border border-blue-200 text-blue-600 px-2 py-1 rounded hover:bg-blue-100 flex items-center"><Plus className="w-3 h-3 mr-1" /> เพิ่ม</button>
                                                                                     )}
                                                                                 </div>
@@ -1789,7 +1841,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                                         <div className="text-xs text-gray-500 flex items-center"><Phone className="w-3 h-3 mr-1.5"/> {item.judge.phone || '-'}</div>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium align-top">
-                                        {canManage && (
+                                        {canModifyJudge(item.judge) && (
                                             <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                                 <button onClick={() => handleEdit(item.judge)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded" title="แก้ไขข้อมูลหลัก"><Edit2 className="w-4 h-4"/></button>
                                             </div>
@@ -2253,51 +2305,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
         />
     </div>
   );
-
-  // Helper to render Judge Row
-  function renderJudgeRow(judge: Judge, contextSchools: Set<string>) {
-      const conflict = checkConflict(judge, contextSchools);
-      return (
-          <div key={judge.id} className={`flex items-center justify-between p-3 rounded-lg border text-sm ${conflict.hasConflict ? 'bg-red-50 border-red-200' : 'bg-white border-gray-200'}`}>
-              <div className="flex items-center">
-                  <img 
-                      src={judge.photoUrl || "https://cdn-icons-png.flaticon.com/512/3135/3135768.png"} 
-                      className="w-10 h-10 rounded-full object-cover border border-gray-200 mr-3 bg-gray-50"
-                      alt="Judge"
-                  />
-                  <div>
-                      <div className="font-bold text-gray-900 flex items-center">
-                          {judge.judgeName}
-                          <span className="ml-2 text-[10px] font-normal text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">{judge.role}</span>
-                      </div>
-                      <div className="text-xs text-gray-500 flex items-center mt-0.5">
-                          {judge.schoolId !== '__EXTERNAL__' ? <School className="w-3 h-3 mr-1" /> : <Briefcase className="w-3 h-3 mr-1 text-orange-400" />}
-                          {judge.schoolName || 'ไม่ระบุสังกัด'}
-                          {/* Show Network/Cluster for context */}
-                          {judge.clusterLabel && (
-                              <span className="ml-2 text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 flex items-center">
-                                  <LayoutGrid className="w-3 h-3 mr-1" /> {judge.clusterLabel}
-                              </span>
-                          )}
-                          {conflict.hasConflict && (
-                              <span className="ml-2 text-red-600 font-bold flex items-center">
-                                  <AlertOctagon className="w-3 h-3 mr-1" /> ตรงกับทีมแข่ง
-                              </span>
-                          )}
-                      </div>
-                  </div>
-              </div>
-              <div className="flex items-center gap-1">
-                  {canManage && (
-                      <>
-                        <button onClick={() => handleEdit(judge)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"><Edit2 className="w-3.5 h-3.5" /></button>
-                        <button onClick={() => setConfirmDelete({ isOpen: true, id: judge.id })} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 className="w-3.5 h-3.5" /></button>
-                      </>
-                  )}
-              </div>
-          </div>
-      );
-  }
 };
 
 export default JudgesView;
+
