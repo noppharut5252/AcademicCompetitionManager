@@ -2301,4 +2301,3 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
 };
 
 export default JudgesView;
-
