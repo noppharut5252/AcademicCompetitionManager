@@ -1,10 +1,10 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { AppData, Judge, User, Team } from '../types';
-import { Search, Plus, Edit2, Trash2, Gavel, Mail, Phone, School, MapPin, Loader2, Save, X, LayoutGrid, AlertTriangle, CheckCircle, Users, Briefcase, ChevronDown, ChevronUp, AlertOctagon, UserCheck, Camera, Copy, Trophy, Filter, Layers, ChevronRight, Hash, Eye, EyeOff, ChevronsUpDown, ChevronLeft, ListChecks, ArrowRight, Import, AlertCircle, Printer, FileText, Files, Settings, ScrollText } from 'lucide-react';
+import { AppData, Judge, User, Team, JudgeConfig } from '../types';
+import { Search, Plus, Edit2, Trash2, Gavel, Mail, Phone, School, MapPin, Loader2, Save, X, LayoutGrid, AlertTriangle, CheckCircle, Users, Briefcase, ChevronDown, ChevronUp, AlertOctagon, UserCheck, Camera, Copy, Trophy, Filter, Layers, ChevronRight, Hash, Eye, EyeOff, ChevronsUpDown, ChevronLeft, ListChecks, ArrowRight, Import, AlertCircle, Printer, FileText, Files, Settings, ScrollText, ArrowUpFromLine, ArrowDownToLine, MoveHorizontal } from 'lucide-react';
 import SearchableSelect from './SearchableSelect';
 import ConfirmationModal from './ConfirmationModal';
-import { saveJudge, deleteJudge, uploadImage } from '../services/api';
+import { saveJudge, deleteJudge, uploadImage, getJudgeConfig, saveJudgeConfig } from '../services/api';
 import { resizeImage } from '../services/utils';
 import QRCode from 'qrcode';
 
@@ -102,31 +102,46 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isLoadingCandidates, setIsLoadingCandidates] = useState(false);
+  const [isSavingConfig, setIsSavingConfig] = useState(false);
   
   // Print Modal State
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [isGeneratingPrint, setIsGeneratingPrint] = useState(false);
   const [showOfficialSettings, setShowOfficialSettings] = useState(false);
-  const [officialConfig, setOfficialConfig] = useState({
+  const [officialConfig, setOfficialConfig] = useState<JudgeConfig>({
       officeName: 'ศูนย์เครือข่ายพัฒนาคุณภาพการศึกษา...',
       commandNumber: '1/2567',
       subject: 'แต่งตั้งคณะกรรมการตัดสินการแข่งขันงานศิลปหัตถกรรมนักเรียน ครั้งที่ 71',
       preamble: 'ด้วยศูนย์เครือข่ายพัฒนาคุณภาพการศึกษา... ได้กำหนดจัดงานศิลปหัตถกรรมนักเรียน เพื่อคัดเลือกตัวแทนเข้าร่วมการแข่งขันในระดับเขตพื้นที่การศึกษา เพื่อให้การดำเนินงานเป็นไปด้วยความเรียบร้อยและบรรลุตามวัตถุประสงค์ จึงแต่งตั้งคณะกรรมการตัดสินการแข่งขัน ดังรายชื่อต่อไปนี้',
       signerName: 'นายสมชาย ใจดี',
       signerPosition: 'ประธานศูนย์เครือข่าย...',
-      dateText: `สั่ง ณ วันที่ ${new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}`
+      dateText: `สั่ง ณ วันที่ ${new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}`,
+      margins: { top: 20, bottom: 20, left: 20, right: 20 }
   });
 
-  // Load official config from local storage
+  // Load official config from API
   useEffect(() => {
-      const saved = localStorage.getItem('judge_official_config');
-      if (saved) {
+      const loadConfig = async () => {
           try {
-              setOfficialConfig(JSON.parse(saved));
+              const saved = await getJudgeConfig();
+              if (saved) {
+                  // Merge with defaults to ensure margins exist if old config didn't have them
+                  setOfficialConfig(prev => ({
+                      ...prev,
+                      ...saved,
+                      margins: { 
+                          top: saved.margins?.top ?? 20,
+                          bottom: saved.margins?.bottom ?? 20,
+                          left: saved.margins?.left ?? 20,
+                          right: saved.margins?.right ?? 20
+                      }
+                  }));
+              }
           } catch (e) {
-              console.error("Failed to parse saved config");
+              console.error("Failed to load config");
           }
-      }
+      };
+      loadConfig();
   }, []);
 
   // Toast State
@@ -175,10 +190,21 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
       setToast({ message, type, isVisible: true });
   };
 
-  const handleSaveOfficialConfig = () => {
-      localStorage.setItem('judge_official_config', JSON.stringify(officialConfig));
-      setShowOfficialSettings(false);
-      showToast('บันทึกการตั้งค่าเรียบร้อย', 'success');
+  const handleSaveOfficialConfig = async () => {
+      setIsSavingConfig(true);
+      try {
+          const success = await saveJudgeConfig(officialConfig);
+          if (success) {
+              setShowOfficialSettings(false);
+              showToast('บันทึกการตั้งค่าเรียบร้อย', 'success');
+          } else {
+              showToast('บันทึกไม่สำเร็จ', 'error');
+          }
+      } catch (e) {
+          showToast('เกิดข้อผิดพลาดในการบันทึก', 'error');
+      } finally {
+          setIsSavingConfig(false);
+      }
   };
 
   // --- Derived Data & Logic ---
@@ -699,6 +725,9 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
           console.error("QR Error", e);
       }
 
+      // Margins
+      const margins = officialConfig.margins || { top: 20, bottom: 20, left: 20, right: 20 };
+
       // 1. Organize data: Category -> Activity -> Judges (Sorted)
       const categoryList = Array.from(new Set(data.activities.map(a => a.category))).sort();
       let htmlBodyContent = '';
@@ -722,9 +751,6 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                           judges = group.clusters[clusterFilter]?.judges || [];
                           teamCount = group.clusters[clusterFilter]?.teamCount || 0;
                       } else {
-                          // No cluster filter in cluster view -> likely printing for all clusters?
-                          // Logic for 'official' usually implies specific scope. 
-                          // If no filter, aggregate all cluster judges
                           Object.values(group.clusters).forEach(c => {
                               judges = [...judges, ...c.judges];
                               teamCount += c.teamCount;
@@ -787,7 +813,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
           `;
 
       } else if (mode === 'continuous') {
-          // --- Continuous Mode (Original Logic) ---
+          // --- Continuous Mode ---
           htmlBodyContent += `
             <h1 class="header-main">คำสั่งแต่งตั้งคณะกรรมการตัดสินการแข่งขัน</h1>
             <h2 class="header-sub">${scopeTitle}</h2>
@@ -801,11 +827,22 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
 
               activities.forEach(act => {
                   let judges = [];
+                  let teamCount = 0;
+                  
+                  const group = activityGroups[act.id];
                   if (viewScope === 'area') {
-                      judges = data.judges.filter(j => j.activityId === act.id && j.stageScope === 'area');
+                      judges = group.areaJudges;
+                      teamCount = group.areaTeamCount;
                   } else {
-                      judges = data.judges.filter(j => j.activityId === act.id && j.stageScope !== 'area');
-                      if (clusterFilter) judges = judges.filter(j => j.clusterKey === clusterFilter);
+                      if (clusterFilter) {
+                          judges = group.clusters[clusterFilter]?.judges || [];
+                          teamCount = group.clusters[clusterFilter]?.teamCount || 0;
+                      } else {
+                          Object.values(group.clusters).forEach(c => {
+                              judges = [...judges, ...c.judges];
+                              teamCount += c.teamCount;
+                          });
+                      }
                   }
 
                   if (judges.length > 0) {
@@ -813,7 +850,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                       const sortedJudges = sortJudgesByRole(judges);
                       catContent += `
                         <tr class="activity-row">
-                            <td colspan="5">กิจกรรม: ${act.name}</td>
+                            <td colspan="5">กิจกรรม: ${act.name} <span style="font-weight:normal; font-size: 0.9em; margin-left: 5px;">(จำนวน ${teamCount} ทีม)</span></td>
                         </tr>
                         ${sortedJudges.map((j, idx) => `
                             <tr>
@@ -849,7 +886,6 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
               }
           });
           
-          // Append QR Footer for continuous mode
           htmlBodyContent += `
             <div class="footer-qr">
                 <img src="${qrCodeBase64}" />
@@ -863,17 +899,27 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
           categoryList.forEach(cat => {
               const activities = data.activities.filter(a => a.category === cat);
               activities.forEach(act => {
-                  let judges = [];
+                  let judges: Judge[] = [];
+                  let teamCount = 0;
+
+                  const group = activityGroups[act.id];
                   if (viewScope === 'area') {
-                      judges = data.judges.filter(j => j.activityId === act.id && j.stageScope === 'area');
+                      judges = group.areaJudges;
+                      teamCount = group.areaTeamCount;
                   } else {
-                      judges = data.judges.filter(j => j.activityId === act.id && j.stageScope !== 'area');
-                      if (clusterFilter) judges = judges.filter(j => j.clusterKey === clusterFilter);
+                      if (clusterFilter) {
+                          judges = group.clusters[clusterFilter]?.judges || [];
+                          teamCount = group.clusters[clusterFilter]?.teamCount || 0;
+                      } else {
+                          Object.values(group.clusters).forEach(c => {
+                              judges = [...judges, ...c.judges];
+                              teamCount += c.teamCount;
+                          });
+                      }
                   }
 
                   if (judges.length > 0) {
                       const sortedJudges = sortJudgesByRole(judges);
-                      // Page Break logic: Add break before every page except the first one
                       const breakClass = pageCount > 0 ? 'page-break' : '';
                       
                       htmlBodyContent += `
@@ -885,6 +931,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                             <div class="single-activity-info">
                                 <div><strong>หมวดหมู่:</strong> ${cat}</div>
                                 <div><strong>กิจกรรม:</strong> ${act.name}</div>
+                                <div><strong>จำนวนทีมแข่งขัน:</strong> ${teamCount} ทีม</div>
                             </div>
 
                             <table>
@@ -928,7 +975,8 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
             <title>รายชื่อกรรมการตัดสิน - ${scopeTitle}</title>
             <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600&display=swap" rel="stylesheet">
             <style>
-                body { font-family: 'Sarabun', sans-serif; padding: 20px; font-size: 14px; color: #000; }
+                @page { margin-top: ${margins.top}mm; margin-bottom: ${margins.bottom}mm; margin-left: ${margins.left}mm; margin-right: ${margins.right}mm; }
+                body { font-family: 'Sarabun', sans-serif; padding: 0; font-size: 14px; color: #000; }
                 
                 /* Standard Table Styles */
                 table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
@@ -1157,6 +1205,51 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                         </button>
                     </div>
                     <div className="p-6 overflow-y-auto space-y-4">
+                        {/* Page Margins Settings */}
+                        <div className="bg-white p-3 rounded border border-gray-200 shadow-sm">
+                            <h4 className="text-xs font-bold text-gray-500 mb-2 uppercase flex items-center">
+                                <MoveHorizontal className="w-3.5 h-3.5 mr-1"/> ตั้งค่าขอบกระดาษ (Margins) - หน่วย mm
+                            </h4>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-[10px] text-gray-500 mb-1 flex items-center"><ArrowDownToLine className="w-3 h-3 mr-1"/> ขอบบน (Top)</label>
+                                    <input 
+                                        type="number" 
+                                        className="w-full border rounded p-1.5 text-sm" 
+                                        value={officialConfig.margins?.top ?? 20} 
+                                        onChange={e => setOfficialConfig({...officialConfig, margins: { ...officialConfig.margins!, top: parseInt(e.target.value) || 0 } })} 
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] text-gray-500 mb-1 flex items-center"><ArrowUpFromLine className="w-3 h-3 mr-1"/> ขอบล่าง (Bottom)</label>
+                                    <input 
+                                        type="number" 
+                                        className="w-full border rounded p-1.5 text-sm" 
+                                        value={officialConfig.margins?.bottom ?? 20} 
+                                        onChange={e => setOfficialConfig({...officialConfig, margins: { ...officialConfig.margins!, bottom: parseInt(e.target.value) || 0 } })} 
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] text-gray-500 mb-1">ขอบซ้าย (Left)</label>
+                                    <input 
+                                        type="number" 
+                                        className="w-full border rounded p-1.5 text-sm" 
+                                        value={officialConfig.margins?.left ?? 20} 
+                                        onChange={e => setOfficialConfig({...officialConfig, margins: { ...officialConfig.margins!, left: parseInt(e.target.value) || 0 } })} 
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] text-gray-500 mb-1">ขอบขวา (Right)</label>
+                                    <input 
+                                        type="number" 
+                                        className="w-full border rounded p-1.5 text-sm" 
+                                        value={officialConfig.margins?.right ?? 20} 
+                                        onChange={e => setOfficialConfig({...officialConfig, margins: { ...officialConfig.margins!, right: parseInt(e.target.value) || 0 } })} 
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
                         <div>
                             <label className="block text-xs font-bold text-gray-700 mb-1">หัวข้อคำสั่ง (Office Name)</label>
                             <input className="w-full border rounded p-2 text-sm" value={officialConfig.officeName} onChange={e => setOfficialConfig({...officialConfig, officeName: e.target.value})} placeholder="คำสั่ง ศูนย์เครือข่าย..." />
@@ -1189,7 +1282,14 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                     </div>
                     <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-2">
                         <button onClick={() => setShowOfficialSettings(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded text-sm">ยกเลิก</button>
-                        <button onClick={handleSaveOfficialConfig} className="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 font-medium">บันทึกการตั้งค่า</button>
+                        <button 
+                            onClick={handleSaveOfficialConfig} 
+                            disabled={isSavingConfig}
+                            className="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 font-medium flex items-center"
+                        >
+                            {isSavingConfig && <Loader2 className="w-3 h-3 mr-2 animate-spin" />}
+                            บันทึกการตั้งค่า
+                        </button>
                     </div>
                 </div>
             </div>
@@ -1956,6 +2056,51 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                         </button>
                     </div>
                     <div className="p-6 overflow-y-auto space-y-4">
+                        {/* Page Margins Settings */}
+                        <div className="bg-white p-3 rounded border border-gray-200 shadow-sm">
+                            <h4 className="text-xs font-bold text-gray-500 mb-2 uppercase flex items-center">
+                                <MoveHorizontal className="w-3.5 h-3.5 mr-1"/> ตั้งค่าขอบกระดาษ (Margins) - หน่วย mm
+                            </h4>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-[10px] text-gray-500 mb-1 flex items-center"><ArrowDownToLine className="w-3 h-3 mr-1"/> ขอบบน (Top)</label>
+                                    <input 
+                                        type="number" 
+                                        className="w-full border rounded p-1.5 text-sm" 
+                                        value={officialConfig.margins?.top ?? 20} 
+                                        onChange={e => setOfficialConfig({...officialConfig, margins: { ...officialConfig.margins!, top: parseInt(e.target.value) || 0 } })} 
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] text-gray-500 mb-1 flex items-center"><ArrowUpFromLine className="w-3 h-3 mr-1"/> ขอบล่าง (Bottom)</label>
+                                    <input 
+                                        type="number" 
+                                        className="w-full border rounded p-1.5 text-sm" 
+                                        value={officialConfig.margins?.bottom ?? 20} 
+                                        onChange={e => setOfficialConfig({...officialConfig, margins: { ...officialConfig.margins!, bottom: parseInt(e.target.value) || 0 } })} 
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] text-gray-500 mb-1">ขอบซ้าย (Left)</label>
+                                    <input 
+                                        type="number" 
+                                        className="w-full border rounded p-1.5 text-sm" 
+                                        value={officialConfig.margins?.left ?? 20} 
+                                        onChange={e => setOfficialConfig({...officialConfig, margins: { ...officialConfig.margins!, left: parseInt(e.target.value) || 0 } })} 
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] text-gray-500 mb-1">ขอบขวา (Right)</label>
+                                    <input 
+                                        type="number" 
+                                        className="w-full border rounded p-1.5 text-sm" 
+                                        value={officialConfig.margins?.right ?? 20} 
+                                        onChange={e => setOfficialConfig({...officialConfig, margins: { ...officialConfig.margins!, right: parseInt(e.target.value) || 0 } })} 
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
                         <div>
                             <label className="block text-xs font-bold text-gray-700 mb-1">หัวข้อคำสั่ง (Office Name)</label>
                             <input className="w-full border rounded p-2 text-sm" value={officialConfig.officeName} onChange={e => setOfficialConfig({...officialConfig, officeName: e.target.value})} placeholder="คำสั่ง ศูนย์เครือข่าย..." />
@@ -1988,7 +2133,14 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
                     </div>
                     <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-2">
                         <button onClick={() => setShowOfficialSettings(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded text-sm">ยกเลิก</button>
-                        <button onClick={handleSaveOfficialConfig} className="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 font-medium">บันทึกการตั้งค่า</button>
+                        <button 
+                            onClick={handleSaveOfficialConfig} 
+                            disabled={isSavingConfig}
+                            className="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 font-medium flex items-center"
+                        >
+                            {isSavingConfig && <Loader2 className="w-3 h-3 mr-2 animate-spin" />}
+                            บันทึกการตั้งค่า
+                        </button>
                     </div>
                 </div>
             </div>
