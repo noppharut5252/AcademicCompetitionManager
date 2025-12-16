@@ -1,11 +1,12 @@
 
 import React, { useState, useMemo } from 'react';
-import { AppData, Announcement, User, AreaStageInfo } from '../types';
-import { Users, School, Trophy, Megaphone, Plus, Book, Calendar, ChevronRight, Gavel, MapPin, Award, FileText, Smartphone, Loader2, PieChart, CheckCircle, Clock, Star, Medal, TrendingUp } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart as RePieChart, Pie, Legend } from 'recharts';
+import { AppData, Announcement, User, AreaStageInfo, Team } from '../types';
+import { Users, School, Trophy, Megaphone, Plus, Book, Calendar, ChevronRight, FileText, Loader2, Star, Medal, TrendingUp, Activity, Timer, ArrowUpRight, Zap, Target, CheckCircle, PieChart as PieIcon, List, X, BarChart3 } from 'lucide-react';
+import { ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import StatCard from './StatCard';
 import { useNavigate } from 'react-router-dom';
 import { addAnnouncement } from '../services/api';
+import { formatDeadline } from '../services/utils';
 
 interface DashboardProps {
   data: AppData;
@@ -13,11 +14,17 @@ interface DashboardProps {
 }
 
 const COLORS = ['#10B981', '#F59E0B', '#EF4444', '#6366F1'];
-const MEDAL_COLORS = { 'Gold': '#FFD700', 'Silver': '#C0C0C0', 'Bronze': '#CD7F32', 'Participant': '#3B82F6' };
+const MEDAL_COLORS = { 'Gold': '#FFD700', 'Silver': '#C0C0C0', 'Bronze': '#CD7F32', 'Participant': '#94a3b8' };
 
 const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
   const navigate = useNavigate();
   const [viewLevel, setViewLevel] = useState<'cluster' | 'area'>('cluster');
+  
+  // Modal States
+  const [showUnscoredModal, setShowUnscoredModal] = useState(false);
+  const [showRankingModal, setShowRankingModal] = useState(false);
+
+  // Admin News State
   const [showAddNews, setShowAddNews] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newContent, setNewContent] = useState('');
@@ -25,124 +32,173 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
   const [newLink, setNewLink] = useState('');
   const [isAddingNews, setIsAddingNews] = useState(false);
 
-  // Helper to check Area Status
-  const isAreaTeam = (team: any) => {
-      // Logic: Explicit StageStatus OR Flag (Representative)
-      const isExplicitArea = team.stageStatus === 'Area';
-      const isRep = String(team.flag).trim().toUpperCase() === 'TRUE';
-      return isExplicitArea || isRep;
-  };
-
+  // --- Helpers ---
   const getAreaInfo = (team: any): AreaStageInfo | null => {
       try { return JSON.parse(team.stageInfo); } catch { return null; }
   };
 
-  // Filter teams based on view level
-  const filteredTeams = useMemo(() => {
-    if (viewLevel === 'area') {
-        return data.teams.filter(t => isAreaTeam(t));
-    }
-    return data.teams;
+  const calculateMedalFromScore = (score: number) => {
+      if (score >= 80) return 'Gold';
+      if (score >= 70) return 'Silver';
+      if (score >= 60) return 'Bronze';
+      return 'Participant';
+  };
+
+  const isQualified = (team: Team) => {
+      return String(team.rank) === '1' && String(team.flag).toUpperCase() === 'TRUE';
+  };
+
+  // --- Data Filtering & Processing ---
+
+  // 1. Filter Teams by View Level
+  const scopeTeams = useMemo(() => {
+      if (viewLevel === 'area') {
+          return data.teams.filter(t => t.stageStatus === 'Area' || String(t.flag).toUpperCase() === 'TRUE');
+      }
+      return data.teams;
   }, [data.teams, viewLevel]);
 
-  // Dynamic Chart Data based on View Level
-  const chartData = useMemo(() => {
-      if (viewLevel === 'area') {
-          // AREA VIEW: Show Medal Distribution
-          const counts: Record<string, number> = { 'Gold': 0, 'Silver': 0, 'Bronze': 0, 'Participant': 0 };
-          filteredTeams.forEach(team => {
-              const info = getAreaInfo(team);
-              // Priority: Manual Medal -> Score Calculation -> Participant
-              let medal = info?.medal || team.medalOverride;
-              if (!medal) {
-                  const score = info?.score || 0;
-                  if (score >= 80) medal = 'Gold';
-                  else if (score >= 70) medal = 'Silver';
-                  else if (score >= 60) medal = 'Bronze';
-                  else medal = 'Participant';
-              }
-              // Normalize medal string
-              if (medal.includes('Gold')) counts['Gold']++;
-              else if (medal.includes('Silver')) counts['Silver']++;
-              else if (medal.includes('Bronze')) counts['Bronze']++;
-              else counts['Participant']++;
-          });
-          return Object.keys(counts).map(key => ({ name: key, value: counts[key] }));
-      } else {
-          // CLUSTER VIEW: Show Registration Status
-          const counts: Record<string, number> = {};
-          filteredTeams.forEach(team => {
-            const rawStatus = String(team.status);
-            let statusLabel = rawStatus;
-            
-            if (rawStatus === '1' || rawStatus === 'Approved') statusLabel = 'อนุมัติ';
-            else if (rawStatus === '0' || rawStatus === 'Pending') statusLabel = 'รอตรวจ';
-            else if (rawStatus === '2' || rawStatus === '-1' || rawStatus === 'Rejected') statusLabel = 'แก้ไข';
-            
-            counts[statusLabel] = (counts[statusLabel] || 0) + 1;
-          });
-          return Object.keys(counts).map(key => ({ name: key, value: counts[key] }));
-      }
-  }, [filteredTeams, viewLevel]);
+  // 2. Statistics Overview & Charts
+  const { stats, medalChartData, categoryChartData } = useMemo(() => {
+      const totalTeams = scopeTeams.length;
+      const schools = new Set(scopeTeams.map(t => t.schoolId)).size;
+      const activities = new Set(scopeTeams.map(t => t.activityId)).size;
+      
+      let scoredCount = 0;
+      let goldCount = 0;
+      const medalCounts: Record<string, number> = { 'Gold': 0, 'Silver': 0, 'Bronze': 0, 'Participant': 0 };
+      const catCounts: Record<string, number> = {};
 
-  // Unique schools in the filtered list
-  const uniqueSchoolCount = useMemo(() => {
-      return new Set(filteredTeams.map(t => t.schoolId)).size;
-  }, [filteredTeams]);
+      scopeTeams.forEach(t => {
+          // Score & Medal Logic
+          let score = 0;
+          let medal = '';
+          
+          if (viewLevel === 'area') {
+              const info = getAreaInfo(t);
+              score = info?.score || 0;
+              medal = info?.medal || calculateMedalFromScore(score);
+          } else {
+              score = t.score;
+              medal = t.medalOverride || calculateMedalFromScore(score);
+          }
 
-   // Unique activities in the filtered list
-   const uniqueActivityCount = useMemo(() => {
-    return new Set(filteredTeams.map(t => t.activityId)).size;
-   }, [filteredTeams]);
+          if (score > 0) {
+              scoredCount++;
+              // Count medals only for scored teams
+              if (medal.includes('Gold')) medalCounts['Gold']++;
+              else if (medal.includes('Silver')) medalCounts['Silver']++;
+              else if (medal.includes('Bronze')) medalCounts['Bronze']++;
+              else medalCounts['Participant']++;
+          }
+          if (score >= 80) goldCount++;
 
-   // --- New Analytics: Scoring Progress & Top Schools ---
-   const scoringProgress = useMemo(() => {
-       const total = filteredTeams.length;
-       const scored = filteredTeams.filter(t => {
-           if (viewLevel === 'area') {
-               const info = getAreaInfo(t);
-               return (info?.score || 0) > 0;
-           }
-           return t.score > 0;
-       }).length;
-       const percentage = total > 0 ? Math.round((scored / total) * 100) : 0;
-       return { total, scored, percentage };
-   }, [filteredTeams, viewLevel]);
+          // Category Logic
+          const activity = data.activities.find(a => a.id === t.activityId);
+          if (activity) {
+              catCounts[activity.category] = (catCounts[activity.category] || 0) + 1;
+          }
+      });
 
-   const topSchools = useMemo(() => {
-       const stats: Record<string, { name: string, gold: number, totalScore: number }> = {};
-       
-       filteredTeams.forEach(t => {
-           // Normalize School Name (Handle ID vs Name)
-           const schoolObj = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
-           const sName = schoolObj?.SchoolName || t.schoolId;
-           
-           if (!stats[sName]) stats[sName] = { name: sName, gold: 0, totalScore: 0 };
-           
-           let score = 0;
-           let medal = '';
+      const progress = totalTeams > 0 ? Math.round((scoredCount / totalTeams) * 100) : 0;
 
-           if (viewLevel === 'area') {
-               const info = getAreaInfo(t);
-               score = info?.score || 0;
-               medal = info?.medal || t.medalOverride;
-               if (!medal && score >= 80) medal = 'Gold';
-           } else {
-               score = t.score;
-               medal = t.medalOverride;
-               if (!medal && score >= 80) medal = 'Gold';
-           }
+      // Format for Recharts
+      const medalChart = Object.keys(medalCounts).map(key => ({ name: key, value: medalCounts[key] }));
+      const categoryChart = Object.keys(catCounts)
+          .map(key => ({ name: key, value: catCounts[key] }))
+          .sort((a, b) => b.value - a.value)
+          .slice(0, 5); // Top 5 Categories
 
-           if (score > 0) stats[sName].totalScore += score;
-           if (medal?.includes('Gold')) stats[sName].gold += 1;
-       });
+      return { 
+          stats: { totalTeams, schools, activities, progress, goldCount, scoredCount },
+          medalChartData: medalChart,
+          categoryChartData: categoryChart
+      };
+  }, [scopeTeams, viewLevel, data.activities]);
 
-       return Object.values(stats)
-           .sort((a, b) => b.gold - a.gold || b.totalScore - a.totalScore)
-           .slice(0, 5); // Top 5
-   }, [filteredTeams, viewLevel, data.schools]);
+  // 3. Leaderboards Logic
+  const leaderboards = useMemo(() => {
+      const schoolStats: Record<string, { 
+          name: string, 
+          totalEntries: number, 
+          qualifiedCount: number, 
+          totalScore: number, 
+          goldCount: number 
+      }> = {};
 
+      scopeTeams.forEach(t => {
+          const schoolObj = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
+          const sName = schoolObj?.SchoolName || t.schoolId;
 
+          if (!schoolStats[sName]) {
+              schoolStats[sName] = { name: sName, totalEntries: 0, qualifiedCount: 0, totalScore: 0, goldCount: 0 };
+          }
+
+          schoolStats[sName].totalEntries++;
+
+          if (isQualified(t)) schoolStats[sName].qualifiedCount++;
+
+          let score = 0;
+          if (viewLevel === 'area') {
+              const info = getAreaInfo(t);
+              score = info?.score || 0;
+          } else {
+              score = t.score;
+          }
+
+          if (score > 0) schoolStats[sName].totalScore += score;
+          if (score >= 80) schoolStats[sName].goldCount++;
+      });
+
+      const schoolsArray = Object.values(schoolStats);
+
+      // Full Lists for Modals
+      const fullSuccessRate = [...schoolsArray]
+          .map(s => ({ ...s, rate: s.totalEntries > 0 ? (s.qualifiedCount / s.totalEntries) * 100 : 0 }))
+          .sort((a, b) => b.rate - a.rate || b.qualifiedCount - a.qualifiedCount);
+
+      const topBySuccessRate = fullSuccessRate.slice(0, 5);
+
+      const topByScore = [...schoolsArray]
+          .sort((a, b) => b.totalScore - a.totalScore)
+          .slice(0, 5);
+
+      const topByGold = [...schoolsArray]
+          .sort((a, b) => b.goldCount - a.goldCount || b.totalScore - a.totalScore)
+          .slice(0, 5);
+
+      return { topBySuccessRate, topByScore, topByGold, fullSuccessRate };
+  }, [scopeTeams, viewLevel, data.schools]);
+
+  // 4. Unscored Teams Logic
+  const unscoredTeams = useMemo(() => {
+      return scopeTeams.filter(t => {
+          if (viewLevel === 'area') {
+              const info = getAreaInfo(t);
+              return !info || !info.score || info.score === 0;
+          }
+          return t.score === 0;
+      });
+  }, [scopeTeams, viewLevel]);
+
+  // 5. Latest Results Feed
+  const latestResults = useMemo(() => {
+      const scored = scopeTeams.filter(t => {
+          if (viewLevel === 'area') {
+              const info = getAreaInfo(t);
+              return (info?.score || 0) > 0;
+          }
+          return t.score > 0;
+      });
+
+      return scored.sort((a, b) => {
+          const dateA = a.lastEditedAt ? new Date(a.lastEditedAt).getTime() : 0;
+          const dateB = b.lastEditedAt ? new Date(b.lastEditedAt).getTime() : 0;
+          return dateB - dateA;
+      }).slice(0, 6);
+  }, [scopeTeams, viewLevel]);
+
+  // Admin Actions
   const handleAddNews = async (e: React.FormEvent) => {
       e.preventDefault();
       setIsAddingNews(true);
@@ -151,304 +207,465 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
           if (success) {
               alert('เพิ่มข้อมูลสำเร็จ! (กรุณารีเฟรชหน้าเว็บเพื่อดูข้อมูลล่าสุด)');
               setShowAddNews(false);
-              setNewTitle('');
-              setNewContent('');
-              setNewLink('');
-          } else {
-              alert('เกิดข้อผิดพลาดในการบันทึก');
-          }
-      } catch (err) {
-          alert('เกิดข้อผิดพลาดในการเชื่อมต่อ');
-      } finally {
-          setIsAddingNews(false);
-      }
+              setNewTitle(''); setNewContent(''); setNewLink('');
+          } else { alert('เกิดข้อผิดพลาดในการบันทึก'); }
+      } catch (err) { alert('เชื่อมต่อไม่ได้'); } finally { setIsAddingNews(false); }
   };
 
-  const isAdmin = user?.level === 'admin';
+  const isAdmin = user?.level === 'admin' || user?.level === 'area';
   const newsList = (data.announcements || []).filter(a => a.type !== 'manual');
   const manualList = (data.announcements || []).filter(a => a.type === 'manual');
 
-  const QuickMenuItem = ({ icon: Icon, label, to, color }: { icon: any, label: string, to: string, color: string }) => (
-      <div 
-        onClick={() => navigate(to)}
-        className="flex flex-col items-center justify-center p-4 bg-white rounded-xl shadow-sm border border-gray-100 active:scale-95 transition-transform cursor-pointer"
-      >
-          <div className={`p-3 rounded-full ${color} text-white mb-2 shadow-md`}>
-              <Icon className="w-6 h-6" />
-          </div>
-          <span className="text-xs font-bold text-gray-700 text-center leading-tight">{label}</span>
-      </div>
-  );
-
   return (
-    <div className="space-y-6 animate-in fade-in duration-500 pb-10">
+    <div className="space-y-6 animate-in fade-in duration-500 pb-20 relative">
       
-      {/* Hero / Header Section */}
-      <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-3xl p-8 text-white shadow-xl flex flex-col md:flex-row justify-between items-center gap-6 relative overflow-hidden">
+      {/* Header Section */}
+      <div className={`rounded-3xl p-6 text-white shadow-xl flex flex-col md:flex-row justify-between items-center gap-6 relative overflow-hidden ${viewLevel === 'area' ? 'bg-gradient-to-r from-purple-800 to-indigo-900' : 'bg-gradient-to-r from-blue-600 to-indigo-600'}`}>
         <div className="absolute top-0 right-0 p-4 opacity-10">
-            <Trophy className="w-40 h-40" />
+            {viewLevel === 'area' ? <Trophy className="w-40 h-40" /> : <School className="w-40 h-40" />}
         </div>
         <div className="relative z-10 text-center md:text-left">
-            <h1 className="text-2xl md:text-3xl font-bold mb-2">ยินดีต้อนรับสู่ CompManager</h1>
-            <p className="text-blue-100 opacity-90 text-sm md:text-base">ระบบบริหารจัดการการแข่งขันวิชาการแบบครบวงจร</p>
-            {user && !user.isGuest && (
-                <div className="mt-4 inline-flex items-center bg-white/20 backdrop-blur-sm px-4 py-1.5 rounded-full text-xs font-medium text-white border border-white/30">
-                    <Users className="w-3 h-3 mr-2" /> สวัสดี, {user.displayName || user.name}
-                </div>
-            )}
+            <div className="inline-flex items-center bg-white/20 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold text-white mb-2 border border-white/30">
+                {viewLevel === 'area' ? '🏆 District Level' : '🏫 Cluster Level'}
+            </div>
+            <h1 className="text-2xl md:text-3xl font-bold mb-1">
+                {viewLevel === 'area' ? 'สรุปผลระดับเขตพื้นที่' : 'สรุปผลระดับกลุ่มเครือข่าย'}
+            </h1>
+            <p className="text-white/80 text-sm">
+                {viewLevel === 'area' ? 'ติดตามตารางสรุปเหรียญและคะแนนรวม' : 'ติดตามสถานะการคัดเลือกตัวแทนเข้าสู่ระดับเขต'}
+            </p>
         </div>
         
-        {/* Level Selector */}
-        <div className="bg-white/10 p-1.5 rounded-xl backdrop-blur-md flex relative z-10">
-            <button
-                onClick={() => setViewLevel('cluster')}
-                className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${viewLevel === 'cluster' ? 'bg-white text-blue-600 shadow' : 'text-white/80 hover:bg-white/10'}`}
-            >
-                ระดับกลุ่มฯ
+        {/* Level Toggle */}
+        <div className="bg-white/10 p-1.5 rounded-xl backdrop-blur-md flex relative z-10 border border-white/20">
+            <button onClick={() => setViewLevel('cluster')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center ${viewLevel === 'cluster' ? 'bg-white text-blue-600 shadow' : 'text-white/80 hover:bg-white/10'}`}>
+                <School className="w-4 h-4 mr-2"/> ระดับกลุ่มฯ
             </button>
-            <button
-                onClick={() => setViewLevel('area')}
-                className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${viewLevel === 'area' ? 'bg-white text-purple-600 shadow' : 'text-white/80 hover:bg-white/10'}`}
-            >
-                ระดับเขตฯ
+            <button onClick={() => setViewLevel('area')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center ${viewLevel === 'area' ? 'bg-white text-purple-600 shadow' : 'text-white/80 hover:bg-white/10'}`}>
+                <Trophy className="w-4 h-4 mr-2"/> ระดับเขตฯ
             </button>
         </div>
       </div>
 
-      {/* Mobile Quick Menu (Only on small screens) */}
-      <div className="grid grid-cols-4 gap-3 md:hidden">
-          <QuickMenuItem icon={Users} label="ทีมแข่งขัน" to="/teams" color="bg-blue-500" />
-          <QuickMenuItem icon={Award} label="ผลรางวัล" to="/results" color="bg-yellow-500" />
-          <QuickMenuItem icon={MapPin} label="สนามแข่ง" to="/venues" color="bg-emerald-500" />
-          <QuickMenuItem icon={Gavel} label="กรรมการ" to="/judges" color="bg-purple-500" />
-          <QuickMenuItem icon={FileText} label="เกียรติบัตร" to="/certificates" color="bg-indigo-500" />
-          <QuickMenuItem icon={Smartphone} label="Digital ID" to="/idcards" color="bg-pink-500" />
-          <QuickMenuItem icon={School} label="โรงเรียน" to="/schools" color="bg-cyan-500" />
-          <QuickMenuItem icon={Trophy} label="รายการ" to="/activities" color="bg-orange-500" />
-      </div>
-
-      {/* Stats Overview Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard 
-            title={viewLevel === 'area' ? "ทีมระดับเขต (Area Teams)" : "ทีมทั้งหมด (All Teams)"}
-            value={filteredTeams.length} 
-            icon={Users} 
-            colorClass="bg-blue-500"
-            description={`ในรอบ${viewLevel === 'cluster' ? 'กลุ่มเครือข่าย' : 'เขตพื้นที่'}`} 
-        />
-        
-        {/* Scoring Progress Card */}
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100 flex flex-col justify-between hover:shadow-md transition-shadow">
-            <div className="flex justify-between items-start mb-2">
-                <div>
-                    <p className="text-sm font-medium text-gray-500 mb-1">ความคืบหน้าการตัดสิน</p>
-                    <h3 className="text-2xl font-bold text-gray-900">{scoringProgress.percentage}%</h3>
-                </div>
-                <div className="p-3 rounded-lg bg-green-500">
-                    <TrendingUp className="w-6 h-6 text-white" />
-                </div>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-2 mb-1">
-                <div className="bg-green-500 h-2 rounded-full transition-all duration-1000" style={{ width: `${scoringProgress.percentage}%` }}></div>
-            </div>
-            <p className="text-xs text-gray-400">บันทึกแล้ว {scoringProgress.scored} จาก {scoringProgress.total} ทีม</p>
-        </div>
-
-        <StatCard 
-            title="โรงเรียนที่เข้าร่วม" 
-            value={uniqueSchoolCount} 
-            icon={School} 
-            colorClass="bg-indigo-500" 
-        />
-        
-        {/* Dynamic Chart Card */}
-        <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100 flex items-center justify-between">
-             <div className="h-20 w-20">
-                <ResponsiveContainer width="100%" height="100%">
-                    <RePieChart>
-                        <Pie
-                            data={chartData}
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={25}
-                            outerRadius={40}
-                            paddingAngle={5}
-                            dataKey="value"
-                        >
-                            {chartData.map((entry, index) => (
-                                <Cell 
-                                    key={`cell-${index}`} 
-                                    fill={viewLevel === 'area' ? (MEDAL_COLORS[entry.name as keyof typeof MEDAL_COLORS] || '#3B82F6') : COLORS[index % COLORS.length]} 
-                                />
-                            ))}
-                        </Pie>
-                    </RePieChart>
-                </ResponsiveContainer>
-             </div>
-             <div className="flex-1 ml-4">
-                 <p className="text-xs font-bold text-gray-500 uppercase">
-                     {viewLevel === 'area' ? 'สรุปเหรียญรางวัล' : 'สถานะการสมัคร'}
-                 </p>
-                 <div className="flex flex-wrap gap-2 mt-1">
-                     {chartData.map((entry, idx) => (
-                         <div key={idx} className="flex items-center text-[10px] text-gray-600">
-                             <div 
-                                className="w-2 h-2 rounded-full mr-1" 
-                                style={{ backgroundColor: viewLevel === 'area' ? (MEDAL_COLORS[entry.name as keyof typeof MEDAL_COLORS] || '#3B82F6') : COLORS[idx % COLORS.length] }}
-                             ></div>
-                             {entry.name}: {entry.value}
-                         </div>
-                     ))}
-                 </div>
-             </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      {/* KPI Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
+              <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-gray-500 font-bold uppercase">ทีมทั้งหมด</span>
+                  <Users className="w-4 h-4 text-blue-500" />
+              </div>
+              <div className="text-2xl font-black text-gray-800">{stats.totalTeams}</div>
+          </div>
           
-          {/* Main Column: News & Top Schools */}
+          {/* Clickable Scoring Progress Block */}
+          <div 
+            onClick={() => setShowUnscoredModal(true)}
+            className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between cursor-pointer hover:shadow-md hover:border-blue-300 transition-all group relative overflow-hidden"
+          >
+             <div className="absolute right-0 top-0 p-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                 <List className="w-4 h-4 text-blue-400" />
+             </div>
+             <div className="flex justify-between items-center mb-1">
+                 <span className="text-xs text-gray-500 font-bold uppercase flex items-center group-hover:text-blue-600">
+                    <Target className="w-3 h-3 mr-1"/> ความคืบหน้า
+                 </span>
+                 <span className="text-lg font-black text-green-600">{stats.progress}%</span>
+             </div>
+             <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
+                 <div className="bg-green-500 h-full rounded-full transition-all duration-1000" style={{width: `${stats.progress}%`}}></div>
+             </div>
+             <div className="text-[10px] text-gray-400 mt-1 text-right group-hover:text-blue-500 font-medium">
+                 เหลือ {unscoredTeams.length} ทีม (คลิกดู)
+             </div>
+          </div>
+
+          <div className="bg-gradient-to-br from-yellow-50 to-amber-50 p-4 rounded-2xl shadow-sm border border-amber-100 flex flex-col justify-between">
+              <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-amber-600 font-bold uppercase">เหรียญทอง</span>
+                  <Medal className="w-4 h-4 text-amber-500" />
+              </div>
+              <div className="text-2xl font-black text-amber-700">{stats.goldCount}</div>
+          </div>
+          <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
+              <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-gray-500 font-bold uppercase">ตัดสินแล้ว</span>
+                  <CheckCircle className="w-4 h-4 text-green-500" />
+              </div>
+              <div className="text-2xl font-black text-gray-800">{stats.scoredCount}</div>
+          </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          
+          {/* Main Column */}
           <div className="lg:col-span-2 space-y-6">
               
-              {/* Top Schools Section */}
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                  <div className="p-5 border-b border-gray-100 flex items-center justify-between">
-                        <h2 className="text-lg font-bold text-gray-800 flex items-center">
-                            <Star className="w-5 h-5 mr-2 text-yellow-500 fill-current" />
-                            5 อันดับโรงเรียนยอดเยี่ยม ({viewLevel === 'cluster' ? 'กลุ่มฯ' : 'เขตฯ'})
-                        </h2>
-                        <span className="text-xs text-gray-400 bg-gray-50 px-2 py-1 rounded">เรียงตามจำนวนเหรียญทอง</span>
+              {/* AREA VIEW: Medal Chart & Category Analytics */}
+              {viewLevel === 'area' && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Medal Pie Chart */}
+                      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex flex-col items-center">
+                          <h3 className="text-sm font-bold text-gray-700 mb-2 flex items-center w-full">
+                              <PieIcon className="w-4 h-4 mr-2 text-purple-500" /> สรุปเหรียญรางวัล
+                          </h3>
+                          <div className="h-48 w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                    <Pie
+                                        data={medalChartData}
+                                        cx="50%"
+                                        cy="50%"
+                                        innerRadius={40}
+                                        outerRadius={70}
+                                        paddingAngle={5}
+                                        dataKey="value"
+                                    >
+                                        {medalChartData.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={MEDAL_COLORS[entry.name as keyof typeof MEDAL_COLORS] || '#94a3b8'} />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip />
+                                    <Legend iconSize={8} wrapperStyle={{ fontSize: '10px' }} />
+                                </PieChart>
+                            </ResponsiveContainer>
+                          </div>
+                      </div>
+
+                      {/* Category Bar Chart */}
+                      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex flex-col">
+                          <h3 className="text-sm font-bold text-gray-700 mb-2 flex items-center">
+                              <BarChart3 className="w-4 h-4 mr-2 text-blue-500" /> หมวดหมู่ยอดนิยม (Top 5)
+                          </h3>
+                          <div className="h-48 w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={categoryChartData} layout="vertical" margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
+                                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                                    <XAxis type="number" hide />
+                                    <YAxis type="category" dataKey="name" width={80} tick={{fontSize: 10}} />
+                                    <Tooltip cursor={{fill: 'transparent'}} />
+                                    <Bar dataKey="value" fill="#3B82F6" radius={[0, 4, 4, 0]} barSize={20} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                          </div>
+                      </div>
                   </div>
-                  <div className="p-0">
-                      {topSchools.length > 0 ? (
-                          <table className="w-full">
-                              <tbody className="divide-y divide-gray-50">
-                                  {topSchools.map((school, idx) => (
-                                      <tr key={idx} className="hover:bg-gray-50/50 transition-colors">
-                                          <td className="pl-6 py-3 w-12 text-center">
-                                              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
-                                                  idx === 0 ? 'bg-yellow-100 text-yellow-700' :
-                                                  idx === 1 ? 'bg-gray-100 text-gray-700' :
-                                                  idx === 2 ? 'bg-orange-100 text-orange-700' :
-                                                  'bg-white text-gray-500 border border-gray-200'
-                                              }`}>
-                                                  {idx + 1}
-                                              </div>
-                                          </td>
-                                          <td className="px-4 py-3">
-                                              <div className="font-bold text-gray-800 text-sm">{school.name}</div>
-                                              <div className="text-xs text-gray-400">คะแนนรวม: {school.totalScore}</div>
-                                          </td>
-                                          <td className="pr-6 py-3 text-right">
-                                              <div className="inline-flex items-center px-3 py-1 bg-yellow-50 text-yellow-700 rounded-full text-xs font-bold border border-yellow-100">
-                                                  <Medal className="w-3 h-3 mr-1" /> {school.gold} ทอง
-                                              </div>
-                                          </td>
+              )}
+
+              {/* CLUSTER VIEW: Qualification Rate Leaderboard */}
+              {viewLevel === 'cluster' && (
+                  <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                      <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-blue-50/50">
+                          <div>
+                              <h2 className="font-bold text-gray-800 flex items-center">
+                                  <TrendingUp className="w-5 h-5 mr-2 text-blue-600" />
+                                  5 อันดับโรงเรียนคุณภาพ (Qualification Rate)
+                              </h2>
+                              <p className="text-xs text-gray-500 mt-0.5">คิดจาก % การส่งทีมเข้ารอบระดับเขตเทียบกับจำนวนที่ส่งทั้งหมด</p>
+                          </div>
+                          <button 
+                            onClick={() => setShowRankingModal(true)}
+                            className="text-xs bg-white border border-blue-200 text-blue-600 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors font-medium shadow-sm"
+                          >
+                              ดูทั้งหมด
+                          </button>
+                      </div>
+                      <div className="p-0">
+                          {leaderboards.topBySuccessRate.length > 0 ? (
+                              <table className="w-full">
+                                  <thead className="bg-gray-50 text-xs text-gray-500 uppercase font-medium">
+                                      <tr>
+                                          <th className="px-4 py-3 text-left w-12">#</th>
+                                          <th className="px-4 py-3 text-left">โรงเรียน</th>
+                                          <th className="px-4 py-3 text-center">ส่งแข่ง</th>
+                                          <th className="px-4 py-3 text-center text-blue-600">เข้ารอบ</th>
+                                          <th className="px-4 py-3 text-right">อัตราส่วน</th>
                                       </tr>
-                                  ))}
-                              </tbody>
-                          </table>
-                      ) : (
-                          <div className="p-8 text-center text-gray-400 text-sm">ยังไม่มีข้อมูลผลการแข่งขัน</div>
+                                  </thead>
+                                  <tbody className="divide-y divide-gray-50 text-sm">
+                                      {leaderboards.topBySuccessRate.map((school, idx) => (
+                                          <tr key={idx} className="hover:bg-gray-50/50">
+                                              <td className="px-4 py-3 text-center font-bold text-gray-400">{idx + 1}</td>
+                                              <td className="px-4 py-3 font-medium text-gray-800">{school.name}</td>
+                                              <td className="px-4 py-3 text-center text-gray-500">{school.totalEntries}</td>
+                                              <td className="px-4 py-3 text-center font-bold text-blue-600">{school.qualifiedCount}</td>
+                                              <td className="px-4 py-3 text-right">
+                                                  <span className="inline-block px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-bold">
+                                                      {school.rate.toFixed(1)}%
+                                                  </span>
+                                              </td>
+                                          </tr>
+                                      ))}
+                                  </tbody>
+                              </table>
+                          ) : (
+                              <div className="p-8 text-center text-gray-400 text-sm">ยังไม่มีข้อมูลการตัดสิน</div>
+                          )}
+                      </div>
+                  </div>
+              )}
+
+              {/* AREA VIEW: Gold & Score Leaderboards */}
+              {viewLevel === 'area' && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                          <div className="p-4 border-b border-gray-100 bg-yellow-50/50">
+                              <h2 className="font-bold text-gray-800 flex items-center text-sm">
+                                  <Medal className="w-4 h-4 mr-2 text-yellow-500" />
+                                  อันดับเหรียญทอง (Top Gold)
+                              </h2>
+                          </div>
+                          <div className="p-0">
+                              {leaderboards.topByGold.length > 0 ? (
+                                  <div className="divide-y divide-gray-50">
+                                      {leaderboards.topByGold.map((s, idx) => (
+                                          <div key={idx} className="flex items-center justify-between p-3 hover:bg-gray-50/50">
+                                              <div className="flex items-center min-w-0">
+                                                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold mr-3 shrink-0 ${idx === 0 ? 'bg-yellow-400 text-white' : 'bg-gray-100 text-gray-500'}`}>{idx + 1}</div>
+                                                  <div className="truncate text-sm font-medium text-gray-700" title={s.name}>{s.name}</div>
+                                              </div>
+                                              <div className="flex items-center text-sm font-bold text-yellow-600">
+                                                  {s.goldCount} <span className="text-[10px] text-gray-400 font-normal ml-1">เหรียญ</span>
+                                              </div>
+                                          </div>
+                                      ))}
+                                  </div>
+                              ) : <div className="p-6 text-center text-gray-400 text-xs">ยังไม่มีข้อมูล</div>}
+                          </div>
+                      </div>
+
+                      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                          <div className="p-4 border-b border-gray-100 bg-indigo-50/50">
+                              <h2 className="font-bold text-gray-800 flex items-center text-sm">
+                                  <Zap className="w-4 h-4 mr-2 text-indigo-500" />
+                                  คะแนนรวมสูงสุด (Total Score)
+                              </h2>
+                          </div>
+                          <div className="p-0">
+                              {leaderboards.topByScore.length > 0 ? (
+                                  <div className="divide-y divide-gray-50">
+                                      {leaderboards.topByScore.map((s, idx) => (
+                                          <div key={idx} className="flex items-center justify-between p-3 hover:bg-gray-50/50">
+                                              <div className="flex items-center min-w-0">
+                                                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold mr-3 shrink-0 ${idx === 0 ? 'bg-indigo-500 text-white' : 'bg-gray-100 text-gray-500'}`}>{idx + 1}</div>
+                                                  <div className="truncate text-sm font-medium text-gray-700" title={s.name}>{s.name}</div>
+                                              </div>
+                                              <div className="flex items-center text-sm font-bold text-indigo-600">
+                                                  {s.totalScore.toLocaleString()}
+                                              </div>
+                                          </div>
+                                      ))}
+                                  </div>
+                              ) : <div className="p-6 text-center text-gray-400 text-xs">ยังไม่มีข้อมูล</div>}
+                          </div>
+                      </div>
+                  </div>
+              )}
+
+              {/* Latest Results Feed */}
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                  <div className="p-5 border-b border-gray-100 flex justify-between items-center">
+                      <h2 className="font-bold text-gray-800 flex items-center">
+                          <Activity className="w-5 h-5 mr-2 text-green-500" />
+                          ผลการแข่งขันล่าสุด (Live Feed)
+                      </h2>
+                      <span className="relative flex h-2.5 w-2.5">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span>
+                      </span>
+                  </div>
+                  <div className="divide-y divide-gray-50">
+                      {latestResults.length > 0 ? latestResults.map((team) => {
+                          const activityName = data.activities.find(a => a.id === team.activityId)?.name || team.activityId;
+                          const schoolName = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId)?.SchoolName || team.schoolId;
+                          
+                          let score = 0;
+                          let medal = '';
+                          if (viewLevel === 'area') {
+                              const info = getAreaInfo(team);
+                              score = info?.score || 0;
+                              medal = info?.medal || calculateMedalFromScore(score);
+                          } else {
+                              score = team.score;
+                              medal = team.medalOverride || calculateMedalFromScore(score);
+                          }
+
+                          return (
+                              <div key={team.teamId} className="p-4 hover:bg-gray-50/50 transition-colors flex items-center justify-between">
+                                  <div className="min-w-0 flex-1 pr-4">
+                                      <div className="flex items-center gap-2 mb-1">
+                                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 uppercase tracking-wide">
+                                              {viewLevel === 'area' ? 'Area' : 'Cluster'}
+                                          </span>
+                                          <span className="text-xs text-gray-400 flex items-center">
+                                              <Timer className="w-3 h-3 mr-1" /> 
+                                              {team.lastEditedAt ? formatDeadline(team.lastEditedAt) : 'เมื่อสักครู่'}
+                                          </span>
+                                      </div>
+                                      <h4 className="text-sm font-bold text-gray-900 truncate">{activityName}</h4>
+                                      <p className="text-xs text-gray-500 truncate mt-0.5">{team.teamName} - {schoolName}</p>
+                                  </div>
+                                  <div className="text-right shrink-0">
+                                      <div className="text-xl font-black text-gray-800">{score}</div>
+                                      <div className={`text-[10px] font-bold px-2 py-0.5 rounded-full inline-block mt-1 
+                                          ${medal.includes('Gold') ? 'bg-yellow-100 text-yellow-700' : 
+                                            medal.includes('Silver') ? 'bg-gray-100 text-gray-600' : 
+                                            medal.includes('Bronze') ? 'bg-orange-100 text-orange-700' : 'bg-blue-50 text-blue-600'}`}>
+                                          {medal}
+                                      </div>
+                                  </div>
+                              </div>
+                          );
+                      }) : (
+                          <div className="p-8 text-center text-gray-400 text-sm">ยังไม่มีรายการบันทึกคะแนนใหม่</div>
                       )}
                   </div>
-              </div>
-
-              {/* News Section */}
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-xl font-bold text-gray-800 flex items-center">
-                        <Megaphone className="w-6 h-6 mr-2 text-orange-500" />
-                        ข่าวประชาสัมพันธ์
-                    </h2>
-                    {isAdmin && (
-                        <button 
-                            onClick={() => setShowAddNews(true)}
-                            className="flex items-center px-3 py-1.5 text-xs bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors font-medium"
-                        >
-                            <Plus className="w-4 h-4 mr-1" /> เพิ่มข่าว
-                        </button>
-                    )}
-                </div>
-
-                <div className="space-y-4">
-                    {newsList.length > 0 ? (
-                        newsList.map((item) => (
-                            <div key={item.id} className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all relative overflow-hidden group">
-                                <div className="absolute top-0 left-0 w-1.5 h-full bg-orange-500"></div>
-                                <div className="flex justify-between items-start mb-2 pl-3">
-                                    <span className="text-xs text-gray-400 flex items-center bg-gray-50 px-2 py-1 rounded-full">
-                                        <Calendar className="w-3 h-3 mr-1" />
-                                        {new Date(item.date).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}
-                                    </span>
-                                </div>
-                                <div className="pl-3">
-                                    <h3 className="text-lg font-bold text-gray-900 mb-2 group-hover:text-blue-600 transition-colors">{item.title}</h3>
-                                    <p className="text-gray-600 text-sm leading-relaxed mb-3">
-                                        {item.content}
-                                    </p>
-                                    {item.link && (
-                                        <a href={item.link} target="_blank" rel="noreferrer" className="inline-flex items-center text-sm font-medium text-blue-600 hover:text-blue-800 mt-1">
-                                            อ่านเพิ่มเติม <ChevronRight className="w-4 h-4 ml-1" />
-                                        </a>
-                                    )}
-                                </div>
-                            </div>
-                        ))
-                    ) : (
-                        <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-gray-200 text-gray-400">
-                            <Megaphone className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                            ยังไม่มีข่าวประชาสัมพันธ์
-                        </div>
-                    )}
-                </div>
+                  {latestResults.length > 0 && (
+                      <div className="p-3 bg-gray-50 text-center border-t border-gray-100">
+                          <button onClick={() => navigate('/results')} className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center justify-center">
+                              ดูผลทั้งหมด <ArrowUpRight className="w-3 h-3 ml-1" />
+                          </button>
+                      </div>
+                  )}
               </div>
           </div>
 
-          {/* Right Column: Manuals & Links */}
+          {/* Right Column: News & Manuals */}
           <div className="space-y-6">
-             <h2 className="text-xl font-bold text-gray-800 flex items-center">
-                 <Book className="w-6 h-6 mr-2 text-green-600" />
-                 คู่มือการใช้งาน
-             </h2>
+             <div className="flex items-center justify-between">
+                 <h2 className="text-lg font-bold text-gray-800 flex items-center">
+                     <Megaphone className="w-5 h-5 mr-2 text-orange-500" /> ข่าวประชาสัมพันธ์
+                 </h2>
+                 {isAdmin && (
+                    <button onClick={() => setShowAddNews(true)} className="p-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100">
+                        <Plus className="w-4 h-4" />
+                    </button>
+                 )}
+             </div>
              
-             <div className="grid grid-cols-1 gap-4">
-                {manualList.length > 0 ? (
-                    manualList.map(item => (
-                        <div key={item.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 hover:border-green-200 transition-colors group">
-                            <div className="flex items-start">
-                                <div className="p-3 bg-green-50 text-green-600 rounded-lg mr-3 group-hover:bg-green-100 transition-colors">
-                                    <FileText className="w-6 h-6" />
-                                </div>
-                                <div className="flex-1">
-                                    <h4 className="font-bold text-gray-800 text-sm mb-1 group-hover:text-green-700 transition-colors">{item.title}</h4>
-                                    <p className="text-xs text-gray-500 line-clamp-2">{item.content}</p>
-                                    {item.link && (
-                                        <a href={item.link} target="_blank" rel="noreferrer" className="text-xs font-bold text-green-600 mt-2 inline-block hover:underline">
-                                            เปิดคู่มือ &rarr;
-                                        </a>
-                                    )}
-                                </div>
+             <div className="space-y-4">
+                {newsList.length > 0 ? (
+                    newsList.slice(0, 3).map(item => (
+                        <div key={item.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-all relative overflow-hidden group">
+                            <div className="absolute top-0 left-0 w-1 h-full bg-orange-500"></div>
+                            <div className="pl-3">
+                                <span className="text-[10px] text-gray-400 mb-1 block">{new Date(item.date).toLocaleDateString('th-TH')}</span>
+                                <h3 className="text-sm font-bold text-gray-900 mb-2 group-hover:text-blue-600 transition-colors line-clamp-2">{item.title}</h3>
+                                {item.link && <a href={item.link} target="_blank" className="text-xs text-blue-500 hover:underline">อ่านต่อ →</a>}
                             </div>
                         </div>
                     ))
-                ) : (
-                    <div className="text-center py-8 bg-white rounded-xl border border-dashed border-gray-200 text-gray-400 text-sm">
-                        ยังไม่มีคู่มือ
-                    </div>
-                )}
+                ) : <div className="text-center py-8 text-gray-400 text-sm border-dashed border-2 rounded-xl">ไม่มีข่าวใหม่</div>}
              </div>
 
-             {/* Quick Links / Resources Placeholder */}
-             <div className="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-xl p-5 border border-indigo-100">
-                 <h3 className="font-bold text-indigo-800 mb-3 text-sm">แหล่งข้อมูลเพิ่มเติม</h3>
-                 <ul className="space-y-2 text-sm text-indigo-600">
-                     <li>• เกณฑ์การแข่งขันศิลปหัตถกรรม ครั้งที่ 71</li>
-                     <li>• ปฏิทินการดำเนินงาน</li>
-                     <li>• ติดต่อฝ่ายเทคนิค</li>
-                 </ul>
+             <div className="pt-4 border-t border-gray-200">
+                 <h2 className="text-lg font-bold text-gray-800 flex items-center mb-4">
+                     <Book className="w-5 h-5 mr-2 text-green-600" /> คู่มือการใช้งาน
+                 </h2>
+                 <div className="grid gap-3">
+                    {manualList.length > 0 ? manualList.map(item => (
+                        <a key={item.id} href={item.link} target="_blank" className="flex items-center p-3 bg-white border border-gray-200 rounded-xl hover:border-green-400 transition-colors group">
+                            <div className="p-2 bg-green-50 text-green-600 rounded-lg mr-3 group-hover:bg-green-100"><FileText className="w-4 h-4"/></div>
+                            <div className="text-sm font-medium text-gray-700 group-hover:text-green-700 truncate">{item.title}</div>
+                        </a>
+                    )) : <div className="text-center py-4 text-gray-400 text-sm">ไม่มีคู่มือ</div>}
+                 </div>
              </div>
           </div>
       </div>
+
+      {/* Modal: Unscored Teams */}
+      {showUnscoredModal && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+              <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[80vh]">
+                  <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                      <div>
+                          <h3 className="font-bold text-gray-800">รายการที่ยังไม่ได้ตัดสิน (Pending)</h3>
+                          <p className="text-xs text-gray-500">ระดับ: {viewLevel === 'area' ? 'เขตพื้นที่' : 'กลุ่มเครือข่าย'}</p>
+                      </div>
+                      <button onClick={() => setShowUnscoredModal(false)} className="p-1.5 hover:bg-gray-200 rounded-full"><X className="w-5 h-5"/></button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-0">
+                      {unscoredTeams.length > 0 ? (
+                          <table className="w-full text-sm">
+                              <thead className="bg-gray-50 text-gray-500 font-medium border-b border-gray-100">
+                                  <tr>
+                                      <th className="px-4 py-3 text-left">ทีม</th>
+                                      <th className="px-4 py-3 text-left">โรงเรียน</th>
+                                      <th className="px-4 py-3 text-left">กิจกรรม</th>
+                                  </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-50">
+                                  {unscoredTeams.map(t => {
+                                      const actName = data.activities.find(a => a.id === t.activityId)?.name;
+                                      const sName = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId)?.SchoolName || t.schoolId;
+                                      return (
+                                          <tr key={t.teamId} className="hover:bg-gray-50">
+                                              <td className="px-4 py-3 font-medium">{t.teamName}</td>
+                                              <td className="px-4 py-3 text-gray-600">{sName}</td>
+                                              <td className="px-4 py-3 text-gray-500 text-xs">{actName}</td>
+                                          </tr>
+                                      );
+                                  })}
+                              </tbody>
+                          </table>
+                      ) : (
+                          <div className="p-10 text-center text-gray-400">
+                              <CheckCircle className="w-12 h-12 mx-auto mb-2 text-green-500 opacity-50" />
+                              <p>ตัดสินครบทุกรายการแล้ว!</p>
+                          </div>
+                      )}
+                  </div>
+                  <div className="p-3 border-t border-gray-100 bg-gray-50 text-right text-xs text-gray-500">
+                      รวม {unscoredTeams.length} ทีม
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* Modal: Full Ranking */}
+      {showRankingModal && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+              <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[85vh]">
+                  <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-blue-50">
+                      <div>
+                          <h3 className="font-bold text-blue-900 flex items-center">
+                              <TrendingUp className="w-5 h-5 mr-2" /> อันดับโรงเรียนคุณภาพ (Qualification Rate)
+                          </h3>
+                          <p className="text-xs text-blue-700">เรียงลำดับจาก % การเข้ารอบ</p>
+                      </div>
+                      <button onClick={() => setShowRankingModal(false)} className="p-1.5 hover:bg-blue-100 rounded-full text-blue-800"><X className="w-5 h-5"/></button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto">
+                      <table className="w-full text-sm">
+                          <thead className="bg-gray-50 text-gray-500 font-medium sticky top-0 shadow-sm">
+                              <tr>
+                                  <th className="px-4 py-3 text-center w-12">#</th>
+                                  <th className="px-4 py-3 text-left">โรงเรียน</th>
+                                  <th className="px-4 py-3 text-center">ส่งแข่ง</th>
+                                  <th className="px-4 py-3 text-center text-blue-600">เข้ารอบ</th>
+                                  <th className="px-4 py-3 text-right">อัตราส่วน</th>
+                              </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-50">
+                              {leaderboards.fullSuccessRate.map((school, idx) => (
+                                  <tr key={idx} className="hover:bg-blue-50/30 transition-colors">
+                                      <td className="px-4 py-3 text-center font-bold text-gray-400">{idx + 1}</td>
+                                      <td className="px-4 py-3 font-medium text-gray-800">{school.name}</td>
+                                      <td className="px-4 py-3 text-center text-gray-500">{school.totalEntries}</td>
+                                      <td className="px-4 py-3 text-center font-bold text-blue-600">{school.qualifiedCount}</td>
+                                      <td className="px-4 py-3 text-right">
+                                          <span className={`inline-block px-2 py-1 rounded text-xs font-bold ${school.rate >= 50 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                                              {school.rate.toFixed(1)}%
+                                          </span>
+                                      </td>
+                                  </tr>
+                              ))}
+                          </tbody>
+                      </table>
+                  </div>
+              </div>
+          </div>
+      )}
 
       {/* Admin Add News Modal */}
       {showAddNews && (
