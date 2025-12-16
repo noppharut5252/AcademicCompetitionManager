@@ -1,10 +1,11 @@
 
 import React, { useState, useMemo } from 'react';
-import { AppData, Announcement, User } from '../types';
-import { Users, School, Trophy, Megaphone, Plus, Book, Calendar, ChevronRight, Gavel, MapPin, Award, FileText, Smartphone } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from 'recharts';
+import { AppData, Announcement, User, AreaStageInfo } from '../types';
+import { Users, School, Trophy, Megaphone, Plus, Book, Calendar, ChevronRight, Gavel, MapPin, Award, FileText, Smartphone, Loader2, PieChart, CheckCircle, Clock } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart as RePieChart, Pie, Legend } from 'recharts';
 import StatCard from './StatCard';
 import { useNavigate } from 'react-router-dom';
+import { addAnnouncement } from '../services/api';
 
 interface DashboardProps {
   data: AppData;
@@ -12,6 +13,7 @@ interface DashboardProps {
 }
 
 const COLORS = ['#10B981', '#F59E0B', '#EF4444', '#6366F1'];
+const MEDAL_COLORS = { 'Gold': '#FFD700', 'Silver': '#C0C0C0', 'Bronze': '#CD7F32', 'Participant': '#3B82F6' };
 
 const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
   const navigate = useNavigate();
@@ -21,24 +23,67 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
   const [newContent, setNewContent] = useState('');
   const [newType, setNewType] = useState<'news' | 'manual'>('news');
   const [newLink, setNewLink] = useState('');
+  const [isAddingNews, setIsAddingNews] = useState(false);
+
+  // Helper to check Area Status
+  const isAreaTeam = (team: any) => {
+      // Logic: Explicit StageStatus OR Flag (Representative)
+      const isExplicitArea = team.stageStatus === 'Area';
+      const isRep = String(team.flag).trim().toUpperCase() === 'TRUE';
+      return isExplicitArea || isRep;
+  };
+
+  const getAreaInfo = (team: any): AreaStageInfo | null => {
+      try { return JSON.parse(team.stageInfo); } catch { return null; }
+  };
 
   // Filter teams based on view level
   const filteredTeams = useMemo(() => {
     if (viewLevel === 'area') {
-        // Show only teams that made it to the Area level
-        return data.teams.filter(t => t.stageStatus === 'Area' || t.flag === 'TRUE');
+        return data.teams.filter(t => isAreaTeam(t));
     }
     return data.teams;
   }, [data.teams, viewLevel]);
 
-  // Recalculate Stats for current view
-  const statusData = useMemo(() => {
-      const counts: Record<string, number> = {};
-      filteredTeams.forEach(team => {
-        counts[team.status] = (counts[team.status] || 0) + 1;
-      });
-      return Object.keys(counts).map(key => ({ name: key, value: counts[key] }));
-  }, [filteredTeams]);
+  // Dynamic Chart Data based on View Level
+  const chartData = useMemo(() => {
+      if (viewLevel === 'area') {
+          // AREA VIEW: Show Medal Distribution
+          const counts: Record<string, number> = { 'Gold': 0, 'Silver': 0, 'Bronze': 0, 'Participant': 0 };
+          filteredTeams.forEach(team => {
+              const info = getAreaInfo(team);
+              // Priority: Manual Medal -> Score Calculation -> Participant
+              let medal = info?.medal || team.medalOverride;
+              if (!medal) {
+                  const score = info?.score || 0;
+                  if (score >= 80) medal = 'Gold';
+                  else if (score >= 70) medal = 'Silver';
+                  else if (score >= 60) medal = 'Bronze';
+                  else medal = 'Participant';
+              }
+              // Normalize medal string
+              if (medal.includes('Gold')) counts['Gold']++;
+              else if (medal.includes('Silver')) counts['Silver']++;
+              else if (medal.includes('Bronze')) counts['Bronze']++;
+              else counts['Participant']++;
+          });
+          return Object.keys(counts).map(key => ({ name: key, value: counts[key] }));
+      } else {
+          // CLUSTER VIEW: Show Registration Status
+          const counts: Record<string, number> = {};
+          filteredTeams.forEach(team => {
+            const rawStatus = String(team.status);
+            let statusLabel = rawStatus;
+            
+            if (rawStatus === '1' || rawStatus === 'Approved') statusLabel = 'อนุมัติ';
+            else if (rawStatus === '0' || rawStatus === 'Pending') statusLabel = 'รอตรวจ';
+            else if (rawStatus === '2' || rawStatus === '-1' || rawStatus === 'Rejected') statusLabel = 'แก้ไข';
+            
+            counts[statusLabel] = (counts[statusLabel] || 0) + 1;
+          });
+          return Object.keys(counts).map(key => ({ name: key, value: counts[key] }));
+      }
+  }, [filteredTeams, viewLevel]);
 
   // Unique schools in the filtered list
   const uniqueSchoolCount = useMemo(() => {
@@ -53,20 +98,22 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
 
   const handleAddNews = async (e: React.FormEvent) => {
       e.preventDefault();
-      // Call Backend (Mocking the fetch here as direct API call isn't fully set up in api.ts yet for this specific action in the prompt context, 
-      // but in real app use fetch to the script URL)
-      const API_URL = "https://script.google.com/macros/s/AKfycbyYcf6m-3ypN3aX8F6prN0BLQcz0JyW0gj3Tq8dJyMs54gaTXSv_1uytthNu9H4CmMy/exec";
+      setIsAddingNews(true);
       try {
-          await fetch(`${API_URL}?action=addAnnouncement&title=${encodeURIComponent(newTitle)}&content=${encodeURIComponent(newContent)}&type=${newType}&link=${encodeURIComponent(newLink)}&author=${user?.name || 'Admin'}`, {
-              method: 'POST',
-              mode: 'no-cors' // Google Apps Script simple trigger limitation workaround
-          });
-          alert('เพิ่มข้อมูลสำเร็จ! (กรุณารีเฟรชหน้าเว็บเพื่อดูข้อมูลล่าสุด)');
-          setShowAddNews(false);
-          setNewTitle('');
-          setNewContent('');
+          const success = await addAnnouncement(newTitle, newContent, newType, newLink, user?.name || 'Admin');
+          if (success) {
+              alert('เพิ่มข้อมูลสำเร็จ! (กรุณารีเฟรชหน้าเว็บเพื่อดูข้อมูลล่าสุด)');
+              setShowAddNews(false);
+              setNewTitle('');
+              setNewContent('');
+              setNewLink('');
+          } else {
+              alert('เกิดข้อผิดพลาดในการบันทึก');
+          }
       } catch (err) {
-          alert('เกิดข้อผิดพลาดในการบันทึก');
+          alert('เกิดข้อผิดพลาดในการเชื่อมต่อ');
+      } finally {
+          setIsAddingNews(false);
       }
   };
 
@@ -136,7 +183,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
       {/* Stats Overview */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard 
-            title="ทีมทั้งหมด" 
+            title={viewLevel === 'area' ? "ทีมระดับเขต (Area Teams)" : "ทีมทั้งหมด (All Teams)"}
             value={filteredTeams.length} 
             icon={Users} 
             colorClass="bg-blue-500"
@@ -154,12 +201,14 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
             icon={Trophy} 
             colorClass="bg-amber-500" 
         />
+        
+        {/* Dynamic Chart Card */}
         <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100 flex items-center justify-between">
              <div className="h-20 w-20">
                 <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
+                    <RePieChart>
                         <Pie
-                            data={statusData}
+                            data={chartData}
                             cx="50%"
                             cy="50%"
                             innerRadius={25}
@@ -167,19 +216,27 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
                             paddingAngle={5}
                             dataKey="value"
                         >
-                            {statusData.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                            {chartData.map((entry, index) => (
+                                <Cell 
+                                    key={`cell-${index}`} 
+                                    fill={viewLevel === 'area' ? (MEDAL_COLORS[entry.name as keyof typeof MEDAL_COLORS] || '#3B82F6') : COLORS[index % COLORS.length]} 
+                                />
                             ))}
                         </Pie>
-                    </PieChart>
+                    </RePieChart>
                 </ResponsiveContainer>
              </div>
              <div className="flex-1 ml-4">
-                 <p className="text-xs font-bold text-gray-500 uppercase">สถานะการสมัคร</p>
+                 <p className="text-xs font-bold text-gray-500 uppercase">
+                     {viewLevel === 'area' ? 'สรุปเหรียญรางวัล' : 'สถานะการสมัคร'}
+                 </p>
                  <div className="flex flex-wrap gap-2 mt-1">
-                     {statusData.map((entry, idx) => (
+                     {chartData.map((entry, idx) => (
                          <div key={idx} className="flex items-center text-[10px] text-gray-600">
-                             <div className="w-2 h-2 rounded-full mr-1" style={{ backgroundColor: COLORS[idx % COLORS.length] }}></div>
+                             <div 
+                                className="w-2 h-2 rounded-full mr-1" 
+                                style={{ backgroundColor: viewLevel === 'area' ? (MEDAL_COLORS[entry.name as keyof typeof MEDAL_COLORS] || '#3B82F6') : COLORS[idx % COLORS.length] }}
+                             ></div>
                              {entry.name}: {entry.value}
                          </div>
                      ))}
@@ -316,7 +373,10 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
                       </div>
                       <div className="flex justify-end gap-2 pt-2 border-t border-gray-100 mt-4">
                           <button type="button" onClick={() => setShowAddNews(false)} className="px-4 py-2 text-gray-600 text-sm hover:bg-gray-100 rounded-lg font-medium">ยกเลิก</button>
-                          <button type="submit" className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 font-bold shadow-sm">บันทึก</button>
+                          <button type="submit" disabled={isAddingNews} className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 font-bold shadow-sm flex items-center disabled:opacity-70">
+                              {isAddingNews && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                              บันทึก
+                          </button>
                       </div>
                   </form>
               </div>
@@ -327,3 +387,4 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
 };
 
 export default Dashboard;
+
