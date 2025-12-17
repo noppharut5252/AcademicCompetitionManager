@@ -380,6 +380,7 @@ const DashboardSkeleton = () => (
             <div className="space-y-6">
                 <div className="h-40 bg-gray-200 rounded-2xl"></div>
                 <div className="h-40 bg-gray-200 rounded-2xl"></div>
+                <div className="h-40 bg-gray-200 rounded-2xl"></div>
             </div>
         </div>
     </div>
@@ -1077,11 +1078,46 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
              {/* FEATURE 4: Countdown Timer */}
              <CountdownWidget data={data} />
 
+             {/* New Venue Section */}
+             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mt-6">
+                <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                    <h3 className="text-sm font-bold text-gray-800 flex items-center">
+                        <MapPin className="w-4 h-4 mr-2 text-red-500" /> สนามแข่งขันหลัก
+                    </h3>
+                    <button onClick={() => navigate('/venues')} className="text-xs text-blue-600 hover:underline">ดูทั้งหมด</button>
+                </div>
+                <div className="divide-y divide-gray-50">
+                    {data.venues.slice(0, 3).map(venue => (
+                        <div key={venue.id} className="p-3 flex gap-3 hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => navigate('/venues')}>
+                            <div className="w-12 h-12 rounded-lg bg-gray-100 shrink-0 overflow-hidden border border-gray-200">
+                                {venue.imageUrl ? (
+                                    <img src={venue.imageUrl} className="w-full h-full object-cover" alt="" onError={(e) => { (e.target as HTMLImageElement).src = "https://via.placeholder.com/150?text=Venue"; }} />
+                                ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-gray-400"><MapPin className="w-5 h-5"/></div>
+                                )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                                <div className="text-sm font-bold text-gray-800 truncate">{venue.name}</div>
+                                <div className="text-xs text-gray-500 truncate">{venue.description || 'ไม่มีรายละเอียด'}</div>
+                                {venue.scheduledActivities && venue.scheduledActivities.length > 0 && (
+                                    <div className="mt-1 inline-flex items-center text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-100">
+                                        <Activity className="w-3 h-3 mr-1" /> {venue.scheduledActivities.length} รายการ
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    ))}
+                    {data.venues.length === 0 && (
+                        <div className="p-4 text-center text-gray-400 text-xs">ยังไม่มีข้อมูลสนามแข่งขัน</div>
+                    )}
+                </div>
+             </div>
+
              {/* FEATURE 2: Integrity Alerts Widget (Updated with Breakdown) */}
              {integrityStats && integrityStats.totalIssues > 0 && (
                  <div 
                     onClick={() => setShowIntegrityModal(true)}
-                    className="bg-white border border-red-100 rounded-xl overflow-hidden shadow-sm cursor-pointer group"
+                    className="bg-white border border-red-100 rounded-xl overflow-hidden shadow-sm cursor-pointer group mt-6"
                  >
                     <div className="bg-red-50 p-3 flex items-center justify-between border-b border-red-100">
                         <div className="flex items-center">
