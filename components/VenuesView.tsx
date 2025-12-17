@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { AppData, Venue, VenueSchedule } from '../types';
-import { MapPin, Calendar, Plus, Edit2, Trash2, Navigation, Info, ExternalLink, X, Save, CheckCircle, Utensils, Wifi, Car, Wind, Clock, Building, Layers, Map, AlertCircle, Search, LayoutGrid, Camera, Loader2, Upload, ImageIcon, List, ArrowRight, Trophy, Share2 } from 'lucide-react';
+import { MapPin, Calendar, Plus, Edit2, Trash2, Navigation, Info, ExternalLink, X, Save, CheckCircle, Utensils, Wifi, Car, Wind, Clock, Building, Layers, Map, AlertCircle, Search, LayoutGrid, Camera, Loader2, Upload, ImageIcon, List, ArrowRight, Trophy, Share2, Copy } from 'lucide-react';
 import SearchableSelect from './SearchableSelect';
 import { saveVenue, deleteVenue, uploadImage } from '../services/api';
 import { resizeImage } from '../services/utils';
@@ -47,7 +47,7 @@ const Toast = ({ message, type, isVisible, onClose }: { message: string, type: '
     };
 
     return (
-        <div className={`fixed top-6 right-6 z-[250] flex items-center p-4 rounded-xl shadow-xl transition-all duration-500 transform translate-y-0 ${styles[type]} animate-in slide-in-from-top-5 fade-in`}>
+        <div className={`fixed top-6 right-6 z-[300] flex items-center p-4 rounded-xl shadow-xl transition-all duration-500 transform translate-y-0 ${styles[type]} animate-in slide-in-from-top-5 fade-in`}>
             <div className="mr-3">{icons[type]}</div>
             <div className="font-medium text-sm">{message}</div>
             <button onClick={onClose} className="ml-4 p-1 hover:bg-white/20 rounded-full transition-colors">
@@ -60,6 +60,7 @@ const Toast = ({ message, type, isVisible, onClose }: { message: string, type: '
 // --- New Component: Full Schedule Modal ---
 const VenueScheduleModal = ({ venue, isOpen, onClose }: { venue: Venue, isOpen: boolean, onClose: () => void }) => {
     const [searchTerm, setSearchTerm] = useState('');
+    const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info', isVisible: boolean }>({ message: '', type: 'info', isVisible: false });
 
     const groupedSchedules = useMemo(() => {
         if (!venue.scheduledActivities) return {};
@@ -90,7 +91,7 @@ const VenueScheduleModal = ({ venue, isOpen, onClose }: { venue: Venue, isOpen: 
 
     const handleShareSchedule = async (sch: VenueSchedule) => {
         try {
-            await shareSchedule(
+            const result = await shareSchedule(
                 sch.activityName || 'กิจกรรม',
                 venue.name,
                 `${sch.building || ''} ${sch.floor || ''} ${sch.room || ''}`.trim(),
@@ -98,8 +99,16 @@ const VenueScheduleModal = ({ venue, isOpen, onClose }: { venue: Venue, isOpen: 
                 sch.timeRange,
                 venue.locationUrl
             );
+
+            if (result.success) {
+                if (result.method === 'copy') {
+                    setToast({ message: 'คัดลอกข้อมูลแล้ว', type: 'success', isVisible: true });
+                }
+            } else {
+                setToast({ message: 'ไม่สามารถแชร์ได้ กรุณาลองใหม่', type: 'error', isVisible: true });
+            }
         } catch(e) {
-            alert('ไม่สามารถแชร์ได้');
+            setToast({ message: 'เกิดข้อผิดพลาด', type: 'error', isVisible: true });
         }
     };
 
@@ -107,6 +116,8 @@ const VenueScheduleModal = ({ venue, isOpen, onClose }: { venue: Venue, isOpen: 
 
     return (
         <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+            <Toast message={toast.message} type={toast.type} isVisible={toast.isVisible} onClose={() => setToast(prev => ({...prev, isVisible: false}))} />
+            
             <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
                 {/* Header */}
                 <div className="bg-blue-600 p-4 flex justify-between items-center text-white shrink-0">
@@ -116,9 +127,22 @@ const VenueScheduleModal = ({ venue, isOpen, onClose }: { venue: Venue, isOpen: 
                         </h3>
                         <p className="text-blue-100 text-xs mt-0.5">{venue.name}</p>
                     </div>
-                    <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-full transition-colors">
-                        <X className="w-6 h-6" />
-                    </button>
+                    <div className="flex gap-2">
+                        {venue.locationUrl && (
+                            <a 
+                                href={venue.locationUrl} 
+                                target="_blank" 
+                                rel="noreferrer"
+                                className="p-2 bg-white/20 hover:bg-white/30 rounded-full transition-colors text-white"
+                                title="เปิดแผนที่"
+                            >
+                                <Navigation className="w-5 h-5" />
+                            </a>
+                        )}
+                        <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-full transition-colors">
+                            <X className="w-6 h-6" />
+                        </button>
+                    </div>
                 </div>
 
                 {/* Search */}
@@ -149,7 +173,7 @@ const VenueScheduleModal = ({ venue, isOpen, onClose }: { venue: Venue, isOpen: 
                                             <div key={idx} className="p-3 hover:bg-gray-50 transition-colors flex flex-col gap-3 relative group">
                                                 <div className="flex items-start gap-3">
                                                     <div className="sm:w-24 shrink-0 flex flex-col gap-1">
-                                                        <div className="text-orange-600 font-medium text-xs sm:text-sm bg-orange-50 px-2 py-1 rounded w-fit">
+                                                        <div className="text-orange-600 font-medium text-xs sm:text-sm bg-orange-50 px-2 py-1 rounded w-fit whitespace-nowrap">
                                                             <Clock className="w-3 h-3 mr-1 inline" />
                                                             {sch.timeRange || 'ตลอดวัน'}
                                                         </div>
@@ -159,10 +183,10 @@ const VenueScheduleModal = ({ venue, isOpen, onClose }: { venue: Venue, isOpen: 
                                                             </div>
                                                         )}
                                                     </div>
-                                                    <div className="flex-1 min-w-0 pr-8">
+                                                    <div className="flex-1 min-w-0 pr-8 cursor-pointer" onClick={() => handleShareSchedule(sch)}>
                                                         <div className="font-bold text-gray-900 text-sm">{sch.activityName}</div>
                                                         <div className="flex items-center text-xs text-gray-500 mt-1">
-                                                            <MapPin className="w-3.5 h-3.5 mr-1" />
+                                                            <MapPin className="w-3.5 h-3.5 mr-1 text-gray-400" />
                                                             <span>{sch.building} {sch.floor} <b>{sch.room}</b></span>
                                                         </div>
                                                         {sch.note && (
@@ -173,8 +197,8 @@ const VenueScheduleModal = ({ venue, isOpen, onClose }: { venue: Venue, isOpen: 
                                                     </div>
                                                     {/* Share Button for specific schedule */}
                                                     <button 
-                                                        onClick={() => handleShareSchedule(sch)}
-                                                        className="absolute top-3 right-3 p-1.5 bg-gray-100 text-gray-500 rounded-full hover:bg-green-50 hover:text-green-600 transition-colors"
+                                                        onClick={(e) => { e.stopPropagation(); handleShareSchedule(sch); }}
+                                                        className="absolute top-3 right-3 p-1.5 bg-gray-100 text-gray-500 rounded-full hover:bg-green-50 hover:text-green-600 transition-colors shadow-sm border border-gray-200"
                                                         title="แชร์กำหนดการนี้"
                                                     >
                                                         <Share2 className="w-4 h-4" />
@@ -220,7 +244,10 @@ const VenueCard: React.FC<VenueCardProps> = ({ venue, isAdmin, onEdit, onViewSch
 
     const handleShareVenue = async () => {
         try {
-            await shareVenue(venue);
+            const result = await shareVenue(venue);
+            if (result.success && result.method === 'copy') {
+                alert('คัดลอกข้อมูลสนามแล้ว');
+            }
         } catch(e) {
             alert('ไม่สามารถแชร์ได้');
         }
@@ -229,7 +256,7 @@ const VenueCard: React.FC<VenueCardProps> = ({ venue, isAdmin, onEdit, onViewSch
     return (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow group flex flex-col h-full relative">
             {/* Image Section */}
-            <div className="relative h-48 bg-gray-200 shrink-0">
+            <div className="relative h-48 bg-gray-200 shrink-0 cursor-pointer" onClick={() => onViewSchedule(venue)}>
                 <img 
                     src={venue.imageUrl || "https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=800&q=80"} 
                     alt={venue.name} 
@@ -240,8 +267,8 @@ const VenueCard: React.FC<VenueCardProps> = ({ venue, isAdmin, onEdit, onViewSch
                 
                 {/* Share Button (Always Visible) */}
                 <button 
-                    onClick={handleShareVenue}
-                    className="absolute top-3 left-3 p-2 bg-black/40 hover:bg-black/60 backdrop-blur-md rounded-full text-white transition-colors"
+                    onClick={(e) => { e.stopPropagation(); handleShareVenue(); }}
+                    className="absolute top-3 left-3 p-2 bg-black/40 hover:bg-black/60 backdrop-blur-md rounded-full text-white transition-colors border border-white/20"
                     title="แชร์สนามแข่งขัน"
                 >
                     <Share2 className="w-4 h-4" />
@@ -252,7 +279,7 @@ const VenueCard: React.FC<VenueCardProps> = ({ venue, isAdmin, onEdit, onViewSch
                 </div>
                 {isAdmin && (
                     <button 
-                        onClick={() => onEdit(venue)}
+                        onClick={(e) => { e.stopPropagation(); onEdit(venue); }}
                         className="absolute top-3 right-3 p-2 bg-white/90 rounded-full text-blue-600 hover:bg-white shadow-sm opacity-0 group-hover:opacity-100 transition-opacity transform translate-y-2 group-hover:translate-y-0"
                         title="แก้ไขข้อมูลสนาม"
                     >
@@ -289,7 +316,7 @@ const VenueCard: React.FC<VenueCardProps> = ({ venue, isAdmin, onEdit, onViewSch
                     {allSchedules.length > 0 ? (
                         <div className="space-y-2 mb-2">
                             {previewSchedules.map((sch, idx) => (
-                                <div key={idx} className="bg-white p-2 rounded border border-gray-200 text-xs shadow-sm flex flex-col gap-1">
+                                <div key={idx} className="bg-white p-2 rounded border border-gray-200 text-xs shadow-sm flex flex-col gap-1 cursor-pointer hover:border-blue-300 transition-colors" onClick={() => onViewSchedule(venue)}>
                                     <div className="flex justify-between items-start">
                                         <div className="font-bold text-gray-800 line-clamp-1 flex-1" title={sch.activityName}>{sch.activityName}</div>
                                         {sch.level && <span className={`text-[9px] px-1.5 rounded border ml-1 ${sch.level === 'area' ? 'bg-purple-50 text-purple-700 border-purple-100' : 'bg-blue-50 text-blue-700 border-blue-100'}`}>{sch.level === 'area' ? 'เขต' : 'กลุ่ม'}</span>}
