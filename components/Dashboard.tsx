@@ -470,6 +470,31 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
       await toggleLikeAnnouncement(id, user.userid);
   };
 
+  const handleShareManual = async (item: Announcement) => {
+        const att = item.attachments?.find(a => a.type.includes('image'));
+        const coverImage = att ? getAttachmentImageUrl(att) : null;
+        
+        try {
+            const result = await shareAnnouncement(
+                item.id,
+                item.title,
+                item.content,
+                item.type,
+                item.date,
+                coverImage,
+                item.link || ''
+            );
+
+            if (result.success && result.method === 'copy') {
+                alert('คัดลอกลิงก์คู่มือแล้ว');
+            } else if (!result.success && result.method === 'error') {
+                alert('ไม่สามารถแชร์ได้ กรุณาลองใหม่');
+            }
+        } catch (err) {
+            console.error(err);
+        }
+  };
+
   // --- Helpers ---
   const getAreaInfo = (team: any): AreaStageInfo | null => {
       try { return JSON.parse(team.stageInfo); } catch { return null; }
@@ -796,7 +821,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
       {viewingAnnouncement && (
           <AnnouncementDetailModal 
               item={viewingAnnouncement} 
-              onClose={() => setViewingAnnouncement(null)} 
+              onClose={() => { setViewingAnnouncement(null); setSearchParams({}); }} // Clear params on close
           />
       )}
 
@@ -1237,7 +1262,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
                             <div 
                                 key={item.id} 
                                 onClick={() => setViewingAnnouncement(item)}
-                                className="flex items-start p-3 bg-white border border-gray-200 rounded-xl hover:border-green-400 transition-colors group cursor-pointer shadow-sm hover:shadow-md"
+                                className="flex items-start p-3 bg-white border border-gray-200 rounded-xl hover:border-green-400 transition-colors group cursor-pointer shadow-sm hover:shadow-md relative"
                             >
                                 <div className="p-2 bg-green-50 text-green-600 rounded-lg mr-3 group-hover:bg-green-100 border border-green-100 overflow-hidden shrink-0 w-10 h-10 flex items-center justify-center mt-0.5">
                                     {img ? (
@@ -1248,7 +1273,14 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
                                         <FileText className="w-5 h-5"/>
                                     )}
                                 </div>
-                                <div className="text-sm font-medium text-gray-700 group-hover:text-green-700 leading-snug">{item.title}</div>
+                                <div className="text-sm font-medium text-gray-700 group-hover:text-green-700 leading-snug flex-1">{item.title}</div>
+                                <button 
+                                    onClick={(e) => { e.stopPropagation(); handleShareManual(item); }}
+                                    className="absolute top-2 right-2 p-1.5 text-gray-400 hover:text-green-600 bg-white/80 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                                    title="แชร์คู่มือ"
+                                >
+                                    <Share2 className="w-4 h-4" />
+                                </button>
                             </div>
                         );
                     }) : <div className="text-center py-4 text-gray-400 text-sm">ไม่มีคู่มือ</div>}
