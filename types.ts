@@ -110,6 +110,15 @@ export interface Attachment {
   id?: string; // drive id
 }
 
+export interface Comment {
+  id: string;
+  userId: string;
+  userName: string;
+  userAvatar?: string;
+  content: string;
+  timestamp: string;
+}
+
 export interface Announcement {
   id: string;
   title: string;
@@ -121,6 +130,7 @@ export interface Announcement {
   clusterId?: string; // 'area' or ClusterID
   attachments?: Attachment[];
   likedBy?: string[]; // Array of UserIDs
+  comments?: Comment[]; // New: Array of comments
 }
 
 // Detailed Schedule Item for a Venue
@@ -230,3 +240,4 @@ export interface AppData {
   venues: Venue[];
   judges: Judge[];
 }
+
