@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { AppData, Announcement, User, AreaStageInfo, Team, Venue, Activity as ActivityType } from '../types';
-import { Users, School, Trophy, Megaphone, Plus, Book, Calendar, ChevronRight, FileText, Loader2, Star, Medal, TrendingUp, Activity, Timer, ArrowUpRight, Zap, Target, CheckCircle, PieChart as PieIcon, List, X, BarChart3, MapPin, Navigation, Handshake, Briefcase, UserX, GraduationCap, AlertTriangle, Clock, Heart, Share2, Download, Image as ImageIcon, ExternalLink, UserCheck, AlertOctagon } from 'lucide-react';
+import { Users, School, Trophy, Megaphone, Plus, Book, Calendar, ChevronRight, FileText, Loader2, Star, Medal, TrendingUp, Activity, Timer, ArrowUpRight, Zap, Target, CheckCircle, PieChart as PieIcon, List, X, BarChart3, MapPin, Navigation, Handshake, Briefcase, UserX, GraduationCap, AlertTriangle, Clock, Heart, Share2, Download, Image as ImageIcon, ExternalLink, UserCheck, AlertOctagon, PlayCircle } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import StatCard from './StatCard';
 import { useNavigate } from 'react-router-dom';
@@ -27,11 +27,31 @@ const getAttachmentImageUrl = (att: { url: string, id?: string }) => {
     return att.url;
 };
 
+// --- Helper for Video Embed ---
+const getVideoEmbedUrl = (url: string): string | null => {
+    if (!url) return null;
+    
+    // Loom (Convert share link to embed)
+    const loomMatch = url.match(/loom\.com\/share\/([a-f0-9]+)/);
+    if (loomMatch) {
+        return `https://www.loom.com/embed/${loomMatch[1]}`;
+    }
+
+    // YouTube (Convert watch/short link to embed)
+    const ytMatch = url.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/);
+    if (ytMatch) {
+        return `https://www.youtube.com/embed/${ytMatch[1]}`;
+    }
+
+    return null;
+};
+
 // --- Components ---
 
 const AnnouncementDetailModal = ({ item, onClose }: { item: Announcement, onClose: () => void }) => {
     const coverAttachment = item.attachments?.find(att => att.type.includes('image'));
     const coverImage = coverAttachment ? getAttachmentImageUrl(coverAttachment) : null;
+    const videoEmbedUrl = item.link ? getVideoEmbedUrl(item.link) : null;
     
     return (
         <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
@@ -55,7 +75,18 @@ const AnnouncementDetailModal = ({ item, onClose }: { item: Announcement, onClos
                 </div>
                 
                 <div className="overflow-y-auto p-0 flex-1">
-                    {coverImage && (
+                    {/* Priority: Video Embed > Image Cover */}
+                    {videoEmbedUrl ? (
+                        <div className="w-full aspect-video bg-black relative">
+                            <iframe 
+                                src={videoEmbedUrl} 
+                                className="w-full h-full" 
+                                frameBorder="0" 
+                                allowFullScreen 
+                                title="Video Player"
+                            ></iframe>
+                        </div>
+                    ) : coverImage && (
                         <div className="w-full h-64 bg-gray-100 relative">
                             <img src={coverImage} alt="Cover" className="w-full h-full object-cover" />
                         </div>
@@ -92,8 +123,8 @@ const AnnouncementDetailModal = ({ item, onClose }: { item: Announcement, onClos
                             </div>
                         )}
 
-                        {/* External Link */}
-                        {item.link && (
+                        {/* External Link (if not embedded video) */}
+                        {item.link && !videoEmbedUrl && (
                             <div className="pt-2">
                                 <a 
                                     href={item.link} 
@@ -105,6 +136,14 @@ const AnnouncementDetailModal = ({ item, onClose }: { item: Announcement, onClos
                                     <ExternalLink className="w-4 h-4 ml-2" />
                                 </a>
                             </div>
+                        )}
+                        {/* If video, provide direct link as well */}
+                        {videoEmbedUrl && (
+                             <div className="pt-2 text-center">
+                                <a href={item.link} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline flex items-center justify-center">
+                                    เปิดดูวิดีโอในหน้าต่างใหม่ <ExternalLink className="w-3 h-3 ml-1" />
+                                </a>
+                             </div>
                         )}
                     </div>
                 </div>
@@ -121,6 +160,9 @@ const NewsCard = ({ item, user, onLike, onClick }: { item: Announcement, user?: 
     const coverAttachment = item.attachments?.find(att => att.type.includes('image'));
     const coverImage = coverAttachment ? getAttachmentImageUrl(coverAttachment) : null;
     const hasAttachments = item.attachments && item.attachments.length > 0;
+    
+    // Check if it has a video link
+    const isVideo = item.link && getVideoEmbedUrl(item.link);
 
     const handleShare = async (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -144,12 +186,26 @@ const NewsCard = ({ item, user, onLike, onClick }: { item: Announcement, user?: 
             onClick={onClick}
             className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-all group cursor-pointer"
         >
-            {coverImage && (
+            {coverImage ? (
                 <div className="h-40 w-full overflow-hidden relative">
                     <img src={coverImage} alt="cover" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-60 group-hover:opacity-40 transition-opacity"></div>
+                    {isVideo && (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="w-12 h-12 bg-black/50 rounded-full flex items-center justify-center backdrop-blur-sm border-2 border-white/80">
+                                <PlayCircle className="w-8 h-8 text-white ml-1" />
+                            </div>
+                        </div>
+                    )}
                 </div>
-            )}
+            ) : isVideo ? (
+                <div className="h-40 w-full bg-slate-900 flex items-center justify-center relative overflow-hidden group-hover:bg-slate-800 transition-colors">
+                     <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]"></div>
+                     <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center backdrop-blur-md border border-white/20">
+                        <PlayCircle className="w-8 h-8 text-white ml-1" />
+                     </div>
+                </div>
+            ) : null}
             
             <div className="p-4">
                 <div className="flex justify-between items-start mb-2">
@@ -209,7 +265,7 @@ const NewsCard = ({ item, user, onLike, onClick }: { item: Announcement, user?: 
                         </button>
                     </div>
                     <span className="text-xs text-blue-600 font-bold hover:underline flex items-center">
-                        อ่านรายละเอียด &rarr;
+                        {isVideo ? 'ดูวิดีโอ' : 'อ่านรายละเอียด'} &rarr;
                     </span>
                 </div>
             </div>
@@ -1090,6 +1146,8 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
                     {manualList.length > 0 ? manualList.map(item => {
                         const att = item.attachments?.find(a => a.type.includes('image'));
                         const img = att ? getAttachmentImageUrl(att) : null;
+                        const isVideo = item.link && getVideoEmbedUrl(item.link);
+                        
                         return (
                             <div 
                                 key={item.id} 
@@ -1099,6 +1157,8 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
                                 <div className="p-2 bg-green-50 text-green-600 rounded-lg mr-3 group-hover:bg-green-100 border border-green-100 overflow-hidden shrink-0 w-10 h-10 flex items-center justify-center">
                                     {img ? (
                                         <img src={img} className="w-full h-full object-cover" alt="icon" />
+                                    ) : isVideo ? (
+                                        <PlayCircle className="w-5 h-5" />
                                     ) : (
                                         <FileText className="w-5 h-5"/>
                                     )}
@@ -1127,8 +1187,8 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
                                     </span>
                                     <span className="text-xs text-gray-700 truncate" title={item.name}>{item.name}</span>
                                 </div>
-                                <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded ml-2">
-                                    {item.count}
+                                <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded ml-2" title="จำนวนรายการที่ส่งครูเป็นกรรมการ">
+                                    ส่งครูช่วยตัดสิน {item.count} รายการ
                                 </span>
                             </div>
                         ))}
