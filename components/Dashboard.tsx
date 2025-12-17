@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { AppData, Announcement, User, AreaStageInfo, Team, Venue, Activity as ActivityType } from '../types';
-import { Users, School, Trophy, Megaphone, Plus, Book, Calendar, ChevronRight, FileText, Loader2, Star, Medal, TrendingUp, Activity, Timer, ArrowUpRight, Zap, Target, CheckCircle, PieChart as PieIcon, List, X, BarChart3, MapPin, Navigation, Handshake, Briefcase, UserX, GraduationCap, AlertTriangle, Clock, Heart, Share2, Download, Image as ImageIcon, ExternalLink, UserCheck, AlertOctagon, PlayCircle } from 'lucide-react';
+import { Users, School, Trophy, Megaphone, Plus, Book, Calendar, ChevronRight, FileText, Loader2, Star, Medal, TrendingUp, Activity, Timer, ArrowUpRight, Zap, Target, CheckCircle, PieChart as PieIcon, List, X, BarChart3, MapPin, Navigation, Handshake, Briefcase, UserX, GraduationCap, AlertTriangle, Clock, Heart, Share2, Download, Image as ImageIcon, ExternalLink, UserCheck, AlertOctagon, PlayCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import StatCard from './StatCard';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -46,12 +46,21 @@ const getVideoEmbedUrl = (url: string): string | null => {
     return null;
 };
 
+// --- Helper for User Avatar ---
+const getUserAvatar = (id: string) => `https://ui-avatars.com/api/?name=${id}&background=random&color=fff&size=64`;
+
 // --- Components ---
 
 const AnnouncementDetailModal = ({ item, onClose }: { item: Announcement, onClose: () => void }) => {
     const coverAttachment = item.attachments?.find(att => att.type.includes('image'));
     const coverImage = coverAttachment ? getAttachmentImageUrl(coverAttachment) : null;
     const videoEmbedUrl = item.link ? getVideoEmbedUrl(item.link) : null;
+    
+    // Liked By Logic
+    const likedBy = item.likedBy || [];
+    const totalLikes = likedBy.length;
+    // Get last 5 likers (reversed to show latest first)
+    const recentLikes = [...likedBy].reverse().slice(0, 5);
     
     return (
         <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
@@ -144,6 +153,27 @@ const AnnouncementDetailModal = ({ item, onClose }: { item: Announcement, onClos
                                     เปิดดูวิดีโอในหน้าต่างใหม่ <ExternalLink className="w-3 h-3 ml-1" />
                                 </a>
                              </div>
+                        )}
+
+                        {/* Liked By Section */}
+                        {totalLikes > 0 && (
+                            <div className="mt-4 pt-4 border-t border-gray-100 flex items-center gap-3">
+                                <div className="flex -space-x-2 overflow-hidden">
+                                    {recentLikes.map((uid, idx) => (
+                                        <img 
+                                            key={idx}
+                                            className="inline-block h-8 w-8 rounded-full ring-2 ring-white bg-gray-100"
+                                            src={getUserAvatar(uid)}
+                                            alt={uid}
+                                            title={uid}
+                                        />
+                                    ))}
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                    ถูกใจโดย <span className="font-bold text-gray-800">{totalLikes}</span> คน
+                                    {totalLikes > 0 && <span className="block text-[10px] text-gray-400">ล่าสุด: {recentLikes[0].length > 10 ? recentLikes[0].substring(0, 10) + '...' : recentLikes[0]}</span>}
+                                </div>
+                            </div>
                         )}
                     </div>
                 </div>
@@ -388,20 +418,23 @@ const DashboardSkeleton = () => (
 const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [viewLevel, setViewLevel] = useState<'cluster' | 'area'>('cluster');
+  const [viewLevel, setViewLevel] = useState<'cluster' | 'area'>('area');
   const [isLoading, setIsLoading] = useState(true); // Internal loading state for visual transition
   
   // Modal States
   const [showUnscoredModal, setShowUnscoredModal] = useState(false);
   const [showRankingModal, setShowRankingModal] = useState(false);
-  const [showIntegrityModal, setShowIntegrityModal] = useState(false); 
+  const [showIntegrityModal, setShowIntegrityModal] = useState(false);
+  const [showCooperationModal, setShowCooperationModal] = useState(false);
   
   // New: Viewing Item State for Modal
   const [viewingAnnouncement, setViewingAnnouncement] = useState<Announcement | null>(null);
 
   // News State
   const [newsList, setNewsList] = useState<Announcement[]>([]);
+  const [newsLimit, setNewsLimit] = useState(6);
   const [manualList, setManualList] = useState<Announcement[]>([]);
+  const [manualLimit, setManualLimit] = useState(5);
 
   // Simulate loading for Skeleton effect
   useEffect(() => {
@@ -652,8 +685,16 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
       return { ...myStats, rank };
   }, [user, leaderboards.allSchoolStats, data.schools]);
 
-  // 5. FEATURE 2: Data Integrity Logic (Missing Data Alerts)
+  // 5. FEATURE 2: Data Integrity Logic (Missing Data Alerts) - Updated
   const integrityStats = useMemo(() => {
+      // Generic structure for listing items in modal
+      interface ProblemItem {
+          id: string; 
+          title: string; 
+          subtitle: string;
+          issues: string[];
+      }
+
       // Only relevant for Admin/GroupAdmin or users checking their own scope
       let targetTeams = scopeTeams;
       if (user?.level === 'school_admin') {
@@ -666,7 +707,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
       let missingStudentsCount = 0;
       let missingJudgesCount = 0;
       let pendingStatus = 0;
-      const problemTeams: { team: Team, issues: string[] }[] = [];
+      const problemItems: ProblemItem[] = [];
 
       // Check Teams for Teachers/Students
       targetTeams.forEach(t => {
@@ -707,7 +748,13 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
           }
 
           if (issues.length > 0) {
-              problemTeams.push({ team: t, issues });
+              const schoolName = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId)?.SchoolName || t.schoolId;
+              problemItems.push({ 
+                  id: t.teamId, 
+                  title: t.teamName + ` (${activity.name})`, 
+                  subtitle: schoolName, 
+                  issues 
+              });
           }
       });
 
@@ -738,7 +785,13 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
 
           if (!hasJudge) {
               missingJudgesCount++;
-              // Add a generic problem entry for the activity itself (optional, or just count)
+              // Add a generic problem entry for the activity itself
+              problemItems.push({
+                  id: `miss_judge_${act.id}`,
+                  title: act.name,
+                  subtitle: 'กิจกรรม (Activity)',
+                  issues: ['ยังไม่มีกรรมการตัดสิน']
+              });
           }
       });
 
@@ -748,12 +801,13 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
           missingJudgesCount, 
           pendingStatus, 
           totalIssues: missingTeachersCount + missingStudentsCount + missingJudgesCount, 
-          problemTeams 
+          problemItems 
       };
   }, [scopeTeams, data.activities, data.judges, viewLevel, user, data.schools]);
 
   // 6. Judge Cooperation Stats (Updated: Separate by Level & Count Activities)
-  const judgeCooperation = useMemo(() => {
+  // And full list for Modal
+  const { judgeCooperationStats, fullJudgeCooperation } = useMemo(() => {
       const stats: Record<string, { name: string, count: number }> = {};
       
       data.judges.forEach(j => {
@@ -772,9 +826,12 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
           stats[schoolName].count++;
       });
 
-      return Object.values(stats)
-          .sort((a, b) => b.count - a.count)
-          .slice(0, 5); // Top 5 Cooperative Schools
+      const fullList = Object.values(stats).sort((a, b) => b.count - a.count);
+      
+      return {
+          fullJudgeCooperation: fullList,
+          judgeCooperationStats: fullList.slice(0, 5) // Top 5 for widget
+      };
   }, [data.judges, viewLevel]);
 
   // 7. Unscored Teams Logic
@@ -802,7 +859,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
           const dateA = a.lastEditedAt ? new Date(a.lastEditedAt).getTime() : 0;
           const dateB = b.lastEditedAt ? new Date(b.lastEditedAt).getTime() : 0;
           return dateB - dateA;
-      }).slice(0, 6);
+      }).slice(0, 3); // CHANGED FROM 6 TO 3
   }, [scopeTeams, viewLevel]);
 
   // 9. Venue Highlights
@@ -1192,15 +1249,18 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
              )}
 
              {/* FEATURE 5: Judge Cooperation Widget (Filtered by Scope) */}
-             {judgeCooperation.length > 0 && (
+             {judgeCooperationStats.length > 0 && (
                  <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mt-6">
                     <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-indigo-50">
                         <h3 className="text-sm font-bold text-indigo-900 flex items-center">
                             <Handshake className="w-4 h-4 mr-2" /> ความร่วมมือ ({viewLevel === 'area' ? 'ระดับเขต' : 'ระดับกลุ่ม'})
                         </h3>
+                        <button onClick={() => setShowCooperationModal(true)} className="text-xs bg-white text-indigo-600 px-2 py-1 rounded border border-indigo-200 hover:bg-indigo-50">
+                            ดูทั้งหมด
+                        </button>
                     </div>
                     <div className="divide-y divide-gray-50">
-                        {judgeCooperation.map((item, idx) => (
+                        {judgeCooperationStats.map((item, idx) => (
                             <div key={idx} className="p-3 flex justify-between items-center hover:bg-gray-50">
                                 <div className="flex items-center min-w-0">
                                     <span className={`w-5 h-5 flex items-center justify-center rounded-full text-[10px] font-bold mr-2 shrink-0 ${idx < 3 ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-500'}`}>
@@ -1219,7 +1279,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
           </div>
       </div>
 
-      {/* NEW SECTION: News & Manuals (Full Width) */}
+      {/* NEW SECTION: News & Manuals (Full Width with Load More) */}
       <div className="mt-8 border-t border-gray-200 pt-8">
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
              {/* News Section (3 cols wide on large screens) */}
@@ -1236,15 +1296,28 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                    {newsList.length > 0 ? (
-                        newsList.map(item => (
-                            <NewsCard key={item.id} item={item} user={user} onLike={handleLikeNews} onClick={() => setViewingAnnouncement(item)} />
-                        ))
+                        <>
+                            {newsList.slice(0, newsLimit).map(item => (
+                                <NewsCard key={item.id} item={item} user={user} onLike={handleLikeNews} onClick={() => setViewingAnnouncement(item)} />
+                            ))}
+                        </>
                    ) : (
                         <div className="col-span-full text-center py-10 text-gray-400 text-sm border-dashed border-2 rounded-xl bg-gray-50">
                             ยังไม่มีข่าวประชาสัมพันธ์
                         </div>
                    )}
                 </div>
+                {/* Show More Button for News */}
+                {newsList.length > newsLimit && (
+                    <div className="text-center pt-2">
+                        <button 
+                            onClick={() => setNewsLimit(prev => prev + 6)}
+                            className="px-6 py-2 bg-white border border-gray-300 rounded-full text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-800 transition-colors shadow-sm flex items-center justify-center mx-auto"
+                        >
+                            ดูข่าวเก่าเพิ่มเติม <ChevronDown className="w-4 h-4 ml-1" />
+                        </button>
+                    </div>
+                )}
              </div>
 
              {/* Manuals Section (1 col wide on large screens) */}
@@ -1253,38 +1326,46 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
                      <Book className="w-5 h-5 mr-2 text-green-600" /> คู่มือการใช้งาน
                 </h2>
                 <div className="flex flex-col gap-3">
-                    {manualList.length > 0 ? manualList.map(item => {
-                        const att = item.attachments?.find(a => a.type.includes('image'));
-                        const img = att ? getAttachmentImageUrl(att) : null;
-                        const isVideo = item.link && getVideoEmbedUrl(item.link);
-                        
-                        return (
-                            <div 
-                                key={item.id} 
-                                onClick={() => setViewingAnnouncement(item)}
-                                className="flex items-start p-3 bg-white border border-gray-200 rounded-xl hover:border-green-400 transition-colors group cursor-pointer shadow-sm hover:shadow-md relative"
-                            >
-                                <div className="p-2 bg-green-50 text-green-600 rounded-lg mr-3 group-hover:bg-green-100 border border-green-100 overflow-hidden shrink-0 w-10 h-10 flex items-center justify-center mt-0.5">
-                                    {img ? (
-                                        <img src={img} className="w-full h-full object-cover" alt="icon" />
-                                    ) : isVideo ? (
-                                        <PlayCircle className="w-5 h-5" />
-                                    ) : (
-                                        <FileText className="w-5 h-5"/>
-                                    )}
-                                </div>
-                                <div className="text-sm font-medium text-gray-700 group-hover:text-green-700 leading-snug flex-1">{item.title}</div>
-                                <button 
-                                    onClick={(e) => { e.stopPropagation(); handleShareManual(item); }}
-                                    className="absolute top-2 right-2 p-1.5 text-gray-400 hover:text-green-600 bg-white/80 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                                    title="แชร์คู่มือ"
-                                >
-                                    <Share2 className="w-4 h-4" />
-                                </button>
-                            </div>
-                        );
-                    }) : <div className="text-center py-4 text-gray-400 text-sm">ไม่มีคู่มือ</div>}
+                    {manualList.length > 0 ? (
+                        <>
+                            {manualList.slice(0, manualLimit).map(item => {
+                                const att = item.attachments?.find(a => a.type.includes('image'));
+                                const img = att ? getAttachmentImageUrl(att) : null;
+                                const isVideo = item.link && getVideoEmbedUrl(item.link);
+                                
+                                return (
+                                    <div 
+                                        key={item.id} 
+                                        onClick={() => setViewingAnnouncement(item)}
+                                        className="flex items-start p-3 bg-white border border-gray-200 rounded-xl hover:border-green-400 transition-colors group cursor-pointer shadow-sm hover:shadow-md"
+                                    >
+                                        <div className="p-2 bg-green-50 text-green-600 rounded-lg mr-3 group-hover:bg-green-100 border border-green-100 overflow-hidden shrink-0 w-10 h-10 flex items-center justify-center mt-0.5">
+                                            {img ? (
+                                                <img src={img} className="w-full h-full object-cover" alt="icon" />
+                                            ) : isVideo ? (
+                                                <PlayCircle className="w-5 h-5" />
+                                            ) : (
+                                                <FileText className="w-5 h-5"/>
+                                            )}
+                                        </div>
+                                        <div className="text-sm font-medium text-gray-700 group-hover:text-green-700 leading-snug">{item.title}</div>
+                                    </div>
+                                );
+                            })}
+                        </>
+                    ) : <div className="text-center py-4 text-gray-400 text-sm">ไม่มีคู่มือ</div>}
                 </div>
+                {/* Show More Button for Manuals */}
+                {manualList.length > manualLimit && (
+                    <div className="text-center pt-1">
+                        <button 
+                            onClick={() => setManualLimit(prev => prev + 5)}
+                            className="text-xs font-medium text-gray-500 hover:text-green-600 flex items-center justify-center mx-auto"
+                        >
+                            ดูคู่มือเพิ่มเติม <ChevronDown className="w-3 h-3 ml-1" />
+                        </button>
+                    </div>
+                )}
              </div>
           </div>
       </div>
@@ -1303,49 +1384,88 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
                       <button onClick={() => setShowIntegrityModal(false)} className="p-1.5 hover:bg-red-100 rounded-full text-red-700"><X className="w-5 h-5"/></button>
                   </div>
                   <div className="flex-1 overflow-y-auto p-0">
-                      {integrityStats.problemTeams.length > 0 ? (
+                      {integrityStats.problemItems.length > 0 ? (
                           <table className="w-full text-sm">
                               <thead className="bg-gray-50 text-gray-500 font-medium border-b border-gray-100 sticky top-0 shadow-sm">
                                   <tr>
-                                      <th className="px-4 py-3 text-left">ทีม</th>
-                                      <th className="px-4 py-3 text-left">โรงเรียน</th>
+                                      <th className="px-4 py-3 text-left">รายการ / ทีม</th>
+                                      <th className="px-4 py-3 text-left">รายละเอียด</th>
                                       <th className="px-4 py-3 text-left w-40">ปัญหาที่พบ</th>
                                   </tr>
                               </thead>
                               <tbody className="divide-y divide-gray-50">
-                                  {integrityStats.problemTeams.map((item) => {
-                                      const schoolName = data.schools.find(s => s.SchoolID === item.team.schoolId || s.SchoolName === item.team.schoolId)?.SchoolName || item.team.schoolId;
-                                      return (
-                                          <tr key={item.team.teamId} className="hover:bg-red-50/30 transition-colors">
-                                              <td className="px-4 py-3 align-top">
-                                                  <div className="font-medium text-gray-900">{item.team.teamName}</div>
-                                                  <div className="text-xs text-gray-500 mt-0.5">{item.team.activityId}</div>
-                                              </td>
-                                              <td className="px-4 py-3 text-gray-600 align-top">{schoolName}</td>
-                                              <td className="px-4 py-3 align-top">
-                                                  <div className="flex flex-wrap gap-1">
-                                                      {item.issues.map((issue, idx) => (
-                                                          <span key={idx} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-red-100 text-red-700 border border-red-200">
-                                                              {issue}
-                                                          </span>
-                                                      ))}
-                                                  </div>
-                                              </td>
-                                          </tr>
-                                      );
-                                  })}
+                                  {integrityStats.problemItems.map((item) => (
+                                      <tr key={item.id} className="hover:bg-red-50/30 transition-colors">
+                                          <td className="px-4 py-3 align-top">
+                                              <div className="font-medium text-gray-900">{item.title}</div>
+                                          </td>
+                                          <td className="px-4 py-3 text-gray-600 align-top">{item.subtitle}</td>
+                                          <td className="px-4 py-3 align-top">
+                                              <div className="flex flex-wrap gap-1">
+                                                  {item.issues.map((issue, idx) => (
+                                                      <span key={idx} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-red-100 text-red-700 border border-red-200">
+                                                          {issue}
+                                                      </span>
+                                                  ))}
+                                              </div>
+                                          </td>
+                                      </tr>
+                                  ))}
                               </tbody>
                           </table>
                       ) : (
                           <div className="p-10 text-center text-gray-400 flex flex-col items-center">
                               <CheckCircle className="w-16 h-16 text-green-500 mb-3 opacity-50" />
                               <p className="font-medium text-gray-600">ยอดเยี่ยม! ข้อมูลครบถ้วนสมบูรณ์</p>
-                              <p className="text-xs mt-1">ไม่พบทีมที่มีปัญหาขาดครูหรือนักเรียน</p>
+                              <p className="text-xs mt-1">ไม่พบทีมที่มีปัญหาขาดครูหรือนักเรียน และมีกรรมการครบถ้วน</p>
                           </div>
                       )}
                   </div>
                   <div className="p-3 border-t border-gray-100 bg-gray-50 text-right text-xs text-gray-500">
                       พบปัญหาทั้งหมด {integrityStats.totalIssues} รายการ
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* Modal: Full Cooperation List */}
+      {showCooperationModal && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+              <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[80vh]">
+                  <div className="p-4 border-b border-indigo-100 flex justify-between items-center bg-indigo-50">
+                      <div>
+                          <h3 className="font-bold text-indigo-900 flex items-center">
+                              <Handshake className="w-5 h-5 mr-2" /> ความร่วมมือ ({viewLevel === 'area' ? 'ระดับเขต' : 'ระดับกลุ่ม'})
+                          </h3>
+                          <p className="text-xs text-indigo-600">รายการโรงเรียนที่ส่งบุคลากรช่วยตัดสิน</p>
+                      </div>
+                      <button onClick={() => setShowCooperationModal(false)} className="p-1.5 hover:bg-indigo-100 rounded-full text-indigo-700"><X className="w-5 h-5"/></button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-0">
+                      {fullJudgeCooperation.length > 0 ? (
+                          <div className="divide-y divide-gray-50">
+                              {fullJudgeCooperation.map((item, idx) => (
+                                  <div key={idx} className="p-3 flex justify-between items-center hover:bg-gray-50 px-6">
+                                      <div className="flex items-center min-w-0">
+                                          <span className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold mr-3 shrink-0 ${idx < 3 ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-500'}`}>
+                                              {idx + 1}
+                                          </span>
+                                          <span className="text-sm text-gray-800 font-medium truncate">{item.name}</span>
+                                      </div>
+                                      <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded ml-2">
+                                          {item.count} รายการ
+                                      </span>
+                                  </div>
+                              ))}
+                          </div>
+                      ) : (
+                          <div className="p-10 text-center text-gray-400">
+                              <p>ยังไม่มีข้อมูลความร่วมมือ</p>
+                          </div>
+                      )}
+                  </div>
+                  <div className="p-3 border-t border-gray-100 bg-gray-50 text-right text-xs text-gray-500">
+                      รวม {fullJudgeCooperation.length} โรงเรียน
                   </div>
               </div>
           </div>
