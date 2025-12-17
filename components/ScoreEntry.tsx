@@ -1,9 +1,9 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { AppData, User, Team } from '../types';
-import { updateTeamResult } from '../services/api';
+import { AppData, User, Team, AreaStageInfo } from '../types';
+import { updateTeamResult, updateAreaResult } from '../services/api';
 import { shareScoreResult, shareTop3Result } from '../services/liff';
-import { Save, Filter, AlertCircle, CheckCircle, Lock, Trophy, Search, ChevronRight, Share2, AlertTriangle, Calculator, X, Copy, PieChart, Check, ChevronDown, Flag, History, Loader2, ListChecks, Edit2, Crown, LayoutGrid, AlertOctagon, Wand2, Eye, EyeOff, ArrowDownWideNarrow, GraduationCap, Printer, School } from 'lucide-react';
+import { Save, Filter, AlertCircle, CheckCircle, Lock, Trophy, Search, ChevronRight, Share2, AlertTriangle, Calculator, X, Copy, PieChart, Check, ChevronDown, Flag, History, Loader2, ListChecks, Edit2, Crown, LayoutGrid, AlertOctagon, Wand2, Eye, EyeOff, ArrowDownWideNarrow, GraduationCap, Printer, School, FileBadge } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import SearchableSelect from './SearchableSelect'; // Import shared component
 
@@ -38,6 +38,7 @@ interface ConfirmModalProps {
     batchItems?: BatchItem[];
     onConfirm: () => void;
     onCancel: () => void;
+    viewScope?: 'cluster' | 'area';
 }
 
 interface ToastProps {
@@ -74,6 +75,14 @@ const parseLevels = (levelStr: string) => {
         return Array.isArray(parsed) ? parsed.join(', ') : levelStr;
     } catch {
         return levelStr;
+    }
+};
+
+const getAreaInfo = (team: Team): AreaStageInfo | null => {
+    try {
+        return JSON.parse(team.stageInfo);
+    } catch {
+        return null;
     }
 };
 
@@ -124,7 +133,7 @@ const ConfirmModal: React.FC<ConfirmModalProps> = (props) => {
             <div className={`bg-white rounded-xl shadow-xl w-full p-6 space-y-4 flex flex-col max-h-[90vh] ${props.type === 'batch' ? 'max-w-4xl' : 'max-w-sm'}`}>
                 <div className="flex items-center text-amber-500 mb-2 shrink-0">
                     <AlertTriangle className="w-6 h-6 mr-2" />
-                    <h3 className="text-lg font-bold text-gray-800">ยืนยันการบันทึก</h3>
+                    <h3 className="text-lg font-bold text-gray-800">ยืนยันการบันทึก ({props.viewScope === 'area' ? 'ระดับเขต' : 'ระดับกลุ่ม'})</h3>
                 </div>
                 
                 {props.type === 'single' ? (
@@ -143,12 +152,14 @@ const ConfirmModal: React.FC<ConfirmModalProps> = (props) => {
                                 <span className="text-gray-500">ลำดับที่:</span>
                                 <span className="font-medium text-gray-900">{props.newRank || '-'}</span>
                             </div>
-                            <div className="flex justify-between">
-                                <span className="text-gray-500">ตัวแทน (Q):</span>
-                                <span className={`font-medium ${props.newFlag === 'TRUE' ? 'text-green-600' : 'text-gray-400'}`}>
-                                    {props.newFlag === 'TRUE' ? 'ใช่' : 'ไม่ใช่'}
-                                </span>
-                            </div>
+                            {props.viewScope === 'cluster' && (
+                                <div className="flex justify-between">
+                                    <span className="text-gray-500">ตัวแทน (Q):</span>
+                                    <span className={`font-medium ${props.newFlag === 'TRUE' ? 'text-green-600' : 'text-gray-400'}`}>
+                                        {props.newFlag === 'TRUE' ? 'ใช่' : 'ไม่ใช่'}
+                                    </span>
+                                </div>
+                            )}
                         </div>
                     </div>
                 ) : (
@@ -172,7 +183,7 @@ const ConfirmModal: React.FC<ConfirmModalProps> = (props) => {
                                          <th className="px-3 py-2 text-center font-medium text-gray-500 bg-gray-50 w-24">คะแนน</th>
                                          <th className="px-3 py-2 text-center font-medium text-gray-500 bg-gray-50 w-24">Rank</th>
                                          <th className="px-3 py-2 text-center font-medium text-gray-500 bg-gray-50 w-32">Medal</th>
-                                         <th className="px-3 py-2 text-center font-medium text-gray-500 bg-gray-50 w-20">Q</th>
+                                         {props.viewScope === 'cluster' && <th className="px-3 py-2 text-center font-medium text-gray-500 bg-gray-50 w-20">Q</th>}
                                      </tr>
                                  </thead>
                                  <tbody className="divide-y divide-gray-200 bg-white">
@@ -189,11 +200,13 @@ const ConfirmModal: React.FC<ConfirmModalProps> = (props) => {
                                                  </td>
                                                  <td className="px-3 py-2 text-center text-gray-600">{item.rank || '-'}</td>
                                                  <td className="px-3 py-2 text-center text-gray-600">{displayMedal}</td>
-                                                 <td className="px-3 py-2 text-center">
-                                                    {String(item.flag).toUpperCase() === 'TRUE' ? (
-                                                        <div className="flex justify-center"><Check className="w-4 h-4 text-green-600" /></div>
-                                                    ) : <span className="text-gray-300">-</span>}
-                                                 </td>
+                                                 {props.viewScope === 'cluster' && (
+                                                     <td className="px-3 py-2 text-center">
+                                                        {String(item.flag).toUpperCase() === 'TRUE' ? (
+                                                            <div className="flex justify-center"><Check className="w-4 h-4 text-green-600" /></div>
+                                                        ) : <span className="text-gray-300">-</span>}
+                                                     </td>
+                                                 )}
                                              </tr>
                                          );
                                      })}
@@ -216,6 +229,10 @@ const ConfirmModal: React.FC<ConfirmModalProps> = (props) => {
 
 const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => {
   const navigate = useNavigate();
+  
+  // State for Scope (Cluster vs Area)
+  const [viewScope, setViewScope] = useState<'cluster' | 'area'>('cluster');
+
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [selectedActivityId, setSelectedActivityId] = useState<string>('');
   const [selectedClusterFilter, setSelectedClusterFilter] = useState<string>(''); // For Admin/Area filtering
@@ -230,11 +247,16 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
   const [showMissingRepList, setShowMissingRepList] = useState(false);
   const [showUnscoredOnly, setShowUnscoredOnly] = useState(false);
 
-  // New: Representative Modal State
+  // New: Modal States
   const [repModalData, setRepModalData] = useState<{ schoolName: string; teams: Team[] } | null>(null);
+  const [medalDetailData, setMedalDetailData] = useState<{ schoolName: string, medal: string, teams: Team[] } | null>(null);
 
   // References for keyboard navigation
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  const currentActivity = useMemo(() => {
+      return data.activities.find(a => a.id === selectedActivityId);
+  }, [data.activities, selectedActivityId]);
 
   const showToast = (message: string, type: 'success' | 'error' | 'info') => {
       setToast({ message, type, isVisible: true });
@@ -245,6 +267,9 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
   const allowedRoles = ['admin', 'area', 'group_admin', 'score'];
   const canFilterCluster = role === 'admin' || role === 'area';
   
+  // Permissions for Area Score Entry: Admin, Area, Score (Group Admin usually manages Cluster only)
+  const canScoreArea = ['admin', 'area', 'score'].includes(role || '');
+
   if (!user || !allowedRoles.includes(role || '')) {
       return (
         <div className="flex flex-col items-center justify-center h-64 text-gray-500">
@@ -285,7 +310,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
   }, [data.activities, data.teams, data.schools, role, user]);
 
   // Representative Stats Calculation & School Stats
-  const { repStats, schoolStats } = useMemo(() => {
+  const { repStats, schoolStats, representativesList } = useMemo(() => {
       // 1. Rep Stats (Missing)
       const activityIds = new Set(availableActivities.map(a => a.id));
       const activitiesWithRep = new Set(
@@ -299,6 +324,9 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       // 2. School Stats (Medals & Reps)
       const schoolMap: Record<string, { name: string, gold: number, silver: number, bronze: number, repCount: number, repTeams: Team[] }> = {};
       
+      // 3. Representatives List (For new table)
+      const repList: { activity: string, category: string, school: string, teamName: string }[] = [];
+
       allAuthorizedTeams.forEach(t => {
           const schoolName = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId)?.SchoolName || t.schoolId;
           
@@ -314,10 +342,19 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
           if (String(t.flag).toUpperCase() === 'TRUE' && String(t.rank) === '1') {
               schoolMap[schoolName].repCount++;
               schoolMap[schoolName].repTeams.push(t);
+              
+              const act = data.activities.find(a => a.id === t.activityId);
+              repList.push({
+                  activity: act?.name || t.activityId,
+                  category: act?.category || 'General',
+                  school: schoolName,
+                  teamName: t.teamName
+              });
           }
       });
 
       const sortedSchoolStats = Object.values(schoolMap).sort((a, b) => b.repCount - a.repCount || b.gold - a.gold);
+      repList.sort((a, b) => a.category.localeCompare(b.category) || a.activity.localeCompare(b.activity));
 
       return {
           repStats: {
@@ -326,22 +363,44 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
               countMissing: missingActivities.length,
               missingList: missingActivities
           },
-          schoolStats: sortedSchoolStats
+          schoolStats: sortedSchoolStats,
+          representativesList: repList
       };
-  }, [availableActivities, allAuthorizedTeams, data.schools]);
+  }, [availableActivities, allAuthorizedTeams, data.schools, data.activities]);
 
 
   // Global Dashboard Stats
   const globalStats = useMemo(() => {
-      const total = allAuthorizedTeams.length;
-      const scored = allAuthorizedTeams.filter(t => t.score > 0).length;
+      // Filter logic based on View Scope for stats
+      const targetTeams = viewScope === 'area' 
+        ? allAuthorizedTeams.filter(t => t.stageStatus === 'Area' || t.flag === 'TRUE')
+        : allAuthorizedTeams;
+
+      const total = targetTeams.length;
+      let scored = 0;
+      let gold = 0;
+      let silver = 0;
+      let bronze = 0;
+
+      targetTeams.forEach(t => {
+          let score = 0;
+          if (viewScope === 'area') {
+              const info = getAreaInfo(t);
+              score = info?.score || 0;
+          } else {
+              score = t.score;
+          }
+
+          if (score > 0) scored++;
+          if (score >= 80) gold++;
+          else if (score >= 70) silver++;
+          else if (score >= 60) bronze++;
+      });
+
       const pending = total - scored;
-      const gold = allAuthorizedTeams.filter(t => t.score >= 80).length;
-      const silver = allAuthorizedTeams.filter(t => t.score >= 70 && t.score < 80).length;
-      const bronze = allAuthorizedTeams.filter(t => t.score >= 60 && t.score < 70).length;
       const percent = total > 0 ? Math.round((scored / total) * 100) : 0;
       return { total, scored, pending, percent, gold, silver, bronze };
-  }, [allAuthorizedTeams]);
+  }, [allAuthorizedTeams, viewScope]);
 
   // Activity Specific Filtering
   const filteredActivities = useMemo(() => {
@@ -349,14 +408,15 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       return availableActivities.filter(a => a.category === selectedCategory);
   }, [selectedCategory, availableActivities]);
 
-  const currentActivity = useMemo(() => {
-      return availableActivities.find(a => a.id === selectedActivityId);
-  }, [selectedActivityId, availableActivities]);
-
   const filteredTeams = useMemo(() => {
       if (!selectedActivityId) return [];
       let teams = allAuthorizedTeams.filter(t => t.activityId === selectedActivityId);
       
+      // If Area Scope, only show qualified teams or teams moved to Area stage
+      if (viewScope === 'area') {
+          teams = teams.filter(t => t.stageStatus === 'Area' || String(t.flag).toUpperCase() === 'TRUE');
+      }
+
       // Filter by Cluster (For Admin/Area)
       if (canFilterCluster && selectedClusterFilter) {
           teams = teams.filter(t => {
@@ -378,21 +438,37 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
         teams = teams.filter(t => {
             const edit = edits[t.teamId];
             if (edit) return parseFloat(edit.score) <= 0;
-            return t.score <= 0;
+            // Check based on scope
+            if (viewScope === 'area') {
+                const info = getAreaInfo(t);
+                return (info?.score || 0) <= 0;
+            } else {
+                return t.score <= 0;
+            }
         });
       }
 
-      return teams.sort((a, b) => b.score - a.score); 
-  }, [allAuthorizedTeams, selectedActivityId, searchTerm, showUnscoredOnly, edits, selectedClusterFilter, canFilterCluster, data.schools]);
+      return teams.sort((a, b) => {
+          // Sort logic
+          const scoreA = viewScope === 'area' ? (getAreaInfo(a)?.score || 0) : a.score;
+          const scoreB = viewScope === 'area' ? (getAreaInfo(b)?.score || 0) : b.score;
+          return scoreB - scoreA;
+      }); 
+  }, [allAuthorizedTeams, selectedActivityId, searchTerm, showUnscoredOnly, edits, selectedClusterFilter, canFilterCluster, data.schools, viewScope]);
 
   // Activity Progress
   const activityProgress = useMemo(() => {
-      // Base calculation on current filters (so if admin selects a cluster, stats reflect that cluster)
       const total = filteredTeams.length;
-      const recorded = filteredTeams.filter(t => t.score > 0).length;
+      const recorded = filteredTeams.filter(t => {
+          if (viewScope === 'area') {
+              const info = getAreaInfo(t);
+              return (info?.score || 0) > 0;
+          }
+          return t.score > 0;
+      }).length;
       const percent = total > 0 ? Math.round((recorded / total) * 100) : 0;
       return { total, recorded, percent };
-  }, [filteredTeams]);
+  }, [filteredTeams, viewScope]);
 
   // --- Handlers ---
 
@@ -401,11 +477,30 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
           const team = data.teams.find(t => t.teamId === teamId);
           if (!team) return prev;
 
+          let baseScore = '';
+          let baseRank = '';
+          let baseMedal = '';
+          let baseFlag = '';
+
+          if (viewScope === 'area') {
+              const info = getAreaInfo(team);
+              baseScore = String(info?.score && info.score > 0 ? info.score : '');
+              baseRank = String(info?.rank || '');
+              baseMedal = String(info?.medal || '');
+              // Flag usually not used in Area unless going to National
+          } else {
+              baseScore = String(team.score > 0 ? team.score : '');
+              baseRank = String(team.rank || '');
+              baseMedal = String(team.medalOverride || '');
+              baseFlag = String(team.flag || '');
+          }
+
+          const currentEdit = prev[teamId];
           const baseState = {
-              score: prev[teamId]?.score ?? String(team.score > 0 ? team.score : ''),
-              rank: prev[teamId]?.rank ?? String(team.rank || ''),
-              medal: prev[teamId]?.medal ?? String(team.medalOverride || ''),
-              flag: prev[teamId]?.flag ?? String(team.flag || ''),
+              score: currentEdit?.score ?? baseScore,
+              rank: currentEdit?.rank ?? baseRank,
+              medal: currentEdit?.medal ?? baseMedal,
+              flag: currentEdit?.flag ?? baseFlag,
           };
 
           const newState = { ...baseState, [field]: value, isDirty: true };
@@ -439,20 +534,26 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
     const teamsByCluster: Record<string, typeof filteredTeams> = {};
     
     filteredTeams.forEach(team => {
-        const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
-        const clusterId = school?.SchoolCluster || 'Unassigned';
-        if (!teamsByCluster[clusterId]) teamsByCluster[clusterId] = [];
-        teamsByCluster[clusterId].push(team);
+        // If Area mode, group all together or by some other logic? Usually Area is one big group.
+        const groupKey = viewScope === 'area' ? 'Area' : (data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId)?.SchoolCluster || 'Unassigned');
+        
+        if (!teamsByCluster[groupKey]) teamsByCluster[groupKey] = [];
+        teamsByCluster[groupKey].push(team);
     });
 
     const newEdits: typeof edits = {};
 
-    // 2. Process each cluster independently
+    // 2. Process each group
     Object.values(teamsByCluster).forEach(clusterTeams => {
         // Prepare score list
         const teamsWithScores = clusterTeams.map(team => {
             const edit = edits[team.teamId];
-            const score = edit?.score ? parseFloat(edit.score) : team.score;
+            let score = 0;
+            if (edit?.score) {
+                score = parseFloat(edit.score);
+            } else {
+                score = viewScope === 'area' ? (getAreaInfo(team)?.score || 0) : team.score;
+            }
             return { ...team, currentScore: isNaN(score) ? 0 : score };
         });
 
@@ -472,15 +573,25 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                 const rankStr = String(currentRank);
                 
                 const prevEdit = edits[teamId];
-                const baseTeam = data.teams.find(t => t.teamId === teamId);
+                let currentSavedRank = '';
+                if (viewScope === 'area') {
+                    currentSavedRank = String(getAreaInfo(teamsWithScores[i])?.rank || '');
+                } else {
+                    currentSavedRank = String(teamsWithScores[i].rank || '');
+                }
                 
                 // Add to edits if changed
-                if (prevEdit?.rank !== rankStr && baseTeam?.rank !== rankStr) {
+                if (prevEdit?.rank !== rankStr && currentSavedRank !== rankStr) {
+                    // Reconstruct base edit state if not exists
+                    let baseScore = viewScope === 'area' ? (getAreaInfo(teamsWithScores[i])?.score || 0) : teamsWithScores[i].score;
+                    let baseMedal = viewScope === 'area' ? (getAreaInfo(teamsWithScores[i])?.medal || '') : teamsWithScores[i].medalOverride;
+                    let baseFlag = String(teamsWithScores[i].flag || '');
+
                     newEdits[teamId] = {
-                        score: prevEdit?.score ?? String(baseTeam?.score > 0 ? baseTeam.score : ''),
+                        score: prevEdit?.score ?? String(baseScore > 0 ? baseScore : ''),
                         rank: rankStr,
-                        medal: prevEdit?.medal ?? String(baseTeam?.medalOverride || ''),
-                        flag: prevEdit?.flag ?? String(baseTeam?.flag || ''),
+                        medal: prevEdit?.medal ?? String(baseMedal || ''),
+                        flag: prevEdit?.flag ?? baseFlag,
                         isDirty: true
                     };
                 }
@@ -489,7 +600,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
     });
 
     setEdits(prev => ({ ...prev, ...newEdits }));
-    showToast('คำนวณลำดับ (แยกตามกลุ่มเครือข่าย) เรียบร้อยแล้ว (กรุณากดบันทึก)', 'info');
+    showToast(`คำนวณลำดับ (ระดับ${viewScope === 'area' ? 'เขต' : 'กลุ่ม'}) เรียบร้อยแล้ว (กรุณากดบันทึก)`, 'info');
   };
 
   const initiateSave = (teamId: string) => {
@@ -517,8 +628,15 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
         const finalScore = parseFloat(edit.score) || 0;
         const finalRank = edit.rank === 'undefined' ? '' : edit.rank;
         const finalMedal = edit.medal === 'undefined' ? '' : edit.medal;
-        const finalFlag = edit.flag === 'undefined' ? '' : edit.flag;
-        return await updateTeamResult(teamId, finalScore, finalRank, finalMedal, finalFlag);
+        
+        if (viewScope === 'area') {
+            // Area Update
+            return await updateAreaResult(teamId, finalScore, finalRank, finalMedal);
+        } else {
+            // Cluster Update
+            const finalFlag = edit.flag === 'undefined' ? '' : edit.flag;
+            return await updateTeamResult(teamId, finalScore, finalRank, finalMedal, finalFlag);
+        }
   };
 
   const handleConfirmSave = async () => {
@@ -585,6 +703,8 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       }
   };
 
+  // --- Printing & Sharing ---
+
   const handleShare = async (team: Team) => {
      const activityName = data.activities.find(a => a.id === team.activityId)?.name || team.activityId;
      const schoolName = data.schools.find(s => s.SchoolID === team.schoolId)?.SchoolName || team.schoolId;
@@ -606,15 +726,15 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
     const currentActivityName = availableActivities.find(a => a.id === selectedActivityId)?.name || selectedActivityId;
     
     const sorted = [...filteredTeams].sort((a, b) => {
-         const scoreA = edits[a.teamId]?.score ? parseFloat(edits[a.teamId].score) : a.score;
-         const scoreB = edits[b.teamId]?.score ? parseFloat(edits[b.teamId].score) : b.score;
+         const scoreA = edits[a.teamId]?.score ? parseFloat(edits[a.teamId].score) : (viewScope === 'area' ? (getAreaInfo(a)?.score || 0) : a.score);
+         const scoreB = edits[b.teamId]?.score ? parseFloat(edits[b.teamId].score) : (viewScope === 'area' ? (getAreaInfo(b)?.score || 0) : b.score);
          return scoreB - scoreA;
     });
 
     const top3 = sorted.slice(0, 3).map((t, index) => {
         const edit = edits[t.teamId];
-        const score = edit?.score ?? String(t.score);
-        const manualMedal = edit?.medal ?? t.medalOverride;
+        const score = edit?.score ?? String(viewScope === 'area' ? (getAreaInfo(t)?.score || 0) : t.score);
+        const manualMedal = edit?.medal ?? (viewScope === 'area' ? (getAreaInfo(t)?.medal || '') : t.medalOverride);
         const medal = calculateMedal(score, manualMedal);
         const schoolName = data.schools.find(s => s.SchoolID === t.schoolId)?.SchoolName || t.schoolId;
 
@@ -635,6 +755,80 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
      } else {
          showToast('ไม่สามารถแชร์ข้อมูลได้', 'error');
      }
+  };
+
+  // --- Modal & Print Handlers ---
+
+  const handleMedalClick = (schoolName: string, medalType: string) => {
+      const teams = allAuthorizedTeams.filter(t => {
+          const sName = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId)?.SchoolName || t.schoolId;
+          if (sName !== schoolName) return false;
+          
+          const score = t.score;
+          if (medalType === 'Gold' && score >= 80) return true;
+          if (medalType === 'Silver' && score >= 70 && score < 80) return true;
+          if (medalType === 'Bronze' && score >= 60 && score < 70) return true;
+          return false;
+      });
+      setMedalDetailData({ schoolName, medal: medalType, teams });
+  };
+
+  const handlePrintActivityReps = () => {
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) return;
+
+      const date = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
+      
+      const htmlRows = representativesList.map((item, idx) => `
+        <tr>
+            <td style="text-align:center">${idx + 1}</td>
+            <td>${item.category}</td>
+            <td>${item.activity}</td>
+            <td>${item.school}</td>
+            <td>${item.teamName}</td>
+        </tr>
+      `).join('');
+
+      const htmlContent = `
+        <html>
+        <head>
+            <title>สรุปรายการตัวแทน - ระดับกลุ่มเครือข่าย</title>
+            <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap" rel="stylesheet">
+            <style>
+                body { font-family: 'Sarabun', sans-serif; padding: 20px; font-size: 14px; }
+                table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+                th, td { border: 1px solid #ccc; padding: 8px; text-align: left; vertical-align: top; }
+                th { background-color: #f0f0f0; }
+                h1, h2 { text-align: center; margin: 5px; }
+                .meta { text-align: center; font-size: 12px; color: #666; margin-bottom: 20px; }
+                @media print { .no-print { display: none; } }
+            </style>
+        </head>
+        <body>
+            <div class="no-print" style="margin-bottom: 20px; text-align: right;">
+                <button onclick="window.print()" style="padding: 10px 20px; background: #2563eb; color: white; border: none; border-radius: 5px; cursor: pointer;">พิมพ์รายงาน</button>
+            </div>
+            <h1>สรุปรายชื่อโรงเรียนตัวแทนกิจกรรม</h1>
+            <h2>ระดับกลุ่มเครือข่ายพัฒนาคุณภาพการศึกษา</h2>
+            <div class="meta">ข้อมูล ณ วันที่ ${date}</div>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 50px;">ที่</th>
+                        <th style="width: 15%;">หมวดหมู่</th>
+                        <th style="width: 35%;">กิจกรรม</th>
+                        <th style="width: 25%;">โรงเรียนตัวแทน</th>
+                        <th>ชื่อทีม</th>
+                    </tr>
+                </thead>
+                <tbody>${htmlRows}</tbody>
+            </table>
+        </body>
+        </html>
+      `;
+      printWindow.document.write(htmlContent);
+      printWindow.document.close();
   };
 
   const handlePrintRepSummary = () => {
@@ -736,14 +930,32 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       return filteredTeams.map(team => {
           const edit = edits[team.teamId];
           const isModified = edit?.isDirty || false;
+          
+          // Determine existing values based on scope
+          let currentScore = '';
+          let currentRank = '';
+          let currentMedal = '';
+          let currentFlag = '';
+
+          if (viewScope === 'area') {
+              const info = getAreaInfo(team);
+              currentScore = String(info?.score && info.score > 0 ? info.score : '');
+              currentRank = String(info?.rank || '');
+              currentMedal = String(info?.medal || '');
+          } else {
+              currentScore = String(team.score > 0 ? team.score : '');
+              currentRank = String(team.rank || '');
+              currentMedal = String(team.medalOverride || '');
+              currentFlag = String(team.flag || '');
+          }
 
           return {
               id: team.teamId,
               teamName: team.teamName,
-              score: isModified ? edit.score : String(team.score > 0 ? team.score : ''),
-              rank: isModified ? edit.rank : team.rank,
-              medal: isModified ? edit.medal : team.medalOverride,
-              flag: isModified ? edit.flag : team.flag,
+              score: isModified ? edit.score : currentScore,
+              rank: isModified ? edit.rank : currentRank,
+              medal: isModified ? edit.medal : currentMedal,
+              flag: isModified ? edit.flag : currentFlag,
               isModified: isModified
           };
       });
@@ -758,42 +970,71 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       <LoadingOverlay isVisible={isLoading} />
       <Toast message={toast.message} type={toast.type} isVisible={toast.isVisible} onClose={() => setToast(prev => ({...prev, isVisible: false}))} />
       
-      <div>
-        <h2 className="text-2xl font-bold text-gray-800">บันทึกผลการแข่งขัน (Score Entry)</h2>
-        <p className="text-gray-500">จัดการคะแนนและประกาศผลรางวัล</p>
+      {/* Header & Scope Toggle */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div>
+            <h2 className="text-2xl font-bold text-gray-800 flex items-center">
+                <Edit2 className="w-6 h-6 mr-2 text-blue-600" />
+                บันทึกผลการแข่งขัน (Score Entry)
+            </h2>
+            <p className="text-gray-500 text-sm mt-1">จัดการคะแนนและประกาศผลรางวัล</p>
+        </div>
+        
+        {/* Scope Toggle */}
+        <div className="flex bg-gray-100 p-1 rounded-lg shrink-0 w-full md:w-auto">
+            <button
+                onClick={() => setViewScope('cluster')}
+                className={`flex-1 md:flex-none px-6 py-2 text-sm font-medium rounded-md transition-all flex items-center justify-center ${viewScope === 'cluster' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+                <LayoutGrid className="w-4 h-4 mr-2" /> ระดับกลุ่มฯ
+            </button>
+            <button
+                onClick={() => setViewScope('area')}
+                className={`flex-1 md:flex-none px-6 py-2 text-sm font-medium rounded-md transition-all flex items-center justify-center ${viewScope === 'area' ? 'bg-white shadow text-purple-600' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+                <Trophy className="w-4 h-4 mr-2" /> ระดับเขตฯ
+            </button>
+        </div>
       </div>
+
+      {viewScope === 'area' && !canScoreArea && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center">
+              <Lock className="w-5 h-5 mr-2" />
+              <span>คุณไม่มีสิทธิ์ในการบันทึกคะแนนระดับเขตพื้นที่ (สำหรับ Admin/Area/Score เท่านั้น)</span>
+          </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Global Stats */}
-        <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-xl p-6 text-white shadow-lg flex flex-col justify-between">
+        <div className={`rounded-xl p-6 text-white shadow-lg flex flex-col justify-between ${viewScope === 'area' ? 'bg-gradient-to-r from-purple-800 to-indigo-900' : 'bg-gradient-to-r from-slate-800 to-slate-900'}`}>
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                 <div className="flex-1 w-full">
                     <h3 className="text-lg font-bold mb-1 flex items-center">
-                        <PieChart className="w-5 h-5 mr-2 text-blue-400" />
-                        ภาพรวมการบันทึกคะแนน
+                        <PieChart className="w-5 h-5 mr-2 text-white/80" />
+                        ภาพรวม ({viewScope === 'area' ? 'ระดับเขต' : 'ระดับกลุ่ม'})
                     </h3>
                     <div className="space-y-2 mt-4">
                         <div className="flex justify-between text-sm">
-                            <span className="text-slate-300">ความคืบหน้า ({globalStats.scored}/{globalStats.total})</span>
-                            <span className="font-bold text-blue-400">{globalStats.percent}%</span>
+                            <span className="text-white/70">ความคืบหน้า ({globalStats.scored}/{globalStats.total})</span>
+                            <span className="font-bold text-white">{globalStats.percent}%</span>
                         </div>
-                        <div className="w-full bg-slate-700/50 rounded-full h-3">
-                            <div className="bg-blue-500 h-3 rounded-full transition-all duration-700" style={{ width: `${globalStats.percent}%` }}></div>
+                        <div className="w-full bg-black/20 rounded-full h-3">
+                            <div className="bg-green-400 h-3 rounded-full transition-all duration-700" style={{ width: `${globalStats.percent}%` }}></div>
                         </div>
                     </div>
                 </div>
                 <div className="grid grid-cols-3 gap-2 w-full md:w-auto mt-2 md:mt-0">
-                    <div className="bg-slate-700/50 p-2 rounded-lg border border-slate-600/50 text-center min-w-[70px]">
+                    <div className="bg-white/10 p-2 rounded-lg border border-white/10 text-center min-w-[70px]">
                         <div className="text-yellow-400 font-bold text-lg">{globalStats.gold}</div>
-                        <div className="text-[10px] text-slate-400 uppercase tracking-wide">Gold</div>
+                        <div className="text-[10px] text-white/70 uppercase tracking-wide">Gold</div>
                     </div>
-                    <div className="bg-slate-700/50 p-2 rounded-lg border border-slate-600/50 text-center min-w-[70px]">
-                        <div className="text-slate-300 font-bold text-lg">{globalStats.silver}</div>
-                        <div className="text-[10px] text-slate-400 uppercase tracking-wide">Silver</div>
+                    <div className="bg-white/10 p-2 rounded-lg border border-white/10 text-center min-w-[70px]">
+                        <div className="text-gray-300 font-bold text-lg">{globalStats.silver}</div>
+                        <div className="text-[10px] text-white/70 uppercase tracking-wide">Silver</div>
                     </div>
-                    <div className="bg-slate-700/50 p-2 rounded-lg border border-slate-600/50 text-center min-w-[70px]">
+                    <div className="bg-white/10 p-2 rounded-lg border border-white/10 text-center min-w-[70px]">
                         <div className="text-orange-400 font-bold text-lg">{globalStats.bronze}</div>
-                        <div className="text-[10px] text-slate-400 uppercase tracking-wide">Bronze</div>
+                        <div className="text-[10px] text-white/70 uppercase tracking-wide">Bronze</div>
                     </div>
                 </div>
             </div>
@@ -855,11 +1096,11 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
         </div>
       </div>
 
-      {/* School Medal Table */}
+      {/* School Medal Table (Interactive) */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="p-4 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
               <h3 className="font-bold text-gray-800 flex items-center text-sm">
-                  <Crown className="w-4 h-4 mr-2 text-yellow-600" /> ตารางเหรียญรางวัลแยกโรงเรียน
+                  <Crown className="w-4 h-4 mr-2 text-yellow-600" /> ตารางเหรียญรางวัลแยกโรงเรียน (คลิกที่เหรียญเพื่อดูรายละเอียด)
               </h3>
           </div>
           <div className="overflow-x-auto">
@@ -877,9 +1118,24 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                       {schoolStats.map((s, idx) => (
                           <tr key={idx} className="hover:bg-gray-50">
                               <td className="px-4 py-2 font-medium text-gray-800">{s.name}</td>
-                              <td className="px-4 py-2 text-center font-bold">{s.gold}</td>
-                              <td className="px-4 py-2 text-center">{s.silver}</td>
-                              <td className="px-4 py-2 text-center">{s.bronze}</td>
+                              <td 
+                                onClick={() => handleMedalClick(s.name, 'Gold')}
+                                className="px-4 py-2 text-center font-bold hover:bg-yellow-50 cursor-pointer transition-colors text-yellow-700"
+                              >
+                                  {s.gold}
+                              </td>
+                              <td 
+                                onClick={() => handleMedalClick(s.name, 'Silver')}
+                                className="px-4 py-2 text-center hover:bg-gray-100 cursor-pointer transition-colors text-gray-700"
+                              >
+                                  {s.silver}
+                              </td>
+                              <td 
+                                onClick={() => handleMedalClick(s.name, 'Bronze')}
+                                className="px-4 py-2 text-center hover:bg-orange-50 cursor-pointer transition-colors text-orange-700"
+                              >
+                                  {s.bronze}
+                              </td>
                               <td className="px-4 py-2 text-center">
                                   {s.repCount > 0 ? (
                                       <button 
@@ -893,6 +1149,47 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                           </tr>
                       ))}
                       {schoolStats.length === 0 && <tr><td colSpan={5} className="text-center py-4 text-gray-400">ยังไม่มีข้อมูล</td></tr>}
+                  </tbody>
+              </table>
+          </div>
+      </div>
+
+      {/* Cluster Representatives Summary Table */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="p-4 bg-blue-50 border-b border-blue-100 flex justify-between items-center">
+              <h3 className="font-bold text-blue-900 flex items-center text-sm">
+                  <FileBadge className="w-4 h-4 mr-2" /> สรุปโรงเรียนตัวแทนกิจกรรม (Representatives Summary)
+              </h3>
+              <button 
+                onClick={handlePrintActivityReps}
+                className="flex items-center px-3 py-1.5 bg-white border border-blue-200 text-blue-600 rounded-lg hover:bg-blue-50 transition-colors text-xs font-bold shadow-sm"
+              >
+                  <Printer className="w-3 h-3 mr-1.5" /> พิมพ์สรุปตัวแทน
+              </button>
+          </div>
+          <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
+              <table className="min-w-full divide-y divide-gray-200 text-sm">
+                  <thead className="bg-white text-gray-500 font-medium sticky top-0 shadow-sm">
+                      <tr>
+                          <th className="px-4 py-2 text-left w-16">#</th>
+                          <th className="px-4 py-2 text-left w-1/4">หมวดหมู่</th>
+                          <th className="px-4 py-2 text-left w-1/3">กิจกรรม</th>
+                          <th className="px-4 py-2 text-left">โรงเรียนตัวแทน</th>
+                          <th className="px-4 py-2 text-left">ทีม</th>
+                      </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                      {representativesList.length > 0 ? representativesList.map((item, idx) => (
+                          <tr key={idx} className="hover:bg-blue-50/30">
+                              <td className="px-4 py-2 text-gray-400 text-xs">{idx + 1}</td>
+                              <td className="px-4 py-2 text-gray-600 text-xs">{item.category}</td>
+                              <td className="px-4 py-2 font-medium text-gray-800">{item.activity}</td>
+                              <td className="px-4 py-2 text-blue-600 font-bold">{item.school}</td>
+                              <td className="px-4 py-2 text-gray-500 text-xs">{item.teamName}</td>
+                          </tr>
+                      )) : (
+                          <tr><td colSpan={5} className="px-6 py-8 text-center text-gray-400 text-sm">ยังไม่มีข้อมูลตัวแทน</td></tr>
+                      )}
                   </tbody>
               </table>
           </div>
@@ -1008,14 +1305,18 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                   <div className="overflow-x-auto">
                       <table className="min-w-full divide-y divide-gray-200">
-                          <thead className="bg-gray-50">
+                          <thead className={viewScope === 'area' ? 'bg-purple-50' : 'bg-gray-50'}>
                               <tr>
                                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">#</th>
                                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ทีม (Team)</th>
-                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">คะแนน</th>
+                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">
+                                      {viewScope === 'area' ? 'คะแนนเขต' : 'คะแนนกลุ่ม'}
+                                  </th>
                                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">เหรียญ</th>
                                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">ลำดับ</th>
-                                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-20">ตัวแทน (Q)</th>
+                                  {viewScope === 'cluster' && (
+                                      <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-20">ตัวแทน (Q)</th>
+                                  )}
                                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                                      <div className="flex justify-end gap-2">
                                         {/* Auto Rank Button */}
@@ -1045,13 +1346,31 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                   const cluster = data.clusters.find(c => c.ClusterID === school?.SchoolCluster);
                                   const edit = edits[team.teamId];
                                   
-                                  const displayScore = edit?.score ?? (team.score > 0 ? String(team.score) : '');
-                                  const displayRank = edit?.rank ?? team.rank ?? '';
-                                  const displayMedal = edit?.medal ?? team.medalOverride ?? '';
-                                  const displayFlag = edit?.flag ?? team.flag ?? '';
+                                  // Determine display values based on Scope
+                                  let currentScore = 0;
+                                  let currentRank = "";
+                                  let currentMedal = "";
+                                  let currentFlag = "";
+
+                                  if (viewScope === 'area') {
+                                      const info = getAreaInfo(team);
+                                      currentScore = info?.score || 0;
+                                      currentRank = info?.rank || "";
+                                      currentMedal = info?.medal || "";
+                                  } else {
+                                      currentScore = team.score;
+                                      currentRank = team.rank;
+                                      currentMedal = team.medalOverride;
+                                      currentFlag = team.flag;
+                                  }
+
+                                  const displayScore = edit?.score ?? (currentScore > 0 ? String(currentScore) : '');
+                                  const displayRank = edit?.rank ?? currentRank ?? '';
+                                  const displayMedal = edit?.medal ?? currentMedal ?? '';
+                                  const displayFlag = edit?.flag ?? currentFlag ?? '';
                                   
                                   const isDirty = edit?.isDirty;
-                                  const hasSavedScore = team.score > 0 && !isDirty;
+                                  // const hasSavedScore = currentScore > 0 && !isDirty; // unused but logical
 
                                   // Calculate medal
                                   const calculatedMedal = calculateMedal(displayScore, displayMedal);
@@ -1061,8 +1380,11 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                   const scorePercent = isNaN(numScore) ? 0 : Math.min(100, Math.max(0, numScore));
                                   const scoreColor = numScore >= 80 ? 'bg-green-500' : numScore >= 70 ? 'bg-blue-500' : numScore >= 60 ? 'bg-orange-400' : 'bg-red-400';
 
+                                  // Disable input if Area view and user has no permission
+                                  const disabledInput = viewScope === 'area' && !canScoreArea;
+
                                   return (
-                                      <tr key={team.teamId} className={`${isDirty ? "bg-blue-50/30" : hasSavedScore ? "bg-green-50/20" : ""}`}>
+                                      <tr key={team.teamId} className={`${isDirty ? "bg-blue-50/30" : (currentScore > 0 ? "bg-green-50/20" : "")}`}>
                                           <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-500">{idx + 1}</td>
                                           <td className="px-6 py-4 whitespace-nowrap">
                                               <div className="ml-0">
@@ -1079,11 +1401,12 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                                   <input 
                                                     ref={(el) => { inputRefs.current[team.teamId] = el; }}
                                                     type="number" step="0.01" min="0" max="100"
-                                                    className={`w-full border rounded px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none ${isDirty ? 'border-blue-400 bg-white' : 'border-gray-300'}`}
+                                                    className={`w-full border rounded px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none ${isDirty ? 'border-blue-400 bg-white' : 'border-gray-300'} ${disabledInput ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                                                     value={displayScore}
                                                     onChange={(e) => handleInputChange(team.teamId, 'score', e.target.value)}
                                                     onKeyDown={(e) => handleKeyDown(e, idx)}
                                                     placeholder="0.00"
+                                                    disabled={disabledInput}
                                                   />
                                                   {displayScore && (
                                                       <div className={`absolute bottom-0 left-0 h-0.5 ${scoreColor} transition-all duration-300`} style={{ width: `${scorePercent}%`, opacity: 0.6 }}></div>
@@ -1092,9 +1415,10 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                           </td>
                                           <td className="px-6 py-4 whitespace-nowrap relative">
                                               <select 
-                                                className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                                className={`w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none ${disabledInput ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                                                 value={displayMedal}
                                                 onChange={(e) => handleInputChange(team.teamId, 'medal', e.target.value)}
+                                                disabled={disabledInput}
                                               >
                                                   <option value="">- Auto -</option>
                                                   <option value="Gold">Gold</option>
@@ -1111,34 +1435,37 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                           <td className="px-6 py-4 whitespace-nowrap">
                                                <input 
                                                 type="text" 
-                                                className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none text-center"
+                                                className={`w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none text-center ${disabledInput ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                                                 value={displayRank}
                                                 onChange={(e) => handleInputChange(team.teamId, 'rank', e.target.value)}
                                                 placeholder="-"
+                                                disabled={disabledInput}
                                               />
                                           </td>
-                                          <td className="px-6 py-4 whitespace-nowrap text-center">
-                                              <input 
-                                                type="checkbox"
-                                                className="w-5 h-5 accent-blue-600 cursor-pointer"
-                                                checked={String(displayFlag).toUpperCase() === 'TRUE'}
-                                                onChange={(e) => handleInputChange(team.teamId, 'flag', e.target.checked ? 'TRUE' : '')}
-                                              />
-                                          </td>
+                                          {viewScope === 'cluster' && (
+                                              <td className="px-6 py-4 whitespace-nowrap text-center">
+                                                  <input 
+                                                    type="checkbox"
+                                                    className="w-5 h-5 accent-blue-600 cursor-pointer"
+                                                    checked={String(displayFlag).toUpperCase() === 'TRUE'}
+                                                    onChange={(e) => handleInputChange(team.teamId, 'flag', e.target.checked ? 'TRUE' : '')}
+                                                  />
+                                              </td>
+                                          )}
                                           <td className="px-6 py-4 whitespace-nowrap text-right">
                                               <div className="flex items-center justify-end space-x-2">
                                                   <button 
-                                                    disabled={!isDirty}
+                                                    disabled={!isDirty || disabledInput}
                                                     onClick={() => initiateSave(team.teamId)}
                                                     className={`inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-white focus:outline-none transition-all
-                                                        ${!isDirty 
+                                                        ${(!isDirty || disabledInput) 
                                                             ? 'bg-gray-300 cursor-default opacity-50' 
                                                             : 'bg-blue-600 hover:bg-blue-700 hover:shadow-md'
                                                         }`}
                                                   >
                                                       <Save className="w-4 h-4 mr-1" /> บันทึก
                                                   </button>
-                                                  {hasSavedScore && (
+                                                  {currentScore > 0 && !isDirty && (
                                                       <button 
                                                         onClick={() => handleShare(team)}
                                                         className="p-1.5 bg-green-50 text-green-600 rounded-md hover:bg-green-100 transition-colors border border-green-200"
@@ -1153,7 +1480,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                   );
                               })}
                               {filteredTeams.length === 0 && (
-                                  <tr><td colSpan={7} className="px-6 py-10 text-center text-gray-500">ไม่พบข้อมูลทีมในรายการนี้</td></tr>
+                                  <tr><td colSpan={viewScope === 'cluster' ? 7 : 6} className="px-6 py-10 text-center text-gray-500">ไม่พบข้อมูลทีมในรายการนี้</td></tr>
                               )}
                           </tbody>
                       </table>
@@ -1255,6 +1582,35 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
           </div>
       )}
 
+      {/* Medal Detail Modal */}
+      {medalDetailData && (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+              <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[80vh]">
+                  <div className="p-4 border-b border-gray-100 bg-yellow-50 flex justify-between items-center">
+                      <h3 className="font-bold text-yellow-800 flex items-center">
+                          <Crown className="w-5 h-5 mr-2" />
+                          {medalDetailData.medal} - {medalDetailData.schoolName}
+                      </h3>
+                      <button onClick={() => setMedalDetailData(null)} className="p-1 hover:bg-yellow-100 rounded-full text-yellow-800"><X className="w-5 h-5"/></button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-4">
+                      <ul className="space-y-2">
+                          {medalDetailData.teams.map((t, idx) => {
+                              const act = data.activities.find(a => a.id === t.activityId);
+                              return (
+                                  <li key={idx} className="bg-gray-50 p-3 rounded-lg border border-gray-100 text-sm">
+                                      <div className="font-bold text-gray-800">{act?.name || t.activityId}</div>
+                                      <div className="text-gray-600 text-xs mt-1">{t.teamName}</div>
+                                      <div className="text-xs text-blue-600 mt-1 font-medium">คะแนน: {t.score}</div>
+                                  </li>
+                              );
+                          })}
+                      </ul>
+                  </div>
+              </div>
+          </div>
+      )}
+
       {/* Confirmation Modal */}
       {confirmState.isOpen && (
           <ConfirmModal 
@@ -1268,6 +1624,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
               newMedal={singleConfirmData?.newMedal}
               newFlag={singleConfirmData?.newFlag}
               batchItems={batchConfirmData}
+              viewScope={viewScope}
               onConfirm={handleConfirmSave}
               onCancel={() => setConfirmState({ isOpen: false, type: 'single', teamId: null })}
           />
