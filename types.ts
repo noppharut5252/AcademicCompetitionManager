@@ -103,12 +103,6 @@ export interface FileLog {
   FileDriveId: string;
 }
 
-export interface AnnouncementAttachment {
-    type: 'image' | 'file';
-    url: string;
-    name: string;
-}
-
 export interface Announcement {
   id: string;
   title: string;
@@ -117,9 +111,6 @@ export interface Announcement {
   type: 'news' | 'manual';
   link?: string;
   author?: string;
-  clusterId?: string; // Optional: If empty = District/Global, else = Specific Cluster
-  attachments?: string; // JSON string of AnnouncementAttachment[]
-  likes?: number;
 }
 
 // Detailed Schedule Item for a Venue
