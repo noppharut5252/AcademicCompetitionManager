@@ -1,11 +1,11 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { AppData, Announcement, User, AreaStageInfo, Team, Venue, Activity as ActivityType } from '../types';
-import { Users, School, Trophy, Megaphone, Plus, Book, Calendar, ChevronRight, FileText, Loader2, Star, Medal, TrendingUp, Activity, Timer, ArrowUpRight, Zap, Target, CheckCircle, PieChart as PieIcon, List, X, BarChart3, MapPin, Navigation, Handshake, Briefcase, UserX, GraduationCap, AlertTriangle, Clock } from 'lucide-react';
+import { Users, School, Trophy, Megaphone, Plus, Book, Calendar, ChevronRight, FileText, Loader2, Star, Medal, TrendingUp, Activity, Timer, ArrowUpRight, Zap, Target, CheckCircle, PieChart as PieIcon, List, X, BarChart3, MapPin, Navigation, Handshake, Briefcase, UserX, GraduationCap, AlertTriangle, Clock, Heart, Share2, Download, Image as ImageIcon, ExternalLink, UserCheck, AlertOctagon } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import StatCard from './StatCard';
 import { useNavigate } from 'react-router-dom';
-import { addAnnouncement } from '../services/api';
+import { addAnnouncement, toggleLikeAnnouncement } from '../services/api';
 import { formatDeadline } from '../services/utils';
 
 interface DashboardProps {
@@ -16,7 +16,206 @@ interface DashboardProps {
 const COLORS = ['#10B981', '#F59E0B', '#EF4444', '#6366F1'];
 const MEDAL_COLORS = { 'Gold': '#FFD700', 'Silver': '#C0C0C0', 'Bronze': '#CD7F32', 'Participant': '#94a3b8' };
 
+// --- Helper for Image URL ---
+const getAttachmentImageUrl = (att: { url: string, id?: string }) => {
+    if (att.id) return `https://drive.google.com/thumbnail?id=${att.id}&sz=w1000`;
+    // If it's a drive link but no ID, try to extract or use as is
+    if (att.url.includes('drive.google.com')) {
+        const match = att.url.match(/id=([^&]+)/) || att.url.match(/\/d\/([^/]+)/);
+        if (match) return `https://drive.google.com/thumbnail?id=${match[1]}&sz=w1000`;
+    }
+    return att.url;
+};
+
 // --- Components ---
+
+const AnnouncementDetailModal = ({ item, onClose }: { item: Announcement, onClose: () => void }) => {
+    const coverAttachment = item.attachments?.find(att => att.type.includes('image'));
+    const coverImage = coverAttachment ? getAttachmentImageUrl(coverAttachment) : null;
+    
+    return (
+        <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+                <div className="p-4 border-b border-gray-100 flex justify-between items-start bg-gray-50">
+                    <div className="pr-4">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase mb-2 inline-block ${item.type === 'news' ? 'bg-orange-50 text-orange-700 border-orange-100' : 'bg-green-50 text-green-700 border-green-100'}`}>
+                            {item.type === 'news' ? 'NEWS' : 'MANUAL'}
+                        </span>
+                        <h3 className="font-bold text-lg text-gray-900 leading-tight">{item.title}</h3>
+                        <p className="text-xs text-gray-500 mt-1 flex items-center">
+                            <Calendar className="w-3 h-3 mr-1" />
+                            {new Date(item.date).toLocaleDateString('th-TH', { dateStyle: 'long' })}
+                            <span className="mx-2">•</span>
+                            <span>{item.author || 'Admin'}</span>
+                        </p>
+                    </div>
+                    <button onClick={onClose} className="p-2 hover:bg-gray-200 rounded-full transition-colors shrink-0">
+                        <X className="w-5 h-5 text-gray-500" />
+                    </button>
+                </div>
+                
+                <div className="overflow-y-auto p-0 flex-1">
+                    {coverImage && (
+                        <div className="w-full h-64 bg-gray-100 relative">
+                            <img src={coverImage} alt="Cover" className="w-full h-full object-cover" />
+                        </div>
+                    )}
+                    
+                    <div className="p-6 space-y-6">
+                        <div className="prose prose-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+                            {item.content}
+                        </div>
+
+                        {/* Attachments */}
+                        {item.attachments && item.attachments.length > 0 && (
+                            <div className="space-y-2 pt-4 border-t border-gray-100">
+                                <h4 className="text-xs font-bold text-gray-500 uppercase mb-2">เอกสารแนบ ({item.attachments.length})</h4>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    {item.attachments.map((att, idx) => (
+                                        <a 
+                                            key={idx}
+                                            href={att.url}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="flex items-center p-3 rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-all group"
+                                        >
+                                            <div className="p-2 bg-gray-100 rounded-lg group-hover:bg-white mr-3 text-gray-500 group-hover:text-blue-600 border border-gray-200">
+                                                {att.type.includes('image') ? <ImageIcon className="w-5 h-5"/> : <FileText className="w-5 h-5"/>}
+                                            </div>
+                                            <div className="min-w-0">
+                                                <div className="text-sm font-medium text-gray-900 truncate" title={att.name}>{att.name}</div>
+                                                <div className="text-[10px] text-gray-500 uppercase">{att.type.split('/')[1] || 'FILE'}</div>
+                                            </div>
+                                        </a>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* External Link */}
+                        {item.link && (
+                            <div className="pt-2">
+                                <a 
+                                    href={item.link} 
+                                    target="_blank" 
+                                    rel="noreferrer"
+                                    className="flex items-center justify-center w-full py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors shadow-sm"
+                                >
+                                    {item.type === 'manual' ? 'เปิดคู่มือฉบับเต็ม' : 'อ่านเพิ่มเติม / ไปยังลิงก์'}
+                                    <ExternalLink className="w-4 h-4 ml-2" />
+                                </a>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const NewsCard = ({ item, user, onLike, onClick }: { item: Announcement, user?: User | null, onLike: (id: string) => void, onClick: () => void }) => {
+    const isLiked = item.likedBy?.includes(user?.userid || 'anon');
+    const likeCount = item.likedBy?.length || 0;
+    
+    // Find cover image using helper
+    const coverAttachment = item.attachments?.find(att => att.type.includes('image'));
+    const coverImage = coverAttachment ? getAttachmentImageUrl(coverAttachment) : null;
+    const hasAttachments = item.attachments && item.attachments.length > 0;
+
+    const handleShare = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        const shareData = {
+            title: item.title,
+            text: item.content,
+            url: window.location.href
+        };
+        try {
+            if (navigator.share) {
+                await navigator.share(shareData);
+            } else {
+                await navigator.clipboard.writeText(`${item.title}\n${item.content}`);
+                alert('Copied to clipboard');
+            }
+        } catch (err) {}
+    };
+
+    return (
+        <div 
+            onClick={onClick}
+            className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-all group cursor-pointer"
+        >
+            {coverImage && (
+                <div className="h-40 w-full overflow-hidden relative">
+                    <img src={coverImage} alt="cover" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-60 group-hover:opacity-40 transition-opacity"></div>
+                </div>
+            )}
+            
+            <div className="p-4">
+                <div className="flex justify-between items-start mb-2">
+                    <div className="flex gap-2">
+                        <span className="text-[10px] text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full flex items-center">
+                            <Calendar className="w-3 h-3 mr-1" />
+                            {new Date(item.date).toLocaleDateString('th-TH', {day: 'numeric', month: 'short'})}
+                        </span>
+                        {item.clusterId && item.clusterId !== 'area' && (
+                            <span className="text-[10px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
+                                ระดับกลุ่มฯ
+                            </span>
+                        )}
+                    </div>
+                </div>
+                
+                <h3 className="text-sm font-bold text-gray-900 mb-2 line-clamp-2 leading-tight group-hover:text-blue-600 transition-colors">
+                    {item.title}
+                </h3>
+                
+                <p className="text-xs text-gray-500 line-clamp-3 mb-3">
+                    {item.content}
+                </p>
+
+                {/* Attachments Chips */}
+                {hasAttachments && (
+                    <div className="flex flex-wrap gap-1.5 mb-3">
+                        {item.attachments?.slice(0, 3).map((att, idx) => (
+                            <span 
+                                key={idx} 
+                                className="inline-flex items-center px-2 py-1 bg-gray-50 border border-gray-200 rounded text-[10px] text-gray-600"
+                            >
+                                {att.type.includes('image') ? <ImageIcon className="w-3 h-3 mr-1"/> : <FileText className="w-3 h-3 mr-1"/>}
+                                {att.name.length > 15 ? att.name.substring(0, 12) + '...' : att.name}
+                            </span>
+                        ))}
+                        {item.attachments && item.attachments.length > 3 && (
+                            <span className="inline-flex items-center px-2 py-1 bg-gray-50 border border-gray-200 rounded text-[10px] text-gray-500">
+                                +{item.attachments.length - 3}
+                            </span>
+                        )}
+                    </div>
+                )}
+
+                <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                    <div className="flex items-center gap-3">
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); user && onLike(item.id); }}
+                            className={`flex items-center text-xs transition-colors ${isLiked ? 'text-red-500' : 'text-gray-400 hover:text-red-500'}`}
+                            disabled={!user}
+                        >
+                            <Heart className={`w-4 h-4 mr-1 ${isLiked ? 'fill-current' : ''}`} />
+                            {likeCount}
+                        </button>
+                        <button onClick={handleShare} className="text-gray-400 hover:text-blue-500 transition-colors">
+                            <Share2 className="w-4 h-4" />
+                        </button>
+                    </div>
+                    <span className="text-xs text-blue-600 font-bold hover:underline flex items-center">
+                        อ่านรายละเอียด &rarr;
+                    </span>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 const CountdownWidget = ({ data }: { data: AppData }) => {
     const [timeLeft, setTimeLeft] = useState<{days: number, hours: number, minutes: number, seconds: number} | null>(null);
@@ -138,21 +337,70 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
   // Modal States
   const [showUnscoredModal, setShowUnscoredModal] = useState(false);
   const [showRankingModal, setShowRankingModal] = useState(false);
-  const [showIntegrityModal, setShowIntegrityModal] = useState(false); // New modal for integrity details
+  const [showIntegrityModal, setShowIntegrityModal] = useState(false); 
+  
+  // New: Viewing Item State for Modal
+  const [viewingAnnouncement, setViewingAnnouncement] = useState<Announcement | null>(null);
 
-  // Admin News State
-  const [showAddNews, setShowAddNews] = useState(false);
-  const [newTitle, setNewTitle] = useState('');
-  const [newContent, setNewContent] = useState('');
-  const [newType, setNewType] = useState<'news' | 'manual'>('news');
-  const [newLink, setNewLink] = useState('');
-  const [isAddingNews, setIsAddingNews] = useState(false);
+  // News State
+  const [newsList, setNewsList] = useState<Announcement[]>([]);
+  const [manualList, setManualList] = useState<Announcement[]>([]);
 
   // Simulate loading for Skeleton effect
   useEffect(() => {
       const timer = setTimeout(() => setIsLoading(false), 800);
       return () => clearTimeout(timer);
   }, []);
+
+  // Filter News based on Context
+  useEffect(() => {
+      if (!data.announcements) return;
+
+      const userSchool = data.schools.find(s => s.SchoolID === user?.SchoolID);
+      const userClusterID = userSchool?.SchoolCluster;
+
+      const filterNews = (type: 'news' | 'manual') => {
+          return data.announcements.filter(a => {
+              if (a.type !== type) return false;
+              // Context Filtering:
+              // 1. Area/Global news (clusterId is 'area' or null) -> Show to everyone
+              if (!a.clusterId || a.clusterId === 'area') return true;
+              
+              // 2. Cluster specific news -> Show only if user belongs to that cluster
+              if (userClusterID && a.clusterId === userClusterID) return true;
+              
+              // 3. Admin/Area User sees everything? Maybe just Area + All Cluster for overview?
+              // Let's stick to user context. If Admin, maybe see everything.
+              if (user?.level === 'admin' || user?.level === 'area') return true;
+
+              return false;
+          });
+      };
+
+      setNewsList(filterNews('news'));
+      setManualList(filterNews('manual'));
+
+  }, [data.announcements, user, data.schools]);
+
+  const handleLikeNews = async (id: string) => {
+      if (!user) return;
+      // Optimistic update
+      const updateList = (list: Announcement[]) => list.map(item => {
+          if (item.id === id) {
+              const likedBy = item.likedBy || [];
+              const isLiked = likedBy.includes(user.userid);
+              return {
+                  ...item,
+                  likedBy: isLiked ? likedBy.filter(uid => uid !== user.userid) : [...likedBy, user.userid]
+              };
+          }
+          return item;
+      });
+
+      setNewsList(prev => updateList(prev));
+      // Call API
+      await toggleLikeAnnouncement(id, user.userid);
+  };
 
   // --- Helpers ---
   const getAreaInfo = (team: any): AreaStageInfo | null => {
@@ -321,11 +569,13 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
           targetTeams = scopeTeams.filter(t => t.createdBy === user.userid);
       }
 
-      let missingTeachers = 0;
-      let missingStudents = 0;
+      let missingTeachersCount = 0;
+      let missingStudentsCount = 0;
+      let missingJudgesCount = 0;
       let pendingStatus = 0;
       const problemTeams: { team: Team, issues: string[] }[] = [];
 
+      // Check Teams for Teachers/Students
       targetTeams.forEach(t => {
           if (t.status === 'Rejected') return;
           if (t.status === 'Pending') pendingStatus++;
@@ -355,11 +605,11 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
 
           const issues = [];
           if (activity.reqTeachers > 0 && teachersCount < activity.reqTeachers) {
-              missingTeachers++;
+              missingTeachersCount++;
               issues.push(`ขาดครู ${activity.reqTeachers - teachersCount} คน`);
           }
           if (activity.reqStudents > 0 && studentsCount < activity.reqStudents) {
-              missingStudents++;
+              missingStudentsCount++;
               issues.push(`ขาด นร. ${activity.reqStudents - studentsCount} คน`);
           }
 
@@ -368,8 +618,46 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
           }
       });
 
-      return { missingTeachers, missingStudents, pendingStatus, totalIssues: missingTeachers + missingStudents, problemTeams };
-  }, [scopeTeams, data.activities, viewLevel, user]);
+      // Check Activities for Missing Judges
+      // Only check activities that have teams in the current scope
+      const activeActivityIds = new Set(targetTeams.map(t => t.activityId));
+      
+      activeActivityIds.forEach(actId => {
+          const act = data.activities.find(a => a.id === actId);
+          if (!act) return;
+
+          // Find judges for this activity AND current scope
+          const hasJudge = data.judges.some(j => {
+              if (j.activityId !== actId) return false;
+              
+              if (viewLevel === 'area') {
+                  return j.stageScope === 'area';
+              } else {
+                  // If viewing Cluster level, check if ANY cluster judge exists? 
+                  // Or refined: if user is GroupAdmin, check specifically for their cluster key.
+                  if (user?.level === 'group_admin') {
+                      const userSchool = data.schools.find(s => s.SchoolID === user.SchoolID);
+                      return j.clusterKey === userSchool?.SchoolCluster && j.stageScope !== 'area';
+                  }
+                  return j.stageScope !== 'area';
+              }
+          });
+
+          if (!hasJudge) {
+              missingJudgesCount++;
+              // Add a generic problem entry for the activity itself (optional, or just count)
+          }
+      });
+
+      return { 
+          missingTeachersCount, 
+          missingStudentsCount, 
+          missingJudgesCount, 
+          pendingStatus, 
+          totalIssues: missingTeachersCount + missingStudentsCount + missingJudgesCount, 
+          problemTeams 
+      };
+  }, [scopeTeams, data.activities, data.judges, viewLevel, user, data.schools]);
 
   // 6. Judge Cooperation Stats (Updated: Separate by Level & Count Activities)
   const judgeCooperation = useMemo(() => {
@@ -429,29 +717,21 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
       return data.venues.slice(0, 3);
   }, [data.venues]);
 
-  // Admin Actions
-  const handleAddNews = async (e: React.FormEvent) => {
-      e.preventDefault();
-      setIsAddingNews(true);
-      try {
-          const success = await addAnnouncement(newTitle, newContent, newType, newLink, user?.name || 'Admin');
-          if (success) {
-              alert('เพิ่มข้อมูลสำเร็จ! (กรุณารีเฟรชหน้าเว็บเพื่อดูข้อมูลล่าสุด)');
-              setShowAddNews(false);
-              setNewTitle(''); setNewContent(''); setNewLink('');
-          } else { alert('เกิดข้อผิดพลาดในการบันทึก'); }
-      } catch (err) { alert('เชื่อมต่อไม่ได้'); } finally { setIsAddingNews(false); }
-  };
-
   const isAdmin = user?.level === 'admin' || user?.level === 'area';
-  const newsList = (data.announcements || []).filter(a => a.type !== 'manual');
-  const manualList = (data.announcements || []).filter(a => a.type === 'manual');
 
   if (isLoading) return <DashboardSkeleton />;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20 relative">
       
+      {/* Announcement Modal */}
+      {viewingAnnouncement && (
+          <AnnouncementDetailModal 
+              item={viewingAnnouncement} 
+              onClose={() => setViewingAnnouncement(null)} 
+          />
+      )}
+
       {/* Header Section */}
       <div className={`rounded-3xl p-6 text-white shadow-xl flex flex-col md:flex-row justify-between items-center gap-6 relative overflow-hidden ${viewLevel === 'area' ? 'bg-gradient-to-r from-purple-800 to-indigo-900' : 'bg-gradient-to-r from-blue-600 to-indigo-600'}`}>
         <div className="absolute top-0 right-0 p-4 opacity-10">
@@ -667,63 +947,6 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
                   </div>
               )}
 
-              {/* AREA VIEW: Gold & Score Leaderboards */}
-              {viewLevel === 'area' && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                          <div className="p-4 border-b border-gray-100 bg-yellow-50/50">
-                              <h2 className="font-bold text-gray-800 flex items-center text-sm">
-                                  <Medal className="w-4 h-4 mr-2 text-yellow-500" />
-                                  อันดับเหรียญทอง (Top Gold)
-                              </h2>
-                          </div>
-                          <div className="p-0">
-                              {leaderboards.topByGold.length > 0 ? (
-                                  <div className="divide-y divide-gray-50">
-                                      {leaderboards.topByGold.map((s, idx) => (
-                                          <div key={idx} className="flex items-center justify-between p-3 hover:bg-gray-50/50">
-                                              <div className="flex items-center min-w-0">
-                                                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold mr-3 shrink-0 ${idx === 0 ? 'bg-yellow-400 text-white' : 'bg-gray-100 text-gray-500'}`}>{idx + 1}</div>
-                                                  <div className="truncate text-sm font-medium text-gray-700" title={s.name}>{s.name}</div>
-                                              </div>
-                                              <div className="flex items-center text-sm font-bold text-yellow-600">
-                                                  {s.goldCount} <span className="text-[10px] text-gray-400 font-normal ml-1">เหรียญ</span>
-                                              </div>
-                                          </div>
-                                      ))}
-                                  </div>
-                              ) : <div className="p-6 text-center text-gray-400 text-xs">ยังไม่มีข้อมูล</div>}
-                          </div>
-                      </div>
-
-                      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                          <div className="p-4 border-b border-gray-100 bg-indigo-50/50">
-                              <h2 className="font-bold text-gray-800 flex items-center text-sm">
-                                  <Zap className="w-4 h-4 mr-2 text-indigo-500" />
-                                  คะแนนรวมสูงสุด (Total Score)
-                              </h2>
-                          </div>
-                          <div className="p-0">
-                              {leaderboards.topByScore.length > 0 ? (
-                                  <div className="divide-y divide-gray-50">
-                                      {leaderboards.topByScore.map((s, idx) => (
-                                          <div key={idx} className="flex items-center justify-between p-3 hover:bg-gray-50/50">
-                                              <div className="flex items-center min-w-0">
-                                                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold mr-3 shrink-0 ${idx === 0 ? 'bg-indigo-500 text-white' : 'bg-gray-100 text-gray-500'}`}>{idx + 1}</div>
-                                                  <div className="truncate text-sm font-medium text-gray-700" title={s.name}>{s.name}</div>
-                                              </div>
-                                              <div className="flex items-center text-sm font-bold text-indigo-600">
-                                                  {s.totalScore.toLocaleString()}
-                                              </div>
-                                          </div>
-                                      ))}
-                                  </div>
-                              ) : <div className="p-6 text-center text-gray-400 text-xs">ยังไม่มีข้อมูล</div>}
-                          </div>
-                      </div>
-                  </div>
-              )}
-
               {/* Latest Results Feed */}
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                   <div className="p-5 border-b border-gray-100 flex justify-between items-center">
@@ -798,92 +1021,45 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
              {/* FEATURE 4: Countdown Timer */}
              <CountdownWidget data={data} />
 
-             {/* FEATURE 2: Data Integrity Alerts (Interactive) */}
-             <div 
-                className="bg-white rounded-xl shadow-sm border border-red-100 overflow-hidden hover:shadow-md transition-shadow cursor-pointer group"
-                onClick={() => setShowIntegrityModal(true)}
-             >
-                 <div className="p-4 border-b border-red-50 bg-red-50/30 flex items-center justify-between">
-                     <div className="flex items-center">
-                        <AlertTriangle className="w-4 h-4 mr-2 text-red-500" />
-                        <h3 className="text-sm font-bold text-red-800">แจ้งเตือนข้อมูลไม่สมบูรณ์</h3>
-                     </div>
-                     <span className="text-xs text-red-400 opacity-0 group-hover:opacity-100 transition-opacity flex items-center">
-                         ดูรายละเอียด <ChevronRight className="w-3 h-3 ml-1" />
-                     </span>
-                 </div>
-                 <div className="p-4 grid grid-cols-2 gap-3">
-                     <div className="bg-red-50 p-2 rounded-lg text-center border border-red-100 group-hover:bg-red-100 transition-colors">
-                         <div className="text-xs text-red-600 mb-1">ขาดครู</div>
-                         <div className="font-black text-xl text-red-700 flex items-center justify-center">
-                             <UserX className="w-4 h-4 mr-1"/> {integrityStats.missingTeachers}
-                         </div>
-                     </div>
-                     <div className="bg-red-50 p-2 rounded-lg text-center border border-red-100 group-hover:bg-red-100 transition-colors">
-                         <div className="text-xs text-red-600 mb-1">ขาด นร.</div>
-                         <div className="font-black text-xl text-red-700 flex items-center justify-center">
-                             <GraduationCap className="w-4 h-4 mr-1"/> {integrityStats.missingStudents}
-                         </div>
-                     </div>
-                     {integrityStats.totalIssues === 0 && (
-                         <div className="col-span-2 text-center text-xs text-green-600 py-2 flex items-center justify-center">
-                             <CheckCircle className="w-3 h-3 mr-1" /> ข้อมูลครบถ้วนสมบูรณ์
-                         </div>
-                     )}
-                 </div>
-             </div>
-
-             {/* Judge Cooperation Stats */}
-             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                 <div className="p-4 border-b border-gray-100 bg-emerald-50/50 flex items-center justify-between">
-                     <h3 className="text-sm font-bold text-emerald-800 flex items-center">
-                         <Handshake className="w-4 h-4 mr-2" /> ความร่วมมือ (กรรมการ) - {viewLevel === 'area' ? 'ระดับเขต' : 'ระดับกลุ่ม'}
-                     </h3>
-                 </div>
-                 <div className="p-3">
-                     {judgeCooperation.length > 0 ? (
-                         <div className="space-y-3">
-                             {judgeCooperation.map((s, idx) => (
-                                 <div key={idx} className="flex items-center justify-between text-sm">
-                                     <div className="flex items-center min-w-0">
-                                         <div className="w-5 h-5 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center text-xs font-bold mr-2 shrink-0">{idx + 1}</div>
-                                         <div className="truncate text-gray-700" title={s.name}>{s.name}</div>
-                                     </div>
-                                     <div className="font-bold text-emerald-600">{s.count} <span className="text-[10px] text-gray-400 font-normal">รายการ</span></div>
-                                 </div>
-                             ))}
-                         </div>
-                     ) : <div className="text-center text-xs text-gray-400 py-4">ยังไม่มีข้อมูล</div>}
-                 </div>
-             </div>
-
-             {/* Venue Highlights */}
-             {venueHighlights.length > 0 && (
-                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                     <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-                         <h3 className="text-sm font-bold text-gray-800 flex items-center">
-                             <MapPin className="w-4 h-4 mr-2 text-blue-500" /> สถานที่แข่งขัน
-                         </h3>
-                         <button onClick={() => navigate('/venues')} className="text-xs text-blue-600 hover:underline">ดูทั้งหมด</button>
-                     </div>
-                     <div className="divide-y divide-gray-50">
-                         {venueHighlights.map(v => (
-                             <div key={v.id} className="p-3 hover:bg-gray-50 flex items-start gap-3">
-                                 <img src={v.imageUrl} className="w-12 h-12 rounded-lg object-cover bg-gray-200 shrink-0" alt="" />
-                                 <div className="min-w-0 flex-1">
-                                     <div className="font-bold text-sm text-gray-800 truncate">{v.name}</div>
-                                     <div className="text-xs text-gray-500 mt-0.5 flex items-center">
-                                         <Briefcase className="w-3 h-3 mr-1"/> {v.scheduledActivities?.length || 0} รายการ
-                                     </div>
-                                     {v.locationUrl && (
-                                         <a href={v.locationUrl} target="_blank" className="text-[10px] text-blue-500 flex items-center mt-1 hover:underline">
-                                             <Navigation className="w-3 h-3 mr-1"/> แผนที่
-                                         </a>
-                                     )}
-                                 </div>
-                             </div>
-                         ))}
-                     </div>
+             {/* FEATURE 2: Integrity Alerts Widget (Updated with Breakdown) */}
+             {integrityStats && integrityStats.totalIssues > 0 && (
+                 <div 
+                    onClick={() => setShowIntegrityModal(true)}
+                    className="bg-white border border-red-100 rounded-xl overflow-hidden shadow-sm cursor-pointer group"
+                 >
+                    <div className="bg-red-50 p-3 flex items-center justify-between border-b border-red-100">
+                        <div className="flex items-center">
+                            <AlertTriangle className="w-5 h-5 text-red-600 mr-2" />
+                            <h4 className="text-sm font-bold text-red-800">ข้อมูลไม่สมบูรณ์ ({viewLevel === 'area' ? 'เขต' : 'กลุ่ม'})</h4>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-red-400 group-hover:translate-x-1 transition-transform" />
+                    </div>
+                    <div className="p-3 text-xs text-gray-600 space-y-2">
+                        {integrityStats.missingTeachersCount > 0 && (
+                            <div className="flex items-center justify-between">
+                                <span className="flex items-center"><UserX className="w-3 h-3 mr-1.5 text-orange-500"/> ทีมขาดครู</span>
+                                <span className="font-bold text-red-600 bg-red-50 px-2 rounded-full">{integrityStats.missingTeachersCount}</span>
+                            </div>
+                        )}
+                        {integrityStats.missingStudentsCount > 0 && (
+                            <div className="flex items-center justify-between">
+                                <span className="flex items-center"><UserX className="w-3 h-3 mr-1.5 text-blue-500"/> ทีมขาดนักเรียน</span>
+                                <span className="font-bold text-red-600 bg-red-50 px-2 rounded-full">{integrityStats.missingStudentsCount}</span>
+                            </div>
+                        )}
+                        {integrityStats.missingJudgesCount > 0 && (
+                            <div className="flex items-center justify-between">
+                                <span className="flex items-center"><AlertOctagon className="w-3 h-3 mr-1.5 text-purple-500"/> กิจกรรมไม่มีกรรมการ</span>
+                                <span className="font-bold text-red-600 bg-red-50 px-2 rounded-full">{integrityStats.missingJudgesCount}</span>
+                            </div>
+                        )}
+                        {integrityStats.pendingStatus > 0 && (
+                            <div className="flex items-center justify-between border-t border-dashed border-gray-100 pt-2 mt-1">
+                                <span className="text-gray-500">รอตรวจสอบสถานะ</span>
+                                <span className="font-bold text-orange-500">{integrityStats.pendingStatus} ทีม</span>
+                            </div>
+                        )}
+                    </div>
                  </div>
              )}
 
@@ -892,7 +1068,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
                      <Megaphone className="w-5 h-5 mr-2 text-orange-500" /> ข่าวประชาสัมพันธ์
                  </h2>
                  {isAdmin && (
-                    <button onClick={() => setShowAddNews(true)} className="p-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100">
+                    <button onClick={() => navigate('/announcements')} className="p-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100">
                         <Plus className="w-4 h-4" />
                     </button>
                  )}
@@ -900,15 +1076,8 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
              
              <div className="space-y-4">
                 {newsList.length > 0 ? (
-                    newsList.slice(0, 3).map(item => (
-                        <div key={item.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-all relative overflow-hidden group">
-                            <div className="absolute top-0 left-0 w-1 h-full bg-orange-500"></div>
-                            <div className="pl-3">
-                                <span className="text-[10px] text-gray-400 mb-1 block">{new Date(item.date).toLocaleDateString('th-TH')}</span>
-                                <h3 className="text-sm font-bold text-gray-900 mb-2 group-hover:text-blue-600 transition-colors line-clamp-2">{item.title}</h3>
-                                {item.link && <a href={item.link} target="_blank" className="text-xs text-blue-500 hover:underline">อ่านต่อ →</a>}
-                            </div>
-                        </div>
+                    newsList.slice(0, 5).map(item => (
+                        <NewsCard key={item.id} item={item} user={user} onLike={handleLikeNews} onClick={() => setViewingAnnouncement(item)} />
                     ))
                 ) : <div className="text-center py-8 text-gray-400 text-sm border-dashed border-2 rounded-xl">ไม่มีข่าวใหม่</div>}
              </div>
@@ -918,14 +1087,54 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
                      <Book className="w-5 h-5 mr-2 text-green-600" /> คู่มือการใช้งาน
                  </h2>
                  <div className="grid gap-3">
-                    {manualList.length > 0 ? manualList.map(item => (
-                        <a key={item.id} href={item.link} target="_blank" className="flex items-center p-3 bg-white border border-gray-200 rounded-xl hover:border-green-400 transition-colors group">
-                            <div className="p-2 bg-green-50 text-green-600 rounded-lg mr-3 group-hover:bg-green-100"><FileText className="w-4 h-4"/></div>
-                            <div className="text-sm font-medium text-gray-700 group-hover:text-green-700 truncate">{item.title}</div>
-                        </a>
-                    )) : <div className="text-center py-4 text-gray-400 text-sm">ไม่มีคู่มือ</div>}
+                    {manualList.length > 0 ? manualList.map(item => {
+                        const att = item.attachments?.find(a => a.type.includes('image'));
+                        const img = att ? getAttachmentImageUrl(att) : null;
+                        return (
+                            <div 
+                                key={item.id} 
+                                onClick={() => setViewingAnnouncement(item)}
+                                className="flex items-center p-3 bg-white border border-gray-200 rounded-xl hover:border-green-400 transition-colors group cursor-pointer"
+                            >
+                                <div className="p-2 bg-green-50 text-green-600 rounded-lg mr-3 group-hover:bg-green-100 border border-green-100 overflow-hidden shrink-0 w-10 h-10 flex items-center justify-center">
+                                    {img ? (
+                                        <img src={img} className="w-full h-full object-cover" alt="icon" />
+                                    ) : (
+                                        <FileText className="w-5 h-5"/>
+                                    )}
+                                </div>
+                                <div className="text-sm font-medium text-gray-700 group-hover:text-green-700 truncate">{item.title}</div>
+                            </div>
+                        );
+                    }) : <div className="text-center py-4 text-gray-400 text-sm">ไม่มีคู่มือ</div>}
                  </div>
              </div>
+
+             {/* FEATURE 5: Judge Cooperation Widget (Filtered by Scope) */}
+             {judgeCooperation.length > 0 && (
+                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mt-6">
+                    <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-indigo-50">
+                        <h3 className="text-sm font-bold text-indigo-900 flex items-center">
+                            <Handshake className="w-4 h-4 mr-2" /> ความร่วมมือ ({viewLevel === 'area' ? 'ระดับเขต' : 'ระดับกลุ่ม'})
+                        </h3>
+                    </div>
+                    <div className="divide-y divide-gray-50">
+                        {judgeCooperation.map((item, idx) => (
+                            <div key={idx} className="p-3 flex justify-between items-center hover:bg-gray-50">
+                                <div className="flex items-center min-w-0">
+                                    <span className={`w-5 h-5 flex items-center justify-center rounded-full text-[10px] font-bold mr-2 shrink-0 ${idx < 3 ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-500'}`}>
+                                        {idx + 1}
+                                    </span>
+                                    <span className="text-xs text-gray-700 truncate" title={item.name}>{item.name}</span>
+                                </div>
+                                <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded ml-2">
+                                    {item.count}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                 </div>
+             )}
           </div>
       </div>
 
@@ -936,7 +1145,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
                   <div className="p-4 border-b border-red-100 flex justify-between items-center bg-red-50">
                       <div>
                           <h3 className="font-bold text-red-800 flex items-center">
-                              <AlertTriangle className="w-5 h-5 mr-2" /> รายการที่ข้อมูลไม่สมบูรณ์
+                              <AlertTriangle className="w-5 h-5 mr-2" /> รายการที่ข้อมูลไม่สมบูรณ์ ({viewLevel === 'area' ? 'ระดับเขต' : 'ระดับกลุ่ม'})
                           </h3>
                           <p className="text-xs text-red-600 mt-0.5">กรุณาแก้ไขข้อมูลให้ครบถ้วนตามเกณฑ์</p>
                       </div>
@@ -1081,46 +1290,6 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
                           </tbody>
                       </table>
                   </div>
-              </div>
-          </div>
-      )}
-
-      {/* Admin Add News Modal */}
-      {showAddNews && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-in fade-in zoom-in duration-200">
-                  <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center">
-                      <Plus className="w-5 h-5 mr-2 text-blue-600" />
-                      เพิ่มข่าว/คู่มือ
-                  </h3>
-                  <form onSubmit={handleAddNews} className="space-y-4">
-                      <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">หัวข้อ</label>
-                          <input type="text" required className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={newTitle} onChange={e => setNewTitle(e.target.value)} />
-                      </div>
-                      <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">ประเภท</label>
-                          <select className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white" value={newType} onChange={e => setNewType(e.target.value as any)}>
-                              <option value="news">ข่าวประชาสัมพันธ์</option>
-                              <option value="manual">คู่มือการใช้งาน</option>
-                          </select>
-                      </div>
-                      <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">รายละเอียด</label>
-                          <textarea required className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm h-24 resize-none focus:ring-2 focus:ring-blue-500 outline-none" value={newContent} onChange={e => setNewContent(e.target.value)}></textarea>
-                      </div>
-                      <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">ลิงก์ (ถ้ามี)</label>
-                          <input type="url" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="https://..." value={newLink} onChange={e => setNewLink(e.target.value)} />
-                      </div>
-                      <div className="flex justify-end gap-2 pt-2 border-t border-gray-100 mt-4">
-                          <button type="button" onClick={() => setShowAddNews(false)} className="px-4 py-2 text-gray-600 text-sm hover:bg-gray-100 rounded-lg font-medium">ยกเลิก</button>
-                          <button type="submit" disabled={isAddingNews} className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 font-bold shadow-sm flex items-center disabled:opacity-70">
-                              {isAddingNews && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-                              บันทึก
-                          </button>
-                      </div>
-                  </form>
               </div>
           </div>
       )}
