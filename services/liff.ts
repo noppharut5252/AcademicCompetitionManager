@@ -748,3 +748,123 @@ export const shareSchedule = async (
     }
 }
 
+export const shareAnnouncement = async (
+    title: string,
+    content: string,
+    type: string,
+    date: string,
+    imageUrl: string | null,
+    link: string
+): Promise<{ success: boolean; method: 'line' | 'share' | 'copy' | 'error' }> => {
+    
+    await ensureLiffInitialized();
+
+    // Use specific link if available (e.g. PDF), otherwise default to current app
+    const appUrl = link || window.location.href;
+    
+    // Safety Fallbacks
+    const safeTitle = title || '-';
+    const safeContent = content ? (content.length > 60 ? content.substring(0, 60) + '...' : content) : '-';
+    const safeDate = date ? new Date(date).toLocaleDateString('th-TH') : '-';
+    
+    // Styling based on type
+    const isNews = type === 'news';
+    const headerColor = isNews ? '#F97316' : '#16A34A'; // Orange vs Green
+    const headerText = isNews ? 'NEWS UPDATE' : 'MANUAL / GUIDE';
+    const titleTextSummary = isNews ? 'ข่าวประชาสัมพันธ์' : 'คู่มือการใช้งาน';
+
+    const textSummary = `📢 ${titleTextSummary}: ${safeTitle}\n\n${safeContent}\n📅 ${safeDate}\n\nอ่านเพิ่มเติม: ${appUrl}`;
+
+    // @ts-ignore
+    const isLoggedIn = liff.isLoggedIn();
+    // @ts-ignore
+    const isInClient = liff.isInClient();
+
+    if (isShareTargetPickerSupported() || (!isInClient && !isLoggedIn)) {
+        // @ts-ignore
+        if (!isLoggedIn) {
+            // @ts-ignore
+            liff.login({ redirectUri: window.location.href });
+            return { success: false, method: 'line' };
+        }
+
+        if (isShareTargetPickerSupported()) {
+            const flexMessage = {
+                type: "flex",
+                altText: `${titleTextSummary}: ${safeTitle}`,
+                contents: {
+                    "type": "bubble",
+                    "hero": imageUrl ? {
+                      "type": "image",
+                      "url": imageUrl,
+                      "size": "full",
+                      "aspectRatio": "20:13",
+                      "aspectMode": "cover",
+                      "action": { "type": "uri", "uri": appUrl }
+                    } : undefined,
+                    "body": {
+                      "type": "box",
+                      "layout": "vertical",
+                      "contents": [
+                        { "type": "text", "text": headerText, "weight": "bold", "color": headerColor, "size": "xs", "letterSpacing": "1px" },
+                        { "type": "text", "text": safeTitle, "weight": "bold", "size": "xl", "margin": "md", "wrap": true },
+                        { "type": "text", "text": safeContent, "size": "sm", "color": "#666666", "wrap": true, "margin": "md", "maxLines": 3 },
+                        {
+                          "type": "box",
+                          "layout": "baseline",
+                          "margin": "lg",
+                          "contents": [
+                            { "type": "text", "text": "วันที่", "color": "#aaaaaa", "size": "xs", "flex": 1 },
+                            { "type": "text", "text": safeDate, "color": "#666666", "size": "xs", "flex": 4 }
+                          ]
+                        }
+                      ]
+                    },
+                    "footer": {
+                      "type": "box",
+                      "layout": "vertical",
+                      "spacing": "sm",
+                      "contents": [
+                        {
+                          "type": "button",
+                          "style": "primary",
+                          "height": "sm",
+                          "action": { "type": "uri", "label": "อ่านรายละเอียด", "uri": appUrl },
+                          "color": headerColor
+                        }
+                      ],
+                      "flex": 0
+                    }
+                  }
+            };
+
+            try {
+                // @ts-ignore
+                await liff.shareTargetPicker([flexMessage]);
+                return { success: true, method: 'line' };
+            } catch (error) { 
+                console.error("LINE Share Announcement failed", error); 
+                return { success: false, method: 'error' };
+            }
+        }
+    }
+
+    if (navigator.share) {
+        try {
+            await navigator.share({
+                title: safeTitle,
+                text: textSummary,
+                url: appUrl,
+            });
+            return { success: true, method: 'share' };
+        } catch (error) { console.log("Web Share cancelled"); }
+    }
+
+    try {
+        await navigator.clipboard.writeText(textSummary);
+        return { success: true, method: 'copy' };
+    } catch (err) {
+        return { success: false, method: 'error' };
+    }
+}
+
