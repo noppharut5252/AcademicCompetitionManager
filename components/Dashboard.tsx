@@ -7,6 +7,7 @@ import StatCard from './StatCard';
 import { useNavigate } from 'react-router-dom';
 import { addAnnouncement, toggleLikeAnnouncement } from '../services/api';
 import { formatDeadline } from '../services/utils';
+import { shareAnnouncement } from '../services/liff';
 
 interface DashboardProps {
   data: AppData;
@@ -166,19 +167,25 @@ const NewsCard = ({ item, user, onLike, onClick }: { item: Announcement, user?: 
 
     const handleShare = async (e: React.MouseEvent) => {
         e.stopPropagation();
-        const shareData = {
-            title: item.title,
-            text: item.content,
-            url: window.location.href
-        };
+        
         try {
-            if (navigator.share) {
-                await navigator.share(shareData);
-            } else {
-                await navigator.clipboard.writeText(`${item.title}\n${item.content}`);
-                alert('Copied to clipboard');
+            const result = await shareAnnouncement(
+                item.title,
+                item.content,
+                item.type,
+                item.date,
+                coverImage,
+                item.link || ''
+            );
+
+            if (result.success && result.method === 'copy') {
+                alert('คัดลอกลิงก์ข่าวประชาสัมพันธ์แล้ว');
+            } else if (!result.success && result.method === 'error') {
+                alert('ไม่สามารถแชร์ได้ กรุณาลองใหม่');
             }
-        } catch (err) {}
+        } catch (err) {
+            console.error(err);
+        }
     };
 
     return (
