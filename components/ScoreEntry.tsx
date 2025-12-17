@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { AppData, User, Team } from '../types';
 import { updateTeamResult } from '../services/api';
 import { shareScoreResult, shareTop3Result } from '../services/liff';
-import { Save, Filter, AlertCircle, CheckCircle, Lock, Trophy, Search, ChevronRight, Share2, AlertTriangle, Calculator, X, Copy, PieChart, Check, ChevronDown, Flag, History, Loader2, ListChecks, Edit2, Crown, LayoutGrid, AlertOctagon, Wand2, Eye, EyeOff, ArrowDownWideNarrow, GraduationCap } from 'lucide-react';
+import { Save, Filter, AlertCircle, CheckCircle, Lock, Trophy, Search, ChevronRight, Share2, AlertTriangle, Calculator, X, Copy, PieChart, Check, ChevronDown, Flag, History, Loader2, ListChecks, Edit2, Crown, LayoutGrid, AlertOctagon, Wand2, Eye, EyeOff, ArrowDownWideNarrow, GraduationCap, Printer, School } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import SearchableSelect from './SearchableSelect'; // Import shared component
 
@@ -230,6 +230,9 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
   const [showMissingRepList, setShowMissingRepList] = useState(false);
   const [showUnscoredOnly, setShowUnscoredOnly] = useState(false);
 
+  // New: Representative Modal State
+  const [repModalData, setRepModalData] = useState<{ schoolName: string; teams: Team[] } | null>(null);
+
   // References for keyboard navigation
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
@@ -281,8 +284,9 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       return { availableCategories: categories, availableActivities: activeActivities, allAuthorizedTeams: authorizedTeams };
   }, [data.activities, data.teams, data.schools, role, user]);
 
-  // Representative Stats Calculation
-  const repStats = useMemo(() => {
+  // Representative Stats Calculation & School Stats
+  const { repStats, schoolStats } = useMemo(() => {
+      // 1. Rep Stats (Missing)
       const activityIds = new Set(availableActivities.map(a => a.id));
       const activitiesWithRep = new Set(
           allAuthorizedTeams
@@ -291,13 +295,40 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
             .filter(id => activityIds.has(id))
       );
       const missingActivities = availableActivities.filter(a => !activitiesWithRep.has(a.id));
+
+      // 2. School Stats (Medals & Reps)
+      const schoolMap: Record<string, { name: string, gold: number, silver: number, bronze: number, repCount: number, repTeams: Team[] }> = {};
+      
+      allAuthorizedTeams.forEach(t => {
+          const schoolName = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId)?.SchoolName || t.schoolId;
+          
+          if (!schoolMap[schoolName]) {
+              schoolMap[schoolName] = { name: schoolName, gold: 0, silver: 0, bronze: 0, repCount: 0, repTeams: [] };
+          }
+
+          const score = t.score;
+          if (score >= 80) schoolMap[schoolName].gold++;
+          else if (score >= 70) schoolMap[schoolName].silver++;
+          else if (score >= 60) schoolMap[schoolName].bronze++;
+
+          if (String(t.flag).toUpperCase() === 'TRUE' && String(t.rank) === '1') {
+              schoolMap[schoolName].repCount++;
+              schoolMap[schoolName].repTeams.push(t);
+          }
+      });
+
+      const sortedSchoolStats = Object.values(schoolMap).sort((a, b) => b.repCount - a.repCount || b.gold - a.gold);
+
       return {
-          total: availableActivities.length,
-          countWithRep: activitiesWithRep.size,
-          countMissing: missingActivities.length,
-          missingList: missingActivities
+          repStats: {
+              total: availableActivities.length,
+              countWithRep: activitiesWithRep.size,
+              countMissing: missingActivities.length,
+              missingList: missingActivities
+          },
+          schoolStats: sortedSchoolStats
       };
-  }, [availableActivities, allAuthorizedTeams]);
+  }, [availableActivities, allAuthorizedTeams, data.schools]);
 
 
   // Global Dashboard Stats
@@ -606,6 +637,85 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
      }
   };
 
+  const handlePrintRepSummary = () => {
+      if (!repModalData) return;
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) return;
+
+      const date = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
+      
+      let htmlRows = '';
+      repModalData.teams.forEach((t, idx) => {
+          const actName = data.activities.find(a => a.id === t.activityId)?.name || t.activityId;
+          
+          let teachers: any[] = [];
+          let students: any[] = [];
+          
+          try {
+              const raw = typeof t.members === 'string' ? JSON.parse(t.members) : t.members;
+              if (Array.isArray(raw)) { students = raw; }
+              else if (raw && typeof raw === 'object') {
+                  teachers = raw.teachers || [];
+                  students = raw.students || [];
+              }
+          } catch {}
+
+          const teacherNames = teachers.map(m => `${m.prefix || ''}${m.name || ''}`).join(', ');
+          const studentNames = students.map(m => `${m.prefix || ''}${m.name || ''}`).join(', ');
+
+          htmlRows += `
+            <tr>
+                <td style="text-align:center">${idx + 1}</td>
+                <td>${actName}</td>
+                <td>${t.teamName}</td>
+                <td>${studentNames || '-'}</td>
+                <td>${teacherNames || '-'}</td>
+            </tr>
+          `;
+      });
+
+      const htmlContent = `
+        <html>
+        <head>
+            <title>รายชื่อตัวแทน - ${repModalData.schoolName}</title>
+            <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap" rel="stylesheet">
+            <style>
+                body { font-family: 'Sarabun', sans-serif; padding: 20px; }
+                table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+                th, td { border: 1px solid #ccc; padding: 8px; text-align: left; vertical-align: top; }
+                th { background-color: #f0f0f0; }
+                h1, h2 { text-align: center; margin: 5px; }
+                .meta { text-align: center; font-size: 14px; color: #666; margin-bottom: 20px; }
+                @media print { .no-print { display: none; } }
+            </style>
+        </head>
+        <body>
+            <div class="no-print" style="margin-bottom: 20px; text-align: right;">
+                <button onclick="window.print()" style="padding: 10px 20px; background: #2563eb; color: white; border: none; border-radius: 5px; cursor: pointer;">พิมพ์รายงาน</button>
+            </div>
+            <h1>สรุปรายการตัวแทนเข้าแข่งขันระดับเขตพื้นที่</h1>
+            <h2>โรงเรียน${repModalData.schoolName}</h2>
+            <div class="meta">ข้อมูล ณ วันที่ ${date}</div>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 50px;">ที่</th>
+                        <th style="width: 25%;">กิจกรรม</th>
+                        <th style="width: 20%;">ชื่อทีม</th>
+                        <th>นักเรียน</th>
+                        <th>ครูผู้ฝึกสอน</th>
+                    </tr>
+                </thead>
+                <tbody>${htmlRows}</tbody>
+            </table>
+        </body>
+        </html>
+      `;
+      printWindow.document.write(htmlContent);
+      printWindow.document.close();
+  };
+
   const getSingleConfirmData = () => {
       if (confirmState.type !== 'single' || !confirmState.teamId) return null;
       const team = data.teams.find(t => t.teamId === confirmState.teamId);
@@ -717,15 +827,24 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                             onClick={() => setShowMissingRepList(!showMissingRepList)}
                             className="w-full flex items-center justify-between text-xs text-gray-500 hover:text-gray-700 py-1"
                          >
-                             <span>แสดงรายการที่ยังไม่มีตัวแทน</span>
+                             <span>แสดงรายการที่ยังไม่มีตัวแทน (คลิกเพื่อบันทึก)</span>
                              <ChevronDown className={`w-3 h-3 transition-transform ${showMissingRepList ? 'rotate-180' : ''}`} />
                          </button>
                          {showMissingRepList && (
                              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 max-h-48 overflow-y-auto p-2">
                                  {repStats.missingList.map(a => (
-                                     <div key={a.id} className="text-xs py-1.5 px-2 hover:bg-gray-50 text-gray-700 border-b border-gray-50 last:border-0 flex items-center">
+                                     <div 
+                                        key={a.id} 
+                                        onClick={() => {
+                                            setSelectedCategory(a.category);
+                                            setSelectedActivityId(a.id);
+                                            setShowMissingRepList(false); // Close dropdown
+                                        }}
+                                        className="text-xs py-2 px-2 hover:bg-red-50 text-gray-700 border-b border-gray-50 last:border-0 flex items-center cursor-pointer transition-colors"
+                                     >
                                          <AlertOctagon className="w-3 h-3 text-red-400 mr-2 shrink-0" />
-                                         <span className="truncate">{a.name}</span>
+                                         <span className="truncate flex-1 font-medium">{a.name}</span>
+                                         <ArrowDownWideNarrow className="w-3 h-3 text-gray-400 ml-2" />
                                      </div>
                                  ))}
                              </div>
@@ -734,6 +853,49 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                  )}
              </div>
         </div>
+      </div>
+
+      {/* School Medal Table */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="p-4 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
+              <h3 className="font-bold text-gray-800 flex items-center text-sm">
+                  <Crown className="w-4 h-4 mr-2 text-yellow-600" /> ตารางเหรียญรางวัลแยกโรงเรียน
+              </h3>
+          </div>
+          <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200 text-sm">
+                  <thead className="bg-white text-gray-500 font-medium">
+                      <tr>
+                          <th className="px-4 py-3 text-left">โรงเรียน</th>
+                          <th className="px-4 py-3 text-center text-yellow-600">ทอง</th>
+                          <th className="px-4 py-3 text-center text-gray-500">เงิน</th>
+                          <th className="px-4 py-3 text-center text-orange-600">ทองแดง</th>
+                          <th className="px-4 py-3 text-center text-purple-600">จำนวนตัวแทน</th>
+                      </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                      {schoolStats.map((s, idx) => (
+                          <tr key={idx} className="hover:bg-gray-50">
+                              <td className="px-4 py-2 font-medium text-gray-800">{s.name}</td>
+                              <td className="px-4 py-2 text-center font-bold">{s.gold}</td>
+                              <td className="px-4 py-2 text-center">{s.silver}</td>
+                              <td className="px-4 py-2 text-center">{s.bronze}</td>
+                              <td className="px-4 py-2 text-center">
+                                  {s.repCount > 0 ? (
+                                      <button 
+                                        onClick={() => setRepModalData({ schoolName: s.name, teams: s.repTeams })}
+                                        className="inline-flex items-center px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-bold hover:bg-purple-200 transition-colors"
+                                      >
+                                          <Flag className="w-3 h-3 mr-1" /> {s.repCount}
+                                      </button>
+                                  ) : <span className="text-gray-300">-</span>}
+                              </td>
+                          </tr>
+                      ))}
+                      {schoolStats.length === 0 && <tr><td colSpan={5} className="text-center py-4 text-gray-400">ยังไม่มีข้อมูล</td></tr>}
+                  </tbody>
+              </table>
+          </div>
       </div>
 
       {/* Selection Card */}
@@ -1035,6 +1197,64 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
           </div>
       )}
 
+      {/* Rep Details Modal */}
+      {repModalData && (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+              <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]">
+                  <div className="p-4 border-b border-gray-100 bg-purple-50 flex justify-between items-center">
+                      <h3 className="font-bold text-purple-800 flex items-center">
+                          <Flag className="w-5 h-5 mr-2" />
+                          รายการตัวแทนของโรงเรียน{repModalData.schoolName}
+                      </h3>
+                      <button onClick={() => setRepModalData(null)} className="p-1 hover:bg-purple-100 rounded-full text-purple-800"><X className="w-5 h-5"/></button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-4">
+                      <table className="min-w-full text-sm">
+                          <thead>
+                              <tr className="bg-gray-50 text-gray-500 font-medium">
+                                  <th className="px-3 py-2 text-left">กิจกรรม</th>
+                                  <th className="px-3 py-2 text-left">ทีม</th>
+                                  <th className="px-3 py-2 text-center">ครู</th>
+                                  <th className="px-3 py-2 text-center">นักเรียน</th>
+                              </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                              {repModalData.teams.map((t, idx) => {
+                                  const act = data.activities.find(a => a.id === t.activityId);
+                                  let tCount = 0;
+                                  let sCount = 0;
+                                  try {
+                                      const raw = typeof t.members === 'string' ? JSON.parse(t.members) : t.members;
+                                      if (Array.isArray(raw)) sCount = raw.length;
+                                      else if (raw) {
+                                          tCount = raw.teachers?.length || 0;
+                                          sCount = raw.students?.length || 0;
+                                      }
+                                  } catch {}
+                                  return (
+                                      <tr key={idx} className="hover:bg-gray-50">
+                                          <td className="px-3 py-2 text-gray-900">{act?.name || t.activityId}</td>
+                                          <td className="px-3 py-2 text-gray-600">{t.teamName}</td>
+                                          <td className="px-3 py-2 text-center">{tCount}</td>
+                                          <td className="px-3 py-2 text-center">{sCount}</td>
+                                      </tr>
+                                  );
+                              })}
+                          </tbody>
+                      </table>
+                  </div>
+                  <div className="p-4 bg-gray-50 border-t border-gray-100 flex justify-end">
+                      <button 
+                        onClick={handlePrintRepSummary}
+                        className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm text-sm font-bold"
+                      >
+                          <Printer className="w-4 h-4 mr-2" /> พิมพ์รายงานตัวแทน
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
       {/* Confirmation Modal */}
       {confirmState.isOpen && (
           <ConfirmModal 
@@ -1057,3 +1277,4 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
 };
 
 export default ScoreEntry;
+
