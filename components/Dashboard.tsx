@@ -4,7 +4,7 @@ import { AppData, Announcement, User, AreaStageInfo, Team, Venue, Activity as Ac
 import { Users, School, Trophy, Megaphone, Plus, Book, Calendar, ChevronRight, FileText, Loader2, Star, Medal, TrendingUp, Activity, Timer, ArrowUpRight, Zap, Target, CheckCircle, PieChart as PieIcon, List, X, BarChart3, MapPin, Navigation, Handshake, Briefcase, UserX, GraduationCap, AlertTriangle, Clock, Heart, Share2, Download, Image as ImageIcon, ExternalLink, UserCheck, AlertOctagon, PlayCircle } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import StatCard from './StatCard';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { addAnnouncement, toggleLikeAnnouncement } from '../services/api';
 import { formatDeadline } from '../services/utils';
 import { shareAnnouncement } from '../services/liff';
@@ -20,7 +20,6 @@ const MEDAL_COLORS = { 'Gold': '#FFD700', 'Silver': '#C0C0C0', 'Bronze': '#CD7F3
 // --- Helper for Image URL ---
 const getAttachmentImageUrl = (att: { url: string, id?: string }) => {
     if (att.id) return `https://drive.google.com/thumbnail?id=${att.id}&sz=w1000`;
-    // If it's a drive link but no ID, try to extract or use as is
     if (att.url.includes('drive.google.com')) {
         const match = att.url.match(/id=([^&]+)/) || att.url.match(/\/d\/([^/]+)/);
         if (match) return `https://drive.google.com/thumbnail?id=${match[1]}&sz=w1000`;
@@ -170,6 +169,7 @@ const NewsCard = ({ item, user, onLike, onClick }: { item: Announcement, user?: 
         
         try {
             const result = await shareAnnouncement(
+                item.id,
                 item.title,
                 item.content,
                 item.type,
@@ -289,11 +289,9 @@ const CountdownWidget = ({ data }: { data: AppData }) => {
         data.venues.forEach(v => {
             v.scheduledActivities?.forEach(s => {
                 if (s.date) {
-                    // Try to parse YYYY-MM-DD or standard formats
                     const d = new Date(s.date);
                     if (!isNaN(d.getTime())) {
                         const time = d.getTime();
-                        // Only count future events
                         if (time > Date.now()) {
                              if (earliest === null || time < earliest) {
                                  earliest = time;
@@ -309,7 +307,6 @@ const CountdownWidget = ({ data }: { data: AppData }) => {
             setTargetDate(new Date(earliest));
             setEventLabel('เริ่มการแข่งขันแรก');
         } else {
-            // Fallback: If no schedule found or all passed, maybe use a default or show "Completed"
             setTargetDate(null);
             setEventLabel('สิ้นสุดการแข่งขัน');
         }
@@ -390,6 +387,7 @@ const DashboardSkeleton = () => (
 
 const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [viewLevel, setViewLevel] = useState<'cluster' | 'area'>('cluster');
   const [isLoading, setIsLoading] = useState(true); // Internal loading state for visual transition
   
@@ -440,6 +438,17 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
       setManualList(filterNews('manual'));
 
   }, [data.announcements, user, data.schools]);
+
+  // Deep Link Handling: Check URL for announcement ID
+  useEffect(() => {
+      const annId = searchParams.get('announcementId');
+      if (annId && data.announcements) {
+          const found = data.announcements.find(a => a.id === annId);
+          if (found) {
+              setViewingAnnouncement(found);
+          }
+      }
+  }, [searchParams, data.announcements]);
 
   const handleLikeNews = async (id: string) => {
       if (!user) return;
