@@ -74,7 +74,6 @@ export const logoutLiff = async () => {
 };
 
 // --- Helper: Check sharing capability ---
-// Checks if the environment supports ShareTargetPicker (regardless of login status)
 const isShareTargetPickerSupported = () => {
     // @ts-ignore
     return typeof liff !== 'undefined' && liff.isApiAvailable('shareTargetPicker');
@@ -102,16 +101,14 @@ export const shareIdCard = async (
     // @ts-ignore
     const isInClient = liff.isInClient();
 
-    // Logic: Try LINE Share if available OR if we are on web (not in client) and need to login to check
     if (isShareTargetPickerSupported() || (!isInClient && !isLoggedIn)) {
         // @ts-ignore
         if (!isLoggedIn) {
             // @ts-ignore
             liff.login({ redirectUri: window.location.href });
-            return { success: false, method: 'line' }; // Redirecting
+            return { success: false, method: 'line' };
         }
 
-        // If logged in, verify support again (in case disabled in console)
         if (isShareTargetPickerSupported()) {
             const flexMessage = {
                 type: "flex",
@@ -222,7 +219,6 @@ export const shareIdCard = async (
         }
     }
 
-    // Fallback: Web Share
     if (navigator.share) {
         try {
             await navigator.share({
@@ -234,7 +230,6 @@ export const shareIdCard = async (
         } catch (error) { console.log("Web Share cancelled"); }
     }
 
-    // Fallback: Copy Link
     try {
         await navigator.clipboard.writeText(appUrl);
         return { success: true, method: 'copy' };
@@ -749,6 +744,7 @@ export const shareSchedule = async (
 }
 
 export const shareAnnouncement = async (
+    id: string,
     title: string,
     content: string,
     type: string,
@@ -759,11 +755,13 @@ export const shareAnnouncement = async (
     
     await ensureLiffInitialized();
 
-    // Default to current page if no link provided or invalid
-    const appUrl = (link && link.startsWith('http')) ? link : window.location.href;
+    const baseUrl = `${window.location.origin}${window.location.pathname}`;
+    // Construct the deep link specifically for opening the dashboard modal
+    const deepLink = `${baseUrl}#/dashboard?announcementId=${id}`;
     
     // Safety Fallbacks & Truncation for Stability
     const safeTitle = (title || 'ไม่มีหัวข้อ').substring(0, 100);
+    // Truncate content to avoid Flex Message size limits (keep brief for bubble)
     const safeContent = content ? (content.length > 200 ? content.substring(0, 197) + '...' : content) : '-';
     const safeDate = date ? new Date(date).toLocaleDateString('th-TH') : '-';
     
@@ -817,7 +815,7 @@ export const shareAnnouncement = async (
                       "type": "button",
                       "style": "primary",
                       "height": "sm",
-                      "action": { "type": "uri", "label": "เปิดดูรายละเอียด", "uri": appUrl },
+                      "action": { "type": "uri", "label": "เปิดดูรายละเอียด", "uri": deepLink },
                       "color": headerColor
                     }
                   ]
@@ -832,7 +830,7 @@ export const shareAnnouncement = async (
                     "size": "full",
                     "aspectRatio": "20:13",
                     "aspectMode": "cover",
-                    "action": { "type": "uri", "uri": appUrl }
+                    "action": { "type": "uri", "uri": deepLink }
                 };
             }
 
@@ -848,7 +846,6 @@ export const shareAnnouncement = async (
                 if (result) {
                     return { success: true, method: 'line' };
                 } else {
-                    // User cancelled or failed silently
                     return { success: false, method: 'error' };
                 }
             } catch (error) { 
@@ -864,7 +861,7 @@ export const shareAnnouncement = async (
             await navigator.share({
                 title: safeTitle,
                 text: `${headerText}: ${safeTitle}\n${safeContent}`,
-                url: appUrl,
+                url: deepLink,
             });
             return { success: true, method: 'share' };
         } catch (error) { console.log("Web Share cancelled"); }
@@ -872,7 +869,7 @@ export const shareAnnouncement = async (
 
     // Fallback: Copy Link
     try {
-        await navigator.clipboard.writeText(`${headerText}: ${safeTitle}\n${appUrl}`);
+        await navigator.clipboard.writeText(`${headerText}: ${safeTitle}\n${deepLink}`);
         return { success: true, method: 'copy' };
     } catch (err) {
         return { success: false, method: 'error' };
