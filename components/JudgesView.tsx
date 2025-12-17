@@ -29,6 +29,23 @@ interface JudgeAssignment {
     clusterLabel: string;
 }
 
+// Interfaces for Activity Groups
+interface ClusterJudgeData {
+    judges: Judge[];
+    competingSchools: Set<string>;
+    conflicts: number;
+    teamCount: number;
+}
+
+interface ActivityGroupData {
+    activityName: string;
+    areaJudges: Judge[];
+    areaSchools: Set<string>;
+    areaConflicts: number;
+    areaTeamCount: number;
+    clusters: Record<string, ClusterJudgeData>;
+}
+
 // Default Configuration Template
 const DEFAULT_CONFIG: JudgeConfig = {
     id: '',
@@ -332,7 +349,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
       const judgeSchool = judge.schoolName.trim().toLowerCase();
       if (!judgeSchool) return { hasConflict: false, schoolName: '' };
 
-      for (let school of competingSchoolNames) {
+      for (let school of Array.from(competingSchoolNames)) {
           if (judgeSchool === school.trim().toLowerCase()) {
               return { hasConflict: true, schoolName: school };
           }
@@ -341,27 +358,15 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
   };
 
   // Grouping Logic
-  const activityGroups = useMemo(() => {
-      const groups: Record<string, { 
-          activityName: string, 
-          areaJudges: Judge[],
-          areaSchools: Set<string>,
-          areaConflicts: number,
-          areaTeamCount: number,
-          clusters: Record<string, {
-              judges: Judge[],
-              competingSchools: Set<string>,
-              conflicts: number,
-              teamCount: number
-          }>
-      }> = {};
+  const activityGroups = useMemo<Record<string, ActivityGroupData>>(() => {
+      const groups: Record<string, ActivityGroupData> = {};
 
       // 1. Initialize
       data.activities.forEach(act => {
           groups[act.id] = {
               activityName: act.name,
               areaJudges: [],
-              areaSchools: new Set(),
+              areaSchools: new Set<string>(),
               areaConflicts: 0,
               areaTeamCount: 0,
               clusters: {}
@@ -369,7 +374,7 @@ const JudgesView: React.FC<JudgesViewProps> = ({ data, user, onDataUpdate }) => 
           data.clusters.forEach(c => {
               groups[act.id].clusters[c.ClusterID] = {
                   judges: [],
-                  competingSchools: new Set(),
+                  competingSchools: new Set<string>(),
                   conflicts: 0,
                   teamCount: 0
               };
