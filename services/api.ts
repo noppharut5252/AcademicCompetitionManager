@@ -1,5 +1,5 @@
 
-import { AppData, User, Team, CertificateTemplate, Venue, Judge, JudgeConfig, Announcement, Attachment } from '../types';
+import { AppData, User, Team, CertificateTemplate, Venue, Judge, JudgeConfig, Announcement, Attachment, Comment } from '../types';
 import { getMockData } from './mockData';
 
 const API_URL = "https://script.google.com/macros/s/AKfycbyYcf6m-3ypN3aX8F6prN0BLQcz0JyW0gj3Tq8dJyMs54gaTXSv_1uytthNu9H4CmMy/exec";
@@ -283,6 +283,19 @@ export const toggleLikeAnnouncement = async (id: string, userId: string): Promis
     } catch (e) { return { status: 'error' }; }
 }
 
+export const addComment = async (announcementId: string, comment: Comment): Promise<{ status: string, comments?: Comment[] }> => {
+    try {
+        const response = await fetch(`${API_URL}?action=addComment`, {
+            method: 'POST',
+            mode: 'cors',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify({ announcementId, comment })
+        });
+        if (!response.ok) return { status: 'error' };
+        return await response.json();
+    } catch (e) { return { status: 'error' }; }
+}
+
 // --- Certificate Config API ---
 
 export const getCertificateConfig = async (): Promise<Record<string, CertificateTemplate>> => {
@@ -433,3 +446,4 @@ export const getTeamsByActivity = (data: AppData) => {
   });
   return Object.keys(counts).map(key => ({ name: key, value: counts[key] }));
 };
+
