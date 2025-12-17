@@ -1221,9 +1221,9 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
                             <div 
                                 key={item.id} 
                                 onClick={() => setViewingAnnouncement(item)}
-                                className="flex items-center p-3 bg-white border border-gray-200 rounded-xl hover:border-green-400 transition-colors group cursor-pointer shadow-sm hover:shadow-md"
+                                className="flex items-start p-3 bg-white border border-gray-200 rounded-xl hover:border-green-400 transition-colors group cursor-pointer shadow-sm hover:shadow-md"
                             >
-                                <div className="p-2 bg-green-50 text-green-600 rounded-lg mr-3 group-hover:bg-green-100 border border-green-100 overflow-hidden shrink-0 w-10 h-10 flex items-center justify-center">
+                                <div className="p-2 bg-green-50 text-green-600 rounded-lg mr-3 group-hover:bg-green-100 border border-green-100 overflow-hidden shrink-0 w-10 h-10 flex items-center justify-center mt-0.5">
                                     {img ? (
                                         <img src={img} className="w-full h-full object-cover" alt="icon" />
                                     ) : isVideo ? (
@@ -1232,7 +1232,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
                                         <FileText className="w-5 h-5"/>
                                     )}
                                 </div>
-                                <div className="text-sm font-medium text-gray-700 group-hover:text-green-700 truncate">{item.title}</div>
+                                <div className="text-sm font-medium text-gray-700 group-hover:text-green-700 leading-snug">{item.title}</div>
                             </div>
                         );
                     }) : <div className="text-center py-4 text-gray-400 text-sm">ไม่มีคู่มือ</div>}
