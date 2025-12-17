@@ -16,7 +16,7 @@ export const fetchData = async (): Promise<AppData> => {
     }
 
     const data = await response.json();
-    // Ensure arrays exist
+    // Ensure arrays exist to prevent undefined errors
     if (!data.venues) data.venues = [];
     if (!data.judges) data.judges = [];
     return data;
@@ -150,6 +150,21 @@ export const updateTeamResult = async (teamId: string, score: number, rank: stri
     } catch (e) {
         console.error("Update Score failed", e);
         return false;
+    }
+}
+
+export const updateAreaResult = async (teamId: string, score: number, rank: string, medal: string): Promise<boolean> => {
+    try {
+        const response = await fetch(`${API_URL}?action=updateAreaResult&teamId=${encodeURIComponent(teamId)}&score=${score}&rank=${encodeURIComponent(rank)}&medal=${encodeURIComponent(medal)}`, {
+            method: 'GET',
+            mode: 'cors'
+        });
+        if (!response.ok) return false;
+        const result = await response.json();
+        return result.status === 'success';
+    } catch (e) { 
+        console.error("Update Area Score failed", e);
+        return false; 
     }
 }
 
