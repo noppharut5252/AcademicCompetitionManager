@@ -1,5 +1,5 @@
 
-import { AppData, User, Team, CertificateTemplate, Venue, Judge, JudgeConfig, Announcement } from '../types';
+import { AppData, User, Team, CertificateTemplate, Venue, Judge, JudgeConfig, Announcement, Attachment } from '../types';
 import { getMockData } from './mockData';
 
 const API_URL = "https://script.google.com/macros/s/AKfycbyYcf6m-3ypN3aX8F6prN0BLQcz0JyW0gj3Tq8dJyMs54gaTXSv_1uytthNu9H4CmMy/exec";
@@ -206,12 +206,16 @@ export const updateTeamDetails = async (team: any): Promise<boolean> => {
 }
 
 export const uploadImage = async (base64Image: string, filename: string = 'upload.jpg'): Promise<{ status: 'success' | 'error', fileId?: string, fileUrl?: string, message?: string }> => {
+    return uploadFile(base64Image, filename, 'image/jpeg');
+}
+
+export const uploadFile = async (base64Data: string, filename: string, mimeType: string): Promise<{ status: 'success' | 'error', fileId?: string, fileUrl?: string, message?: string }> => {
     try {
-        const response = await fetch(`${API_URL}?action=uploadImage`, {
+        const response = await fetch(`${API_URL}?action=uploadFile`, {
             method: 'POST',
             mode: 'cors',
             headers: { 'Content-Type': 'text/plain' },
-            body: JSON.stringify({ image: base64Image, filename })
+            body: JSON.stringify({ data: base64Data, filename, mimeType })
         });
         
         if (!response.ok) return { status: 'error', message: 'Network error' };
@@ -224,13 +228,13 @@ export const uploadImage = async (base64Image: string, filename: string = 'uploa
 
 // --- Announcement API ---
 
-export const addAnnouncement = async (title: string, content: string, type: 'news' | 'manual', link: string = '', author: string = 'Admin'): Promise<boolean> => {
+export const addAnnouncement = async (title: string, content: string, type: 'news' | 'manual', link: string = '', author: string = 'Admin', clusterId: string = 'area', attachments: Attachment[] = []): Promise<boolean> => {
     try {
         const response = await fetch(`${API_URL}?action=addAnnouncement`, {
             method: 'POST',
             mode: 'cors',
             headers: { 'Content-Type': 'text/plain' },
-            body: JSON.stringify({ title, content, type, link, author })
+            body: JSON.stringify({ title, content, type, link, author, clusterId, attachments })
         });
         
         if (!response.ok) return false;
@@ -267,6 +271,17 @@ export const deleteAnnouncement = async (id: string): Promise<boolean> => {
         return result.status === 'success';
     } catch (e) { return false; }
 };
+
+export const toggleLikeAnnouncement = async (id: string, userId: string): Promise<{ status: string, likedBy?: string[] }> => {
+    try {
+        const response = await fetch(`${API_URL}?action=toggleLike&id=${encodeURIComponent(id)}&userId=${encodeURIComponent(userId)}`, {
+            method: 'GET',
+            mode: 'cors'
+        });
+        if (!response.ok) return { status: 'error' };
+        return await response.json();
+    } catch (e) { return { status: 'error' }; }
+}
 
 // --- Certificate Config API ---
 
@@ -418,4 +433,3 @@ export const getTeamsByActivity = (data: AppData) => {
   });
   return Object.keys(counts).map(key => ({ name: key, value: counts[key] }));
 };
-
