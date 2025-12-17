@@ -184,10 +184,10 @@ const NewsCard = ({ item, user, onLike, onClick }: { item: Announcement, user?: 
     return (
         <div 
             onClick={onClick}
-            className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-all group cursor-pointer"
+            className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-all group cursor-pointer flex flex-col h-full"
         >
             {coverImage ? (
-                <div className="h-40 w-full overflow-hidden relative">
+                <div className="h-40 w-full overflow-hidden relative shrink-0">
                     <img src={coverImage} alt="cover" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-60 group-hover:opacity-40 transition-opacity"></div>
                     {isVideo && (
@@ -199,7 +199,7 @@ const NewsCard = ({ item, user, onLike, onClick }: { item: Announcement, user?: 
                     )}
                 </div>
             ) : isVideo ? (
-                <div className="h-40 w-full bg-slate-900 flex items-center justify-center relative overflow-hidden group-hover:bg-slate-800 transition-colors">
+                <div className="h-40 w-full bg-slate-900 flex items-center justify-center relative overflow-hidden group-hover:bg-slate-800 transition-colors shrink-0">
                      <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]"></div>
                      <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center backdrop-blur-md border border-white/20">
                         <PlayCircle className="w-8 h-8 text-white ml-1" />
@@ -207,7 +207,7 @@ const NewsCard = ({ item, user, onLike, onClick }: { item: Announcement, user?: 
                 </div>
             ) : null}
             
-            <div className="p-4">
+            <div className="p-4 flex flex-col flex-1">
                 <div className="flex justify-between items-start mb-2">
                     <div className="flex gap-2">
                         <span className="text-[10px] text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full flex items-center">
@@ -226,31 +226,26 @@ const NewsCard = ({ item, user, onLike, onClick }: { item: Announcement, user?: 
                     {item.title}
                 </h3>
                 
-                <p className="text-xs text-gray-500 line-clamp-3 mb-3">
+                <p className="text-xs text-gray-500 line-clamp-3 mb-3 flex-1">
                     {item.content}
                 </p>
 
                 {/* Attachments Chips */}
                 {hasAttachments && (
                     <div className="flex flex-wrap gap-1.5 mb-3">
-                        {item.attachments?.slice(0, 3).map((att, idx) => (
+                        {item.attachments?.slice(0, 2).map((att, idx) => (
                             <span 
                                 key={idx} 
                                 className="inline-flex items-center px-2 py-1 bg-gray-50 border border-gray-200 rounded text-[10px] text-gray-600"
                             >
                                 {att.type.includes('image') ? <ImageIcon className="w-3 h-3 mr-1"/> : <FileText className="w-3 h-3 mr-1"/>}
-                                {att.name.length > 15 ? att.name.substring(0, 12) + '...' : att.name}
+                                {att.name.length > 10 ? att.name.substring(0, 10) + '...' : att.name}
                             </span>
                         ))}
-                        {item.attachments && item.attachments.length > 3 && (
-                            <span className="inline-flex items-center px-2 py-1 bg-gray-50 border border-gray-200 rounded text-[10px] text-gray-500">
-                                +{item.attachments.length - 3}
-                            </span>
-                        )}
                     </div>
                 )}
 
-                <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                <div className="flex items-center justify-between pt-3 border-t border-gray-100 mt-auto">
                     <div className="flex items-center gap-3">
                         <button 
                             onClick={(e) => { e.stopPropagation(); user && onLike(item.id); }}
@@ -1072,13 +1067,13 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
               </div>
           </div>
 
-          {/* Right Column: News & Manuals & New Blocks */}
+          {/* Right Column: Widgets */}
           <div className="space-y-6">
              
              {/* FEATURE 4: Countdown Timer */}
              <CountdownWidget data={data} />
 
-             {/* New Venue Section */}
+             {/* Venue Section */}
              <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mt-6">
                 <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
                     <h3 className="text-sm font-bold text-gray-800 flex items-center">
@@ -1155,57 +1150,6 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
                  </div>
              )}
 
-             <div className="flex items-center justify-between mt-4">
-                 <h2 className="text-lg font-bold text-gray-800 flex items-center">
-                     <Megaphone className="w-5 h-5 mr-2 text-orange-500" /> ข่าวประชาสัมพันธ์
-                 </h2>
-                 {isAdmin && (
-                    <button onClick={() => navigate('/announcements')} className="p-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100">
-                        <Plus className="w-4 h-4" />
-                    </button>
-                 )}
-             </div>
-             
-             <div className="space-y-4">
-                {newsList.length > 0 ? (
-                    newsList.slice(0, 5).map(item => (
-                        <NewsCard key={item.id} item={item} user={user} onLike={handleLikeNews} onClick={() => setViewingAnnouncement(item)} />
-                    ))
-                ) : <div className="text-center py-8 text-gray-400 text-sm border-dashed border-2 rounded-xl">ไม่มีข่าวใหม่</div>}
-             </div>
-
-             <div className="pt-4 border-t border-gray-200">
-                 <h2 className="text-lg font-bold text-gray-800 flex items-center mb-4">
-                     <Book className="w-5 h-5 mr-2 text-green-600" /> คู่มือการใช้งาน
-                 </h2>
-                 <div className="grid gap-3">
-                    {manualList.length > 0 ? manualList.map(item => {
-                        const att = item.attachments?.find(a => a.type.includes('image'));
-                        const img = att ? getAttachmentImageUrl(att) : null;
-                        const isVideo = item.link && getVideoEmbedUrl(item.link);
-                        
-                        return (
-                            <div 
-                                key={item.id} 
-                                onClick={() => setViewingAnnouncement(item)}
-                                className="flex items-center p-3 bg-white border border-gray-200 rounded-xl hover:border-green-400 transition-colors group cursor-pointer"
-                            >
-                                <div className="p-2 bg-green-50 text-green-600 rounded-lg mr-3 group-hover:bg-green-100 border border-green-100 overflow-hidden shrink-0 w-10 h-10 flex items-center justify-center">
-                                    {img ? (
-                                        <img src={img} className="w-full h-full object-cover" alt="icon" />
-                                    ) : isVideo ? (
-                                        <PlayCircle className="w-5 h-5" />
-                                    ) : (
-                                        <FileText className="w-5 h-5"/>
-                                    )}
-                                </div>
-                                <div className="text-sm font-medium text-gray-700 group-hover:text-green-700 truncate">{item.title}</div>
-                            </div>
-                        );
-                    }) : <div className="text-center py-4 text-gray-400 text-sm">ไม่มีคู่มือ</div>}
-                 </div>
-             </div>
-
              {/* FEATURE 5: Judge Cooperation Widget (Filtered by Scope) */}
              {judgeCooperation.length > 0 && (
                  <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mt-6">
@@ -1231,6 +1175,69 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
                     </div>
                  </div>
              )}
+          </div>
+      </div>
+
+      {/* NEW SECTION: News & Manuals (Full Width) */}
+      <div className="mt-8 border-t border-gray-200 pt-8">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+             {/* News Section (3 cols wide on large screens) */}
+             <div className="lg:col-span-3 space-y-4">
+                <div className="flex items-center justify-between mb-2">
+                     <h2 className="text-lg font-bold text-gray-800 flex items-center">
+                         <Megaphone className="w-5 h-5 mr-2 text-orange-500" /> ข่าวประชาสัมพันธ์
+                     </h2>
+                     {isAdmin && (
+                        <button onClick={() => navigate('/announcements')} className="p-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 flex items-center text-xs font-bold px-3">
+                            <Plus className="w-4 h-4 mr-1" /> จัดการข่าว
+                        </button>
+                     )}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                   {newsList.length > 0 ? (
+                        newsList.map(item => (
+                            <NewsCard key={item.id} item={item} user={user} onLike={handleLikeNews} onClick={() => setViewingAnnouncement(item)} />
+                        ))
+                   ) : (
+                        <div className="col-span-full text-center py-10 text-gray-400 text-sm border-dashed border-2 rounded-xl bg-gray-50">
+                            ยังไม่มีข่าวประชาสัมพันธ์
+                        </div>
+                   )}
+                </div>
+             </div>
+
+             {/* Manuals Section (1 col wide on large screens) */}
+             <div className="lg:col-span-1 space-y-4">
+                <h2 className="text-lg font-bold text-gray-800 flex items-center mb-4 border-b pb-2">
+                     <Book className="w-5 h-5 mr-2 text-green-600" /> คู่มือการใช้งาน
+                </h2>
+                <div className="flex flex-col gap-3">
+                    {manualList.length > 0 ? manualList.map(item => {
+                        const att = item.attachments?.find(a => a.type.includes('image'));
+                        const img = att ? getAttachmentImageUrl(att) : null;
+                        const isVideo = item.link && getVideoEmbedUrl(item.link);
+                        
+                        return (
+                            <div 
+                                key={item.id} 
+                                onClick={() => setViewingAnnouncement(item)}
+                                className="flex items-center p-3 bg-white border border-gray-200 rounded-xl hover:border-green-400 transition-colors group cursor-pointer shadow-sm hover:shadow-md"
+                            >
+                                <div className="p-2 bg-green-50 text-green-600 rounded-lg mr-3 group-hover:bg-green-100 border border-green-100 overflow-hidden shrink-0 w-10 h-10 flex items-center justify-center">
+                                    {img ? (
+                                        <img src={img} className="w-full h-full object-cover" alt="icon" />
+                                    ) : isVideo ? (
+                                        <PlayCircle className="w-5 h-5" />
+                                    ) : (
+                                        <FileText className="w-5 h-5"/>
+                                    )}
+                                </div>
+                                <div className="text-sm font-medium text-gray-700 group-hover:text-green-700 truncate">{item.title}</div>
+                            </div>
+                        );
+                    }) : <div className="text-center py-4 text-gray-400 text-sm">ไม่มีคู่มือ</div>}
+                </div>
+             </div>
           </div>
       </div>
 
