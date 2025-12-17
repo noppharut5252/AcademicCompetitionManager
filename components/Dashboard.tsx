@@ -1,11 +1,11 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
-import { AppData, Announcement, User, AreaStageInfo, Team, Venue, Activity as ActivityType } from '../types';
-import { Users, School, Trophy, Megaphone, Plus, Book, Calendar, ChevronRight, FileText, Loader2, Star, Medal, TrendingUp, Activity, Timer, ArrowUpRight, Zap, Target, CheckCircle, PieChart as PieIcon, List, X, BarChart3, MapPin, Navigation, Handshake, Briefcase, UserX, GraduationCap, AlertTriangle, Clock, Heart, Share2, Download, Image as ImageIcon, ExternalLink, UserCheck, AlertOctagon, PlayCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { AppData, Announcement, User, AreaStageInfo, Team, Venue, Activity as ActivityType, Comment } from '../types';
+import { Users, School, Trophy, Megaphone, Plus, Book, Calendar, ChevronRight, FileText, Loader2, Star, Medal, TrendingUp, Activity, Timer, ArrowUpRight, Zap, Target, CheckCircle, PieChart as PieIcon, List, X, BarChart3, MapPin, Navigation, Handshake, Briefcase, UserX, GraduationCap, AlertTriangle, Clock, Heart, Share2, Download, Image as ImageIcon, ExternalLink, UserCheck, AlertOctagon, PlayCircle, ChevronDown, ChevronUp, MessageCircle, Send, ShieldCheck, RefreshCw } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import StatCard from './StatCard';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { addAnnouncement, toggleLikeAnnouncement } from '../services/api';
+import { addAnnouncement, toggleLikeAnnouncement, addComment } from '../services/api';
 import { formatDeadline } from '../services/utils';
 import { shareAnnouncement } from '../services/liff';
 
@@ -47,20 +47,135 @@ const getVideoEmbedUrl = (url: string): string | null => {
 };
 
 // --- Helper for User Avatar ---
-const getUserAvatar = (id: string) => `https://ui-avatars.com/api/?name=${id}&background=random&color=fff&size=64`;
+const getUserAvatar = (id: string, name?: string) => {
+    // If ID looks like a Line ID (usually long, starts with U), we might not have the image easily without lookup
+    // But if name is provided, use it for UI Avatars
+    const seed = name || id;
+    return `https://ui-avatars.com/api/?name=${seed}&background=random&color=fff&size=64`;
+};
+
+// --- Helper: Math Captcha ---
+const generateCaptcha = () => {
+    const num1 = Math.floor(Math.random() * 10) + 1;
+    const num2 = Math.floor(Math.random() * 10) + 1;
+    return {
+        question: `${num1} + ${num2} = ?`,
+        answer: num1 + num2
+    };
+};
 
 // --- Components ---
 
-const AnnouncementDetailModal = ({ item, onClose }: { item: Announcement, onClose: () => void }) => {
+const AnnouncementDetailModal = ({ item, user, onClose, onUpdate }: { item: Announcement, user?: User | null, onClose: () => void, onUpdate?: (updatedItem: Announcement) => void }) => {
     const coverAttachment = item.attachments?.find(att => att.type.includes('image'));
     const coverImage = coverAttachment ? getAttachmentImageUrl(coverAttachment) : null;
     const videoEmbedUrl = item.link ? getVideoEmbedUrl(item.link) : null;
     
     // Liked By Logic
-    const likedBy = item.likedBy || [];
+    const [likedBy, setLikedBy] = useState<string[]>(item.likedBy || []);
+    const isLiked = user && likedBy.includes(user.userid);
     const totalLikes = likedBy.length;
-    // Get last 5 likers (reversed to show latest first)
-    const recentLikes = [...likedBy].reverse().slice(0, 5);
+    
+    // Comment Logic
+    const [comments, setComments] = useState<Comment[]>(item.comments || []);
+    const [commentInput, setCommentInput] = useState('');
+    const [captcha, setCaptcha] = useState(generateCaptcha());
+    const [captchaInput, setCaptchaInput] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    
+    const commentsEndRef = useRef<HTMLDivElement>(null);
+
+    // Scroll to bottom of comments when new one added
+    useEffect(() => {
+        if (commentsEndRef.current) {
+            commentsEndRef.current.scrollIntoView({ behavior: 'smooth' });
+        }
+    }, [comments]);
+
+    const handleLike = async () => {
+        if (!user) return;
+        
+        // Optimistic UI Update
+        const newLikedBy = isLiked 
+            ? likedBy.filter(id => id !== user.userid)
+            : [...likedBy, user.userid];
+        
+        setLikedBy(newLikedBy);
+        
+        if (onUpdate) {
+            onUpdate({ ...item, likedBy: newLikedBy });
+        }
+
+        // API Call
+        await toggleLikeAnnouncement(item.id, user.userid);
+    };
+
+    const handleShare = async () => {
+        try {
+            const result = await shareAnnouncement(
+                item.id,
+                item.title,
+                item.content,
+                item.type,
+                item.date,
+                coverImage,
+                item.link || ''
+            );
+
+            if (result.success && result.method === 'copy') {
+                alert('คัดลอกลิงก์เรียบร้อยแล้ว');
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    const handleSubmitComment = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!user) {
+            alert('กรุณาเข้าสู่ระบบเพื่อแสดงความคิดเห็น');
+            return;
+        }
+        if (!commentInput.trim()) return;
+        
+        if (parseInt(captchaInput) !== captcha.answer) {
+            alert('คำตอบป้องกันสแปมไม่ถูกต้อง');
+            setCaptcha(generateCaptcha());
+            setCaptchaInput('');
+            return;
+        }
+
+        setIsSubmitting(true);
+        const newComment: Comment = {
+            id: Date.now().toString(),
+            userId: user.userid,
+            userName: user.displayName || user.name || 'User',
+            userAvatar: user.pictureUrl,
+            content: commentInput,
+            timestamp: new Date().toISOString()
+        };
+
+        // API Call
+        const res = await addComment(item.id, newComment);
+        setIsSubmitting(false);
+
+        if (res.status === 'success' && res.comments) {
+            setComments(res.comments);
+            setCommentInput('');
+            setCaptchaInput('');
+            setCaptcha(generateCaptcha());
+            if (onUpdate) {
+                onUpdate({ ...item, comments: res.comments });
+            }
+        } else {
+            alert('ไม่สามารถส่งคอมเมนต์ได้');
+        }
+    };
+
+    const refreshCaptcha = () => {
+        setCaptcha(generateCaptcha());
+        setCaptchaInput('');
+    };
     
     return (
         <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
@@ -132,49 +247,134 @@ const AnnouncementDetailModal = ({ item, onClose }: { item: Announcement, onClos
                             </div>
                         )}
 
-                        {/* External Link (if not embedded video) */}
-                        {item.link && !videoEmbedUrl && (
-                            <div className="pt-2">
-                                <a 
-                                    href={item.link} 
-                                    target="_blank" 
-                                    rel="noreferrer"
-                                    className="flex items-center justify-center w-full py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors shadow-sm"
+                        {/* Interaction Bar */}
+                        <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+                            <div className="flex items-center gap-4">
+                                <button 
+                                    onClick={handleLike}
+                                    disabled={!user}
+                                    className={`flex items-center gap-1.5 text-sm font-medium transition-colors ${isLiked ? 'text-red-500' : 'text-gray-500 hover:text-red-500'} disabled:opacity-50`}
                                 >
-                                    {item.type === 'manual' ? 'เปิดคู่มือฉบับเต็ม' : 'อ่านเพิ่มเติม / ไปยังลิงก์'}
-                                    <ExternalLink className="w-4 h-4 ml-2" />
-                                </a>
+                                    <Heart className={`w-5 h-5 ${isLiked ? 'fill-current' : ''}`} />
+                                    {totalLikes > 0 ? totalLikes : 'Like'}
+                                </button>
+                                <button 
+                                    onClick={() => document.getElementById('comment-input')?.focus()}
+                                    className="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-blue-600 transition-colors"
+                                >
+                                    <MessageCircle className="w-5 h-5" />
+                                    Comment
+                                </button>
                             </div>
-                        )}
-                        {/* If video, provide direct link as well */}
-                        {videoEmbedUrl && (
-                             <div className="pt-2 text-center">
-                                <a href={item.link} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline flex items-center justify-center">
-                                    เปิดดูวิดีโอในหน้าต่างใหม่ <ExternalLink className="w-3 h-3 ml-1" />
-                                </a>
-                             </div>
-                        )}
+                            <button 
+                                onClick={handleShare}
+                                className="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-blue-600 transition-colors"
+                            >
+                                <Share2 className="w-5 h-5" />
+                                Share
+                            </button>
+                        </div>
 
-                        {/* Liked By Section */}
+                        {/* Likers Stack */}
                         {totalLikes > 0 && (
-                            <div className="mt-4 pt-4 border-t border-gray-100 flex items-center gap-3">
+                            <div className="flex items-center gap-2 mt-2">
                                 <div className="flex -space-x-2 overflow-hidden">
-                                    {recentLikes.map((uid, idx) => (
+                                    {likedBy.slice(0, 5).map((uid, idx) => (
                                         <img 
                                             key={idx}
-                                            className="inline-block h-8 w-8 rounded-full ring-2 ring-white bg-gray-100"
-                                            src={getUserAvatar(uid)}
-                                            alt={uid}
-                                            title={uid}
+                                            className="inline-block h-6 w-6 rounded-full ring-2 ring-white bg-gray-100 object-cover"
+                                            src={getUserAvatar(uid)} // Use ID to generate visual avatar if no real user object
+                                            alt="Liker"
+                                            title="User"
                                         />
                                     ))}
                                 </div>
                                 <div className="text-xs text-gray-500">
                                     ถูกใจโดย <span className="font-bold text-gray-800">{totalLikes}</span> คน
-                                    {totalLikes > 0 && <span className="block text-[10px] text-gray-400">ล่าสุด: {recentLikes[0].length > 10 ? recentLikes[0].substring(0, 10) + '...' : recentLikes[0]}</span>}
                                 </div>
                             </div>
                         )}
+
+                        {/* Comments Section */}
+                        <div className="bg-gray-50 rounded-xl p-4 mt-4">
+                            <h4 className="text-sm font-bold text-gray-800 mb-3 flex items-center">
+                                <MessageCircle className="w-4 h-4 mr-2" /> ความคิดเห็น ({comments.length})
+                            </h4>
+                            
+                            <div className="space-y-4 mb-4 max-h-[200px] overflow-y-auto pr-1">
+                                {comments.length > 0 ? comments.map((comment) => (
+                                    <div key={comment.id} className="flex gap-3">
+                                        <img 
+                                            src={comment.userAvatar || getUserAvatar(comment.userId, comment.userName)} 
+                                            className="w-8 h-8 rounded-full bg-white border border-gray-200 object-cover shrink-0" 
+                                            alt={comment.userName}
+                                        />
+                                        <div className="flex-1">
+                                            <div className="bg-white p-2.5 rounded-lg border border-gray-200 shadow-sm rounded-tl-none">
+                                                <div className="flex justify-between items-baseline mb-1">
+                                                    <span className="text-xs font-bold text-gray-900">{comment.userName}</span>
+                                                    <span className="text-[9px] text-gray-400">{new Date(comment.timestamp).toLocaleDateString('th-TH', { hour: '2-digit', minute: '2-digit' })}</span>
+                                                </div>
+                                                <p className="text-xs text-gray-700">{comment.content}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )) : (
+                                    <div className="text-center text-gray-400 text-xs py-2 italic">ยังไม่มีความคิดเห็น</div>
+                                )}
+                                <div ref={commentsEndRef} />
+                            </div>
+
+                            {/* Comment Form */}
+                            {user ? (
+                                <form onSubmit={handleSubmitComment} className="border-t border-gray-200 pt-3">
+                                    <div className="flex gap-3 items-start">
+                                        <img 
+                                            src={user.pictureUrl || getUserAvatar(user.userid, user.displayName)} 
+                                            className="w-8 h-8 rounded-full border border-gray-200 object-cover hidden sm:block" 
+                                            alt="Me"
+                                        />
+                                        <div className="flex-1 space-y-2">
+                                            <textarea 
+                                                id="comment-input"
+                                                className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none h-20"
+                                                placeholder="เขียนความคิดเห็น..."
+                                                value={commentInput}
+                                                onChange={(e) => setCommentInput(e.target.value)}
+                                            />
+                                            <div className="flex items-center justify-between gap-2">
+                                                <div className="flex items-center bg-white border border-gray-300 rounded-lg px-2 py-1">
+                                                    <ShieldCheck className="w-4 h-4 text-green-500 mr-2" />
+                                                    <span className="text-xs font-mono font-bold mr-2 text-gray-600 select-none">{captcha.question}</span>
+                                                    <input 
+                                                        type="number" 
+                                                        className="w-12 text-center border-l border-gray-200 text-xs focus:outline-none"
+                                                        placeholder="?"
+                                                        value={captchaInput}
+                                                        onChange={(e) => setCaptchaInput(e.target.value)}
+                                                    />
+                                                    <button type="button" onClick={refreshCaptcha} className="ml-2 text-gray-400 hover:text-gray-600">
+                                                        <RefreshCw className="w-3 h-3" />
+                                                    </button>
+                                                </div>
+                                                <button 
+                                                    type="submit" 
+                                                    disabled={!commentInput.trim() || !captchaInput || isSubmitting}
+                                                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold flex items-center disabled:opacity-50 transition-colors"
+                                                >
+                                                    {isSubmitting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3 mr-1" />}
+                                                    ส่ง
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </form>
+                            ) : (
+                                <div className="text-center bg-gray-100 p-3 rounded-lg border border-gray-200">
+                                    <p className="text-xs text-gray-500 mb-2">กรุณาเข้าสู่ระบบเพื่อแสดงความคิดเห็น</p>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -182,9 +382,17 @@ const AnnouncementDetailModal = ({ item, onClose }: { item: Announcement, onClos
     );
 };
 
-const NewsCard = ({ item, user, onLike, onClick }: { item: Announcement, user?: User | null, onLike: (id: string) => void, onClick: () => void }) => {
+interface NewsCardProps {
+    item: Announcement;
+    user?: User | null;
+    onLike: (id: string) => void;
+    onClick: () => void;
+}
+
+const NewsCard: React.FC<NewsCardProps> = ({ item, user, onLike, onClick }) => {
     const isLiked = item.likedBy?.includes(user?.userid || 'anon');
     const likeCount = item.likedBy?.length || 0;
+    const commentCount = item.comments?.length || 0;
     
     // Find cover image using helper
     const coverAttachment = item.attachments?.find(att => att.type.includes('image'));
@@ -292,6 +500,10 @@ const NewsCard = ({ item, user, onLike, onClick }: { item: Announcement, user?: 
                             <Heart className={`w-4 h-4 mr-1 ${isLiked ? 'fill-current' : ''}`} />
                             {likeCount}
                         </button>
+                        <div className="flex items-center text-xs text-gray-400">
+                            <MessageCircle className="w-4 h-4 mr-1" />
+                            {commentCount}
+                        </div>
                         <button onClick={handleShare} className="text-gray-400 hover:text-blue-500 transition-colors">
                             <Share2 className="w-4 h-4" />
                         </button>
@@ -501,6 +713,12 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
       setNewsList(prev => updateList(prev));
       // Call API
       await toggleLikeAnnouncement(id, user.userid);
+  };
+
+  const handleAnnouncementUpdate = (updated: Announcement) => {
+      setViewingAnnouncement(updated);
+      setNewsList(prev => prev.map(item => item.id === updated.id ? updated : item));
+      setManualList(prev => prev.map(item => item.id === updated.id ? updated : item));
   };
 
   const handleShareManual = async (item: Announcement) => {
@@ -878,7 +1096,9 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
       {viewingAnnouncement && (
           <AnnouncementDetailModal 
               item={viewingAnnouncement} 
+              user={user}
               onClose={() => { setViewingAnnouncement(null); setSearchParams({}); }} // Clear params on close
+              onUpdate={handleAnnouncementUpdate}
           />
       )}
 
