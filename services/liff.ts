@@ -517,6 +517,9 @@ export const shareVenue = async (venue: any): Promise<{ success: boolean; method
         }
 
         if (isShareTargetPickerSupported()) {
+            // Ensure no empty strings in critical fields
+            const validMapUrl = mapUrl && mapUrl.startsWith('http') ? mapUrl : appUrl;
+
             const flexMessage = {
                 type: "flex",
                 altText: `สนามแข่งขัน: ${venue.name}`,
@@ -548,7 +551,7 @@ export const shareVenue = async (venue: any): Promise<{ success: boolean; method
                               "spacing": "sm",
                               "contents": [
                                 { "type": "text", "text": "สถานที่", "color": "#aaaaaa", "size": "sm", "flex": 1 },
-                                { "type": "text", "text": "คลิกดูแผนที่ GPS", "wrap": true, "color": "#666666", "size": "sm", "flex": 4, "action": { "type": "uri", "label": "Map", "uri": mapUrl || appUrl } }
+                                { "type": "text", "text": "คลิกดูแผนที่ GPS", "wrap": true, "color": "#666666", "size": "sm", "flex": 4, "action": { "type": "uri", "label": "Map", "uri": validMapUrl } }
                               ]
                             }
                           ]
@@ -561,7 +564,8 @@ export const shareVenue = async (venue: any): Promise<{ success: boolean; method
                       "spacing": "sm",
                       "contents": [
                         { "type": "button", "style": "primary", "height": "sm", "action": { "type": "uri", "label": "ดูตารางแข่งขัน", "uri": appUrl }, "color": "#2563EB" },
-                        mapUrl ? { "type": "button", "style": "secondary", "height": "sm", "action": { "type": "uri", "label": "นำทาง (Google Maps)", "uri": mapUrl } } : { "type": "spacer", "size": "xs" }
+                        // Condition check for map url
+                        mapUrl && mapUrl.startsWith('http') ? { "type": "button", "style": "secondary", "height": "sm", "action": { "type": "uri", "label": "นำทาง (Google Maps)", "uri": mapUrl } } : { "type": "spacer", "size": "xs" }
                       ],
                       "flex": 0
                     }
@@ -611,8 +615,12 @@ export const shareSchedule = async (
     const displayRoom = room || 'ยังไม่ระบุห้อง';
     const displayTime = time || 'ยังไม่ระบุเวลา';
     const displayDate = date || 'ยังไม่ระบุวันที่';
+    const cleanVenueName = venueName || 'สนามแข่งขัน';
     
-    const textSummary = `📅 กำหนดการแข่งขัน\n${activityName}\n\n📍 สถานที่: ${venueName} ${displayRoom}\n🗓️ วันที่: ${displayDate}\n⏰ เวลา: ${displayTime}\n\nดูรายละเอียดเพิ่มเติม: ${appUrl}`;
+    // Fallback if locationUrl is missing or invalid, use appUrl
+    const mapUrl = (locationUrl && locationUrl.startsWith('http')) ? locationUrl : '';
+    
+    const textSummary = `📅 กำหนดการแข่งขัน\n${activityName}\n\n📍 สถานที่: ${cleanVenueName} ${displayRoom}\n🗓️ วันที่: ${displayDate}\n⏰ เวลา: ${displayTime}\n\nดูรายละเอียดเพิ่มเติม: ${appUrl}`;
 
     // @ts-ignore
     const isLoggedIn = liff.isLoggedIn();
@@ -630,7 +638,7 @@ export const shareSchedule = async (
         if (isShareTargetPickerSupported()) {
             const flexMessage = {
                 type: "flex",
-                altText: `กำหนดการ: ${activityName}`,
+                altText: `กำหนดการ: ${activityName.substring(0, 40)}...`,
                 contents: {
                     "type": "bubble",
                     "header": {
@@ -647,7 +655,7 @@ export const shareSchedule = async (
                         "type": "box",
                         "layout": "vertical",
                         "contents": [
-                            { "type": "text", "text": activityName, "weight": "bold", "size": "md", "wrap": true, "color": "#333333" },
+                            { "type": "text", "text": activityName || "กิจกรรม", "weight": "bold", "size": "md", "wrap": true, "color": "#333333" },
                             { "type": "separator", "margin": "lg" },
                             {
                                 "type": "box",
@@ -679,7 +687,7 @@ export const shareSchedule = async (
                                         "spacing": "sm",
                                         "contents": [
                                             { "type": "text", "text": "สถานที่", "color": "#aaaaaa", "size": "sm", "flex": 1 },
-                                            { "type": "text", "text": `${venueName} ${displayRoom}`, "wrap": true, "color": "#666666", "size": "sm", "flex": 4 }
+                                            { "type": "text", "text": `${cleanVenueName} ${displayRoom}`, "wrap": true, "color": "#666666", "size": "sm", "flex": 4 }
                                         ]
                                     }
                                 ]
@@ -698,12 +706,13 @@ export const shareSchedule = async (
                                 "action": { "type": "uri", "label": "ดูตารางทั้งหมด", "uri": appUrl },
                                 "color": "#0D9488"
                             },
-                            locationUrl ? {
+                            // Only render this button if mapUrl is valid
+                            ...(mapUrl ? [{
                                 "type": "button",
                                 "style": "link",
                                 "height": "sm",
-                                "action": { "type": "uri", "label": "แผนที่ (Google Maps)", "uri": locationUrl }
-                            } : { "type": "spacer", "size": "xs" }
+                                "action": { "type": "uri", "label": "แผนที่ (Google Maps)", "uri": mapUrl }
+                            }] : [])
                         ]
                     }
                 }
@@ -713,7 +722,10 @@ export const shareSchedule = async (
                 // @ts-ignore
                 await liff.shareTargetPicker([flexMessage]);
                 return { success: true, method: 'line' };
-            } catch (error) { console.error("LINE Share Schedule failed", error); }
+            } catch (error) { 
+                console.error("LINE Share Schedule failed", error); 
+                return { success: false, method: 'error' };
+            }
         }
     }
 
