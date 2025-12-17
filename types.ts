@@ -103,14 +103,24 @@ export interface FileLog {
   FileDriveId: string;
 }
 
+export interface Attachment {
+  name: string;
+  url: string;
+  type: string; // mime type
+  id?: string; // drive id
+}
+
 export interface Announcement {
   id: string;
   title: string;
   content: string;
   date: string;
   type: 'news' | 'manual';
-  link?: string;
+  link?: string; // Legacy link
   author?: string;
+  clusterId?: string; // 'area' or ClusterID
+  attachments?: Attachment[];
+  likedBy?: string[]; // Array of UserIDs
 }
 
 // Detailed Schedule Item for a Venue
@@ -220,4 +230,3 @@ export interface AppData {
   venues: Venue[];
   judges: Judge[];
 }
-
