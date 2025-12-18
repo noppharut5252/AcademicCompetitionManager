@@ -11,17 +11,9 @@ import pdfMake from "pdfmake/build/pdfmake";
 // @ts-ignore
 import pdfFonts from "pdfmake/build/vfs_fonts";
 
-// Robust VFS Assignment to ensure it works across different bundlers/environments
-if (pdfMake) {
-    if (!pdfMake.vfs) {
-        if (pdfFonts && pdfFonts.pdfMake && pdfFonts.pdfMake.vfs) {
-            pdfMake.vfs = pdfFonts.pdfMake.vfs;
-        } else if (pdfFonts && pdfFonts.vfs) {
-            pdfMake.vfs = pdfFonts.vfs;
-        } else {
-            pdfMake.vfs = {};
-        }
-    }
+// Assign vfs to pdfMake
+if (pdfMake && pdfMake.vfs === undefined && pdfFonts) {
+  pdfMake.vfs = pdfFonts.pdfMake ? pdfFonts.pdfMake.vfs : pdfFonts.vfs;
 }
 
 interface VenuesViewProps {
@@ -42,25 +34,8 @@ const FACILITY_ICONS: Record<string, React.ReactNode> = {
 
 // --- Helper: Load Thai Fonts for pdfMake ---
 const loadThaiFonts = async () => {
-    // Ensure VFS exists
-    if (!pdfMake.vfs) pdfMake.vfs = {};
-
-    // Check if fonts are already loaded in VFS to prevent reloading
-    if (pdfMake.vfs["Sarabun-Regular.ttf"] && pdfMake.vfs["Sarabun-Bold.ttf"]) {
-         // Ensure font definition exists
-         if (!pdfMake.fonts || !pdfMake.fonts.Sarabun) {
-             pdfMake.fonts = {
-                ...pdfMake.fonts,
-                Sarabun: {
-                    normal: "Sarabun-Regular.ttf",
-                    bold: "Sarabun-Bold.ttf",
-                    italics: "Sarabun-Regular.ttf", 
-                    bolditalics: "Sarabun-Bold.ttf"
-                }
-            };
-         }
-         return;
-    }
+    // Check if fonts are already loaded (custom check)
+    if (pdfMake.fonts && pdfMake.fonts.Sarabun) return;
 
     const fontBaseUrl = "https://raw.githubusercontent.com/google/fonts/main/ofl/sarabun/";
     const regularUrl = fontBaseUrl + "Sarabun-Regular.ttf";
@@ -87,6 +62,9 @@ const loadThaiFonts = async () => {
             boldRes.arrayBuffer()
         ]);
 
+        // Initialize vfs if missing
+        if (!pdfMake.vfs) pdfMake.vfs = {};
+
         // Add to VFS
         pdfMake.vfs["Sarabun-Regular.ttf"] = toBase64(regBlob);
         pdfMake.vfs["Sarabun-Bold.ttf"] = toBase64(boldBlob);
@@ -103,8 +81,7 @@ const loadThaiFonts = async () => {
         };
     } catch (e) {
         console.error("Failed to load Thai fonts", e);
-        // Fallback to avoid crash, though Thai text will look wrong
-        throw new Error("ไม่สามารถโหลดฟอนต์ภาษาไทยได้ กรุณาตรวจสอบอินเทอร์เน็ต");
+        throw new Error("ไม่สามารถโหลดฟอนต์ภาษาไทยได้");
     }
 };
 
@@ -343,9 +320,9 @@ const VenueScheduleModal = ({ venue, isOpen, onClose }: { venue: Venue, isOpen: 
 
             pdfMake.createPdf(docDefinition).open();
 
-        } catch (error: any) {
+        } catch (error) {
             console.error(error);
-            alert(`เกิดข้อผิดพลาด: ${error.message || 'ไม่สามารถสร้าง PDF ได้'}`);
+            alert('เกิดข้อผิดพลาดในการสร้าง PDF หรือโหลดฟอนต์');
         } finally {
             setIsGenerating(false);
         }
@@ -760,7 +737,7 @@ const VenueModal = ({ venue, isOpen, onClose, onSave, onDelete, activities }: { 
             date: newSchedule.date, 
             timeRange: '', 
             note: '',
-            level: 'cluster', 
+            level: 'cluster',
             imageUrl: ''
         });
     };
