@@ -178,25 +178,30 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data }) => {
 
   // --- Medal Summary Statistics ---
   const summaryStats = useMemo(() => {
-      type SchoolStat = { name: string; gold: number; silver: number; bronze: number; total: number; score: number };
+      type SchoolStat = { name: string; gold: number; silver: number; bronze: number; total: number; score: number; winnerCount: number };
       
       // If Area: Single List. If Cluster: Map of Lists.
       if (stage === 'area') {
           const schoolMap: Record<string, SchoolStat> = {};
           processedData.forEach(t => {
-              if (!schoolMap[t.schoolName]) schoolMap[t.schoolName] = { name: t.schoolName, gold: 0, silver: 0, bronze: 0, total: 0, score: 0 };
+              if (!schoolMap[t.schoolName]) schoolMap[t.schoolName] = { name: t.schoolName, gold: 0, silver: 0, bronze: 0, total: 0, score: 0, winnerCount: 0 };
               
               const medal = t.displayMedalRaw;
+              const rank = t.displayRank;
+
               if (medal.includes('Gold')) schoolMap[t.schoolName].gold++;
               else if (medal.includes('Silver')) schoolMap[t.schoolName].silver++;
               else if (medal.includes('Bronze')) schoolMap[t.schoolName].bronze++;
               
+              // Winner check: Rank 1 in Area Stage
+              if (String(rank) === '1') schoolMap[t.schoolName].winnerCount++;
+
               schoolMap[t.schoolName].total++;
               schoolMap[t.schoolName].score += t.displayScore;
           });
           return {
               type: 'area',
-              data: Object.values(schoolMap).sort((a, b) => b.gold - a.gold || b.score - a.score).slice(0, 10) // Top 10
+              data: Object.values(schoolMap).sort((a, b) => b.winnerCount - a.winnerCount || b.gold - a.gold || b.score - a.score).slice(0, 10) // Top 10
           };
       } else {
           // Cluster View: Group by Cluster
@@ -206,13 +211,19 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data }) => {
               const cName = t.clusterName;
               if (!clusterMap[cName]) clusterMap[cName] = {};
               
-              if (!clusterMap[cName][t.schoolName]) clusterMap[cName][t.schoolName] = { name: t.schoolName, gold: 0, silver: 0, bronze: 0, total: 0, score: 0 };
+              if (!clusterMap[cName][t.schoolName]) clusterMap[cName][t.schoolName] = { name: t.schoolName, gold: 0, silver: 0, bronze: 0, total: 0, score: 0, winnerCount: 0 };
               
               const medal = t.displayMedalRaw;
+              const rank = t.displayRank;
+              const flag = t.flag;
+
               if (medal.includes('Gold')) clusterMap[cName][t.schoolName].gold++;
               else if (medal.includes('Silver')) clusterMap[cName][t.schoolName].silver++;
               else if (medal.includes('Bronze')) clusterMap[cName][t.schoolName].bronze++;
               
+              // Representative check for Cluster: Rank 1 and Flag TRUE
+              if (String(rank) === '1' && String(flag).toUpperCase() === 'TRUE') clusterMap[cName][t.schoolName].winnerCount++;
+
               clusterMap[cName][t.schoolName].total++;
               clusterMap[cName][t.schoolName].score += t.displayScore;
           });
@@ -220,8 +231,7 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data }) => {
           // Convert to sorted arrays
           const sortedClusters: Record<string, SchoolStat[]> = {};
           Object.keys(clusterMap).forEach(k => {
-              // REMOVED .slice(0, 5) to show all schools per cluster
-              sortedClusters[k] = Object.values(clusterMap[k]).sort((a, b) => b.gold - a.gold || b.score - a.score);
+              sortedClusters[k] = Object.values(clusterMap[k]).sort((a, b) => b.winnerCount - a.winnerCount || b.gold - a.gold || b.score - a.score);
           });
           
           return { type: 'cluster', data: sortedClusters };
@@ -282,23 +292,25 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data }) => {
                       <table className="w-full text-sm">
                           <thead className="bg-purple-50 text-purple-800 font-bold">
                               <tr>
-                                  <th className="px-4 py-2 text-left">อันดับ</th>
-                                  <th className="px-4 py-2 text-left">โรงเรียน</th>
-                                  <th className="px-4 py-2 text-center text-yellow-600">ทอง</th>
-                                  <th className="px-4 py-2 text-center text-gray-500">เงิน</th>
-                                  <th className="px-4 py-2 text-center text-orange-600">ทองแดง</th>
-                                  <th className="px-4 py-2 text-center">รวม</th>
+                                  <th className="px-4 py-3 text-left">อันดับ</th>
+                                  <th className="px-4 py-3 text-left">โรงเรียน</th>
+                                  <th className="px-4 py-3 text-center text-yellow-600">ทอง</th>
+                                  <th className="px-4 py-3 text-center text-gray-500">เงิน</th>
+                                  <th className="px-4 py-3 text-center text-orange-600">ทองแดง</th>
+                                  <th className="px-4 py-3 text-center">รวม</th>
+                                  <th className="px-4 py-3 text-center bg-purple-100">ชนะเลิศ (ที่ 1)</th>
                               </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-100">
                               {(summaryStats.data as any[]).map((s, idx) => (
                                   <tr key={idx} className="hover:bg-purple-50/20">
-                                      <td className="px-4 py-2 text-center w-16 font-bold text-gray-500">{idx + 1}</td>
-                                      <td className="px-4 py-2 font-medium">{s.name}</td>
-                                      <td className="px-4 py-2 text-center font-bold text-gray-800">{s.gold}</td>
-                                      <td className="px-4 py-2 text-center text-gray-600">{s.silver}</td>
-                                      <td className="px-4 py-2 text-center text-gray-600">{s.bronze}</td>
-                                      <td className="px-4 py-2 text-center font-bold text-blue-600">{s.total}</td>
+                                      <td className="px-4 py-3 text-center w-16 font-bold text-gray-500">{idx + 1}</td>
+                                      <td className="px-4 py-3 font-bold text-gray-900">{s.name}</td>
+                                      <td className="px-4 py-3 text-center font-bold text-gray-800">{s.gold}</td>
+                                      <td className="px-4 py-3 text-center text-gray-600">{s.silver}</td>
+                                      <td className="px-4 py-3 text-center text-gray-600">{s.bronze}</td>
+                                      <td className="px-4 py-3 text-center font-bold text-blue-600">{s.total}</td>
+                                      <td className="px-4 py-3 text-center font-black text-purple-700 bg-purple-50/30">{s.winnerCount}</td>
                                   </tr>
                               ))}
                           </tbody>
@@ -320,6 +332,7 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data }) => {
                                           <th className="px-2 py-2 text-center w-10 text-gray-500">เงิน</th>
                                           <th className="px-2 py-2 text-center w-10 text-orange-600">ท.ด.</th>
                                           <th className="px-2 py-2 text-center w-10">รวม</th>
+                                          <th className="px-3 py-2 text-center w-16 bg-blue-50">ตัวแทน</th>
                                       </tr>
                                   </thead>
                                   <tbody className="divide-y divide-gray-50">
@@ -330,9 +343,10 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data }) => {
                                               <td className="px-2 py-2 text-center text-gray-500">{s.silver}</td>
                                               <td className="px-2 py-2 text-center text-gray-500">{s.bronze}</td>
                                               <td className="px-2 py-2 text-center font-bold text-blue-600">{s.total}</td>
+                                              <td className="px-3 py-2 text-center font-black text-blue-700 bg-blue-50/30">{s.winnerCount}</td>
                                           </tr>
                                       ))}
-                                      {schools.length === 0 && <tr><td colSpan={5} className="text-center py-4 text-gray-400">ยังไม่มีข้อมูล</td></tr>}
+                                      {schools.length === 0 && <tr><td colSpan={6} className="text-center py-4 text-gray-400">ยังไม่มีข้อมูล</td></tr>}
                                   </tbody>
                               </table>
                           </div>
