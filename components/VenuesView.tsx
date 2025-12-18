@@ -517,7 +517,7 @@ const VenueCard: React.FC<VenueCardProps> = ({ venue, isAdmin, onEdit, onViewSch
                 {isAdmin && (
                     <button 
                         onClick={(e) => { e.stopPropagation(); onEdit(venue); }}
-                        className="absolute top-3 right-3 p-2 bg-white/90 rounded-full text-blue-600 hover:bg-white shadow-sm opacity-0 group-hover:opacity-100 transition-opacity transform translate-y-2 group-hover:translate-y-0"
+                        className="absolute top-3 right-3 p-2 bg-white/90 rounded-full text-blue-600 hover:bg-white shadow-sm z-10"
                         title="แก้ไขข้อมูลสนาม"
                     >
                         <Edit2 className="w-4 h-4" />
@@ -987,8 +987,9 @@ const VenuesView: React.FC<VenuesViewProps> = ({ data, user }) => {
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
     
-    // Updated: Include group_admin in admin privileges for Venues
-    const isAdmin = user?.level === 'admin' || user?.level === 'area' || user?.level === 'group_admin';
+    // Updated: Include group_admin in admin privileges for Venues and use normalized role
+    const role = user?.level?.toLowerCase() || '';
+    const isAdmin = ['admin', 'area', 'group_admin'].includes(role);
 
     // Fake Loading
     useEffect(() => {
