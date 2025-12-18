@@ -434,7 +434,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
           }
 
           // MODIFIED: Rep check (Based on rank 1 + flag/area context)
-          // ในระดับเขต: นับว่าเป็น "ตัวแทน" (ผู้ชนะ) เมื่อ Rank เขตเป็น 1
+          // ในระดับเขต: นับว่าเป็น "ตัวแทน" (ผู้ชนะ) เมื่อ Rank เขตเป็น 1 เท่านั้น
           // ในระดับกลุ่ม: นับว่าเป็น "ตัวแทน" เมื่อ Rank กลุ่มเป็น 1 และติ๊ก Q
           const isRep = viewScope === 'area' 
             ? (String(rank) === '1') 
@@ -1347,9 +1347,9 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                          <button 
                             onClick={handleShareTop3}
                             className="p-2 bg-amber-50 text-amber-600 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors whitespace-nowrap flex items-center"
-                            title="แชร์ผล Top 3"
+                            title="แชร์ผลทาง LINE"
                          >
-                             <Crown className="w-4 h-4" />
+                             <Share2 className="w-4 h-4" />
                          </button>
                    </div>
               </div>
