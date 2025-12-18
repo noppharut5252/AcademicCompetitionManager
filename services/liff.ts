@@ -567,16 +567,16 @@ export const shareSchedule = async (
 
     const appUrl = `${window.location.origin}${window.location.pathname}#/venues`;
     
-    // Valid defaults for potentially missing data
-    const displayActivity = (activityName && activityName.trim() !== '') ? activityName : 'กิจกรรมการแข่งขัน';
-    const displayRoom = (room && room.trim() !== '') ? room : '-';
-    const displayTime = (time && time.trim() !== '') ? time : 'ไม่ระบุ';
-    const displayDate = (date && date.trim() !== '') ? date : 'ไม่ระบุ';
-    const cleanVenueName = (venueName && venueName.trim() !== '') ? venueName : 'สนามแข่งขัน';
+    // Valid defaults for potentially missing data. Ensure string type.
+    const displayActivity = (activityName && activityName.trim() !== '') ? activityName.substring(0, 300) : 'กิจกรรมการแข่งขัน';
+    const displayRoom = (room && room.trim() !== '') ? room.substring(0, 100) : '-';
+    const displayTime = (time && time.trim() !== '') ? time.substring(0, 50) : 'ไม่ระบุ';
+    const displayDate = (date && date.trim() !== '') ? date.substring(0, 50) : 'ไม่ระบุ';
+    const cleanVenueName = (venueName && venueName.trim() !== '') ? venueName.substring(0, 100) : 'สนามแข่งขัน';
     
     // Only use locationUrl if it is valid http
     const mapUrl = (locationUrl && locationUrl.startsWith('http')) ? locationUrl : null;
-    // Only use imageUrl if it is valid http
+    // Only use imageUrl if it is valid http and safe
     const validImageUrl = (imageUrl && imageUrl.startsWith('http')) ? imageUrl : null;
     
     const textSummary = `📅 กำหนดการแข่งขัน\n${displayActivity}\n\n📍 สถานที่: ${cleanVenueName} ${displayRoom}\n🗓️ วันที่: ${displayDate}\n⏰ เวลา: ${displayTime}\n\nดูรายละเอียดเพิ่มเติม: ${appUrl}`;
@@ -636,7 +636,16 @@ export const shareSchedule = async (
                                 "spacing": "sm",
                                 "contents": [
                                     { "type": "text", "text": "สถานที่", "color": "#aaaaaa", "size": "sm", "flex": 1 },
-                                    { "type": "text", "text": `${cleanVenueName} ${displayRoom}`, "wrap": true, "color": "#666666", "size": "sm", "flex": 4 }
+                                    { "type": "text", "text": `${cleanVenueName}`, "wrap": true, "color": "#666666", "size": "sm", "flex": 4 },
+                                ]
+                            },
+                            {
+                                "type": "box",
+                                "layout": "baseline",
+                                "spacing": "sm",
+                                "contents": [
+                                    { "type": "text", "text": "ห้อง", "color": "#aaaaaa", "size": "sm", "flex": 1 },
+                                    { "type": "text", "text": `${displayRoom}`, "wrap": true, "color": "#666666", "size": "sm", "flex": 4 },
                                 ]
                             }
                         ]
@@ -676,9 +685,12 @@ export const shareSchedule = async (
             };
         }
 
+        // Truncate altText to max 400 chars (safe limit)
+        const safeAltText = `กำหนดการ: ${displayActivity}`.substring(0, 395) + "...";
+
         const flexMessage = {
             type: "flex",
-            altText: `กำหนดการ: ${displayActivity.substring(0, 40)}...`,
+            altText: safeAltText,
             contents: flexContents
         };
 
@@ -688,7 +700,7 @@ export const shareSchedule = async (
             if (res) {
                return { success: true, method: 'line' };
             } else {
-               // User cancelled the picker, do not fallback to native share
+               // User cancelled the picker, do not fallback to native share immediately
                console.log("ShareTargetPicker cancelled");
             }
         } catch (error) { 
