@@ -192,6 +192,14 @@ export interface CertificateTemplate {
   logoHeight?: number;
 }
 
+export interface PrintConfig {
+  id: string; // 'area' or ClusterID
+  scoreColsCount: number;
+  includeJudges: boolean;
+  includeVenueDate: boolean;
+  headerTitle?: string;
+}
+
 // New Interface for Judges matching requested schema (12 Columns)
 export interface Judge {
   id: string; // Virtual ID for React (ActivityID + JudgeName + Scope)
@@ -206,7 +214,8 @@ export interface Judge {
   email: string;          // Col 8: Email
   importedBy: string;     // Col 9: ImportedBy
   importedAt: string;     // Col 10: ImportedAt
-  stageScope: 'cluster' | 'area'; // Col 11: StageScope
+  // Fix: Widen stageScope type to string to handle empty strings from backend and avoid narrowing errors in filters
+  stageScope: string; // Col 11: StageScope ('cluster' | 'area')
   photoUrl?: string;      // Col 12: Photo URL (New)
   originalId?: string;    // Optional: To track original record for updates
 }
