@@ -329,9 +329,12 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
   };
 
   const userRole = userProfile?.level?.toLowerCase();
+  const isAdminOrArea = ['admin', 'area'].includes(userRole);
   const canScore = ['admin', 'area', 'group_admin', 'score'].includes(userRole);
   const canManageAnnouncements = ['admin', 'area', 'group_admin'].includes(userRole);
-  const canPrintDocs = ['admin', 'area', 'group_admin', 'school_admin', 'user'].includes(userRole);
+  
+  // Allow Guest and all roles to see Print Documents but restrict actions inside
+  const canViewPrintDocs = true; 
   
   const menuItems = [
     { id: 'dashboard', label: 'หน้าหลัก', icon: LayoutDashboard },
@@ -340,7 +343,7 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
     { id: 'activities', label: 'รายการ', icon: Trophy },
     ...(canScore ? [{ id: 'score', label: 'บันทึกคะแนน', icon: Edit3 }] : []),
     { id: 'results', label: 'ผลรางวัล', icon: Award },
-    ...(canPrintDocs ? [{ id: 'documents', label: 'เอกสารการแข่งขัน', icon: Printer }] : []),
+    ...(canViewPrintDocs ? [{ id: 'documents', label: 'เอกสารการแข่งขัน', icon: Printer }] : []),
     { id: 'certificates', label: 'เกียรติบัตร', icon: FileBadge },
     { id: 'idcards', label: 'บัตร', icon: IdCard },
     { id: 'judges', label: 'ทำเนียบกรรมการ', icon: Gavel },
