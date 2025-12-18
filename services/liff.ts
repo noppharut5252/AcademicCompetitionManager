@@ -876,4 +876,3 @@ export const shareAnnouncement = async (
         return { success: false, method: 'error' };
     }
 }
-
