@@ -576,9 +576,8 @@ export const shareSchedule = async (
     
     // Only use locationUrl if it is valid http
     const mapUrl = (locationUrl && locationUrl.startsWith('http')) ? locationUrl : null;
-    
-    // IMPORTANT: Per user request, ignoring imageUrl for stability in Flex Message.
-    // const validImageUrl = (imageUrl && imageUrl.startsWith('http')) ? imageUrl : null;
+    // Only use imageUrl if it is valid http and safe
+    const validImageUrl = (imageUrl && imageUrl.startsWith('http')) ? imageUrl : null;
     
     const textSummary = `📅 กำหนดการแข่งขัน\n${displayActivity}\n\n📍 สถานที่: ${displayVenue} ${displayRoom}\n🗓️ วันที่: ${displayDate}\n⏰ เวลา: ${displayTime}\n\nดูรายละเอียดเพิ่มเติม: ${appUrl}`;
 
@@ -675,7 +674,16 @@ export const shareSchedule = async (
             }
         };
 
-        // Note: Image block removed intentionally to ensure stability.
+        if (validImageUrl) {
+            flexContents.hero = {
+                "type": "image",
+                "url": validImageUrl,
+                "size": "full",
+                "aspectRatio": "20:13",
+                "aspectMode": "cover",
+                "action": { "type": "uri", "uri": appUrl }
+            };
+        }
 
         // Truncate altText to max 400 chars (safe limit)
         const safeAltText = `กำหนดการ: ${displayActivity}`.substring(0, 395) + "...";
