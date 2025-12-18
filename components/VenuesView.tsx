@@ -23,6 +23,33 @@ const FACILITY_ICONS: Record<string, React.ReactNode> = {
     'Free Wifi': <Wifi className="w-4 h-4" />,
 };
 
+// --- Skeleton Component ---
+const VenuesSkeleton = () => (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-pulse">
+        {[1, 2, 3, 4, 5, 6].map((i) => (
+            <div key={i} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden h-full flex flex-col">
+                <div className="h-48 bg-gray-200 shrink-0"></div>
+                <div className="p-5 flex-1 flex flex-col space-y-4">
+                    <div className="space-y-2">
+                        <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                        <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                    </div>
+                    <div className="flex gap-2">
+                        <div className="h-6 w-16 bg-gray-200 rounded-full"></div>
+                        <div className="h-6 w-16 bg-gray-200 rounded-full"></div>
+                        <div className="h-6 w-16 bg-gray-200 rounded-full"></div>
+                    </div>
+                    <div className="flex-1 bg-gray-50 rounded-xl p-3 h-32 border border-gray-100"></div>
+                    <div className="flex gap-2 pt-2">
+                        <div className="h-10 bg-gray-200 rounded-lg flex-1"></div>
+                        <div className="h-10 bg-gray-200 rounded-lg w-1/3"></div>
+                    </div>
+                </div>
+            </div>
+        ))}
+    </div>
+);
+
 // Internal Toast Component
 const Toast = ({ message, type, isVisible, onClose }: { message: string, type: 'success' | 'error' | 'info', isVisible: boolean, onClose: () => void }) => {
     useEffect(() => {
@@ -92,7 +119,7 @@ const VenueScheduleModal = ({ venue, isOpen, onClose }: { venue: Venue, isOpen: 
     const handleShareSchedule = async (sch: VenueSchedule) => {
         try {
             const result = await shareSchedule(
-                sch.activityName || 'กิจกรรม',
+                sch.activityName || '',
                 venue.name,
                 `${sch.building || ''} ${sch.floor || ''} ${sch.room || ''}`.trim(),
                 sch.date,
@@ -705,7 +732,7 @@ const VenueModal = ({ venue, isOpen, onClose, onSave, onDelete, activities }: { 
                                     <div className="flex-1" onClick={() => editScheduleItem(idx)}>
                                         <div className="flex justify-between items-start pr-2">
                                             <div className="font-bold text-sm text-gray-900 cursor-pointer hover:text-blue-600 transition-colors">{item.activityName}</div>
-                                            {item.level && <span className={`text-[10px] px-1.5 rounded border ${item.level === 'area' ? 'bg-purple-50 text-purple-700 border-purple-100' : 'bg-blue-50 text-blue-700 border-blue-100'}`}>{item.level === 'area' ? 'เขต' : 'กลุ่ม'}</span>}
+                                            {item.level && <span className={`text-[9px] px-1.5 rounded border ${item.level === 'area' ? 'bg-purple-50 text-purple-700 border-purple-100' : 'bg-blue-50 text-blue-700 border-blue-100'}`}>{item.level === 'area' ? 'เขต' : 'กลุ่ม'}</span>}
                                         </div>
                                         <div className="text-xs text-gray-500 mt-1 flex flex-wrap gap-x-4 gap-y-1">
                                             <span className="flex items-center text-blue-600 font-medium"><MapPin className="w-3 h-3 mr-1"/> {item.building} {item.floor} {item.room}</span>
@@ -768,10 +795,21 @@ const VenuesView: React.FC<VenuesViewProps> = ({ data, user }) => {
   // New State for Viewing Schedule
   const [scheduleVenue, setScheduleVenue] = useState<Venue | null>(null);
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info', isVisible: boolean }>({ message: '', type: 'info', isVisible: false });
+  const [isLoading, setIsLoading] = useState(true);
   
   const [localVenues, setLocalVenues] = useState<Venue[]>(data.venues || []);
 
   const canManage = ['admin', 'area', 'group_admin'].includes(user?.level?.toLowerCase());
+
+  useEffect(() => {
+      // Simulate initial loading for Skeleton demonstration
+      setIsLoading(true);
+      const timer = setTimeout(() => {
+          setLocalVenues(data.venues || []);
+          setIsLoading(false);
+      }, 800);
+      return () => clearTimeout(timer);
+  }, [data.venues]);
 
   const showToast = (message: string, type: 'success' | 'error' | 'info') => {
       setToast({ message, type, isVisible: true });
@@ -848,38 +886,42 @@ const VenuesView: React.FC<VenuesViewProps> = ({ data, user }) => {
             )}
         </div>
 
-        {/* Venues Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {localVenues.length > 0 ? (
-                localVenues.map(venue => (
-                    <VenueCard 
-                        key={venue.id} 
-                        venue={venue} 
-                        isAdmin={canManage} 
-                        onEdit={handleEdit}
-                        onViewSchedule={(v) => setScheduleVenue(v)}
-                    />
-                ))
-            ) : (
-                <div className="col-span-full py-16 text-center bg-white rounded-xl border-2 border-dashed border-gray-200">
-                    <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4 text-gray-400">
-                        <MapPin className="w-8 h-8" />
+        {/* Content with Skeleton Loading */}
+        {isLoading ? (
+            <VenuesSkeleton />
+        ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {localVenues.length > 0 ? (
+                    localVenues.map(venue => (
+                        <VenueCard 
+                            key={venue.id} 
+                            venue={venue} 
+                            isAdmin={canManage} 
+                            onEdit={handleEdit}
+                            onViewSchedule={(v) => setScheduleVenue(v)}
+                        />
+                    ))
+                ) : (
+                    <div className="col-span-full py-16 text-center bg-white rounded-xl border-2 border-dashed border-gray-200">
+                        <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4 text-gray-400">
+                            <MapPin className="w-8 h-8" />
+                        </div>
+                        <h3 className="text-lg font-medium text-gray-900">ยังไม่มีข้อมูลสนามแข่งขัน</h3>
+                        <p className="text-gray-500 text-sm mt-1">
+                            {canManage ? 'กดปุ่ม "เพิ่มสนามแข่ง" เพื่อเริ่มต้นใช้งาน' : 'ผู้ดูแลระบบยังไม่ได้เพิ่มข้อมูล'}
+                        </p>
+                        {canManage && (
+                            <button 
+                                onClick={handleAdd}
+                                className="mt-4 px-6 py-2 bg-blue-50 text-blue-600 font-medium rounded-lg hover:bg-blue-100 transition-colors"
+                            >
+                                เพิ่มสนามแข่งแรก
+                            </button>
+                        )}
                     </div>
-                    <h3 className="text-lg font-medium text-gray-900">ยังไม่มีข้อมูลสนามแข่งขัน</h3>
-                    <p className="text-gray-500 text-sm mt-1">
-                        {canManage ? 'กดปุ่ม "เพิ่มสนามแข่ง" เพื่อเริ่มต้นใช้งาน' : 'ผู้ดูแลระบบยังไม่ได้เพิ่มข้อมูล'}
-                    </p>
-                    {canManage && (
-                        <button 
-                            onClick={handleAdd}
-                            className="mt-4 px-6 py-2 bg-blue-50 text-blue-600 font-medium rounded-lg hover:bg-blue-100 transition-colors"
-                        >
-                            เพิ่มสนามแข่งแรก
-                        </button>
-                    )}
-                </div>
-            )}
-        </div>
+                )}
+            </div>
+        )}
 
         {/* Edit Modal */}
         {isModalOpen && (
