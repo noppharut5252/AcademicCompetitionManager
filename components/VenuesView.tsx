@@ -125,7 +125,7 @@ const VenueScheduleModal = ({ venue, isOpen, onClose }: { venue: Venue, isOpen: 
                 sch.date,
                 sch.timeRange,
                 venue.locationUrl,
-                sch.imageUrl || '' // Pass Image URL
+                sch.imageUrl || '' // Pass Image URL explicitly
             );
 
             if (result.success) {
