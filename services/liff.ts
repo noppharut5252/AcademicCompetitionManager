@@ -243,7 +243,7 @@ export const shareScoreResult = async (
   schoolName: string, 
   activityName: string, 
   score: string | number, 
-  medal: string,
+  medal: string, 
   rank: string
 ): Promise<{ success: boolean; method: 'line' | 'share' | 'copy' | 'error' }> => {
     
@@ -594,27 +594,32 @@ export const shareVenue = async (venue: any): Promise<{ success: boolean; method
     }
 }
 
-// New: Share Specific Schedule
+// Updated: Share Specific Schedule
 export const shareSchedule = async (
     activityName: string,
     venueName: string,
     room: string,
     date: string,
     time: string,
-    locationUrl: string = ''
+    locationUrl: string = '',
+    imageUrl: string = ''
 ): Promise<{ success: boolean; method: 'line' | 'share' | 'copy' | 'error' }> => {
     
     await ensureLiffInitialized();
 
     const appUrl = `${window.location.origin}${window.location.pathname}#/venues`;
-    const displayActivity = activityName || 'กิจกรรมการแข่งขัน';
-    const displayRoom = room || '-';
-    const displayTime = time || 'ไม่ระบุ';
-    const displayDate = date || 'ไม่ระบุ';
-    const cleanVenueName = venueName || 'สนามแข่งขัน';
+    
+    // Valid defaults for potentially missing data
+    const displayActivity = (activityName && activityName.trim() !== '') ? activityName : 'กิจกรรมการแข่งขัน';
+    const displayRoom = (room && room.trim() !== '') ? room : '-';
+    const displayTime = (time && time.trim() !== '') ? time : 'ไม่ระบุ';
+    const displayDate = (date && date.trim() !== '') ? date : 'ไม่ระบุ';
+    const cleanVenueName = (venueName && venueName.trim() !== '') ? venueName : 'สนามแข่งขัน';
     
     // Only use locationUrl if it is valid http
     const mapUrl = (locationUrl && locationUrl.startsWith('http')) ? locationUrl : null;
+    // Only use imageUrl if it is valid http
+    const validImageUrl = (imageUrl && imageUrl.startsWith('http')) ? imageUrl : null;
     
     const textSummary = `📅 กำหนดการแข่งขัน\n${displayActivity}\n\n📍 สถานที่: ${cleanVenueName} ${displayRoom}\n🗓️ วันที่: ${displayDate}\n⏰ เวลา: ${displayTime}\n\nดูรายละเอียดเพิ่มเติม: ${appUrl}`;
 
@@ -632,86 +637,100 @@ export const shareSchedule = async (
         }
 
         if (isShareTargetPickerSupported()) {
+            const flexContents: any = {
+                "type": "bubble",
+                "header": {
+                    "type": "box",
+                    "layout": "vertical",
+                    "contents": [
+                        { "type": "text", "text": "SCHEDULE", "color": "#FFFFFF", "weight": "bold", "size": "xs", "letterSpacing": "1px" },
+                        { "type": "text", "text": "กำหนดการแข่งขัน", "color": "#FFFFFF", "weight": "bold", "size": "lg" }
+                    ],
+                    "backgroundColor": "#0D9488",
+                    "paddingAll": "20px"
+                },
+                "body": {
+                    "type": "box",
+                    "layout": "vertical",
+                    "contents": [
+                        { "type": "text", "text": displayActivity, "weight": "bold", "size": "md", "wrap": true, "color": "#333333" },
+                        { "type": "separator", "margin": "lg" },
+                        {
+                            "type": "box",
+                            "layout": "vertical",
+                            "margin": "lg",
+                            "spacing": "sm",
+                            "contents": [
+                                {
+                                    "type": "box",
+                                    "layout": "baseline",
+                                    "spacing": "sm",
+                                    "contents": [
+                                        { "type": "text", "text": "วันที่", "color": "#aaaaaa", "size": "sm", "flex": 1 },
+                                        { "type": "text", "text": displayDate, "wrap": true, "color": "#666666", "size": "sm", "flex": 4, "weight": "bold" }
+                                    ]
+                                },
+                                {
+                                    "type": "box",
+                                    "layout": "baseline",
+                                    "spacing": "sm",
+                                    "contents": [
+                                        { "type": "text", "text": "เวลา", "color": "#aaaaaa", "size": "sm", "flex": 1 },
+                                        { "type": "text", "text": displayTime, "wrap": true, "color": "#E65100", "size": "sm", "flex": 4, "weight": "bold" }
+                                    ]
+                                },
+                                {
+                                    "type": "box",
+                                    "layout": "baseline",
+                                    "spacing": "sm",
+                                    "contents": [
+                                        { "type": "text", "text": "สถานที่", "color": "#aaaaaa", "size": "sm", "flex": 1 },
+                                        { "type": "text", "text": `${cleanVenueName} ${displayRoom}`, "wrap": true, "color": "#666666", "size": "sm", "flex": 4 }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                },
+                "footer": {
+                    "type": "box",
+                    "layout": "vertical",
+                    "spacing": "sm",
+                    "contents": [
+                        {
+                            "type": "button",
+                            "style": "primary",
+                            "height": "sm",
+                            "action": { "type": "uri", "label": "ดูตารางทั้งหมด", "uri": appUrl },
+                            "color": "#0D9488"
+                        },
+                        // Only render this button if mapUrl is valid
+                        ...(mapUrl ? [{
+                            "type": "button",
+                            "style": "link",
+                            "height": "sm",
+                            "action": { "type": "uri", "label": "แผนที่ (Google Maps)", "uri": mapUrl }
+                        }] : [])
+                    ]
+                }
+            };
+
+            // Add Hero Image if available
+            if (validImageUrl) {
+                flexContents.hero = {
+                    "type": "image",
+                    "url": validImageUrl,
+                    "size": "full",
+                    "aspectRatio": "20:13",
+                    "aspectMode": "cover",
+                    "action": { "type": "uri", "uri": appUrl }
+                };
+            }
+
             const flexMessage = {
                 type: "flex",
                 altText: `กำหนดการ: ${displayActivity.substring(0, 40)}...`,
-                contents: {
-                    "type": "bubble",
-                    "header": {
-                        "type": "box",
-                        "layout": "vertical",
-                        "contents": [
-                            { "type": "text", "text": "SCHEDULE", "color": "#FFFFFF", "weight": "bold", "size": "xs", "letterSpacing": "1px" },
-                            { "type": "text", "text": "กำหนดการแข่งขัน", "color": "#FFFFFF", "weight": "bold", "size": "lg" }
-                        ],
-                        "backgroundColor": "#0D9488",
-                        "paddingAll": "20px"
-                    },
-                    "body": {
-                        "type": "box",
-                        "layout": "vertical",
-                        "contents": [
-                            { "type": "text", "text": displayActivity, "weight": "bold", "size": "md", "wrap": true, "color": "#333333" },
-                            { "type": "separator", "margin": "lg" },
-                            {
-                                "type": "box",
-                                "layout": "vertical",
-                                "margin": "lg",
-                                "spacing": "sm",
-                                "contents": [
-                                    {
-                                        "type": "box",
-                                        "layout": "baseline",
-                                        "spacing": "sm",
-                                        "contents": [
-                                            { "type": "text", "text": "วันที่", "color": "#aaaaaa", "size": "sm", "flex": 1 },
-                                            { "type": "text", "text": displayDate, "wrap": true, "color": "#666666", "size": "sm", "flex": 4, "weight": "bold" }
-                                        ]
-                                    },
-                                    {
-                                        "type": "box",
-                                        "layout": "baseline",
-                                        "spacing": "sm",
-                                        "contents": [
-                                            { "type": "text", "text": "เวลา", "color": "#aaaaaa", "size": "sm", "flex": 1 },
-                                            { "type": "text", "text": displayTime, "wrap": true, "color": "#E65100", "size": "sm", "flex": 4, "weight": "bold" }
-                                        ]
-                                    },
-                                    {
-                                        "type": "box",
-                                        "layout": "baseline",
-                                        "spacing": "sm",
-                                        "contents": [
-                                            { "type": "text", "text": "สถานที่", "color": "#aaaaaa", "size": "sm", "flex": 1 },
-                                            { "type": "text", "text": `${cleanVenueName} ${displayRoom}`, "wrap": true, "color": "#666666", "size": "sm", "flex": 4 }
-                                        ]
-                                    }
-                                ]
-                            }
-                        ]
-                    },
-                    "footer": {
-                        "type": "box",
-                        "layout": "vertical",
-                        "spacing": "sm",
-                        "contents": [
-                            {
-                                "type": "button",
-                                "style": "primary",
-                                "height": "sm",
-                                "action": { "type": "uri", "label": "ดูตารางทั้งหมด", "uri": appUrl },
-                                "color": "#0D9488"
-                            },
-                            // Only render this button if mapUrl is valid
-                            ...(mapUrl ? [{
-                                "type": "button",
-                                "style": "link",
-                                "height": "sm",
-                                "action": { "type": "uri", "label": "แผนที่ (Google Maps)", "uri": mapUrl }
-                            }] : [])
-                        ]
-                    }
-                }
+                contents: flexContents
             };
 
             try {
