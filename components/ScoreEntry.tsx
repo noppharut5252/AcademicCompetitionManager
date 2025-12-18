@@ -313,7 +313,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       return { availableCategories: categories, availableActivities: activeActivities, allAuthorizedTeams: authorizedTeams };
   }, [data.activities, data.teams, data.schools, role, user]);
 
-  // Completion Stats Calculation
+  // Completion Stats Calculation - UPDATED for Rep & Unscored check
   const completionStats = useMemo(() => {
       const scopeTeams = viewScope === 'area' 
         ? allAuthorizedTeams.filter(t => t.stageStatus === 'Area' || t.flag === 'TRUE')
@@ -327,18 +327,37 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
 
       const pendingActivityIds = new Set<string>();
       const scoredActivityIds = new Set<string>();
+      
+      // Tracking reasons for pending
+      const pendingReasons: Record<string, { unscored: number, missingRep: boolean }> = {};
 
       availableActivities.forEach(act => {
           const teamsInAct = scopeTeams.filter(t => t.activityId === act.id);
           if (teamsInAct.length === 0) return;
 
+          let isPending = false;
+          let unscoredCount = 0;
+          let missingRep = false;
+
           const unscoredInAct = teamsInAct.filter(t => {
               const score = viewScope === 'area' ? (getAreaInfo(t)?.score || 0) : t.score;
               return score === 0;
           });
+          unscoredCount = unscoredInAct.length;
 
-          if (unscoredInAct.length > 0) {
+          if (viewScope === 'cluster') {
+              // ในระดับกลุ่ม: กิจกรรมค้างคือ (ยังมีทีมค้างคะแนน) หรือ (ยังไม่มีใครเป็น Rank 1 พร้อมกับ Flag TRUE)
+              const hasWinnerAndRep = teamsInAct.some(t => String(t.rank) === '1' && String(t.flag).toUpperCase() === 'TRUE');
+              missingRep = !hasWinnerAndRep;
+              if (unscoredCount > 0 || missingRep) isPending = true;
+          } else {
+              // ในระดับเขต: กิจกรรมค้างคือ กิจกรรมที่ยังมีทีมคะแนน 0
+              if (unscoredCount > 0) isPending = true;
+          }
+
+          if (isPending) {
               pendingActivityIds.add(act.id);
+              pendingReasons[act.id] = { unscored: unscoredCount, missingRep };
           } else {
               scoredActivityIds.add(act.id);
           }
@@ -347,11 +366,14 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       return {
           totalTeams: teamCount,
           scoredTeams: scoredTeams.length,
-          pendingTeams: teamCount - scoredTeams.length,
+          totalPendingTeams: teamCount - scoredTeams.length,
           totalActivities: scoredActivityIds.size + pendingActivityIds.size,
           scoredActivities: scoredActivityIds.size,
           pendingActivities: pendingActivityIds.size,
-          pendingList: Array.from(pendingActivityIds).map(id => availableActivities.find(a => a.id === id)!)
+          pendingList: Array.from(pendingActivityIds).map(id => ({
+              ...availableActivities.find(a => a.id === id)!,
+              reason: pendingReasons[id]
+          }))
       };
   }, [availableActivities, allAuthorizedTeams, viewScope]);
 
@@ -558,12 +580,12 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
 
   // --- Computed for Save & Share ---
 
-  // fix: count modified items only within the current filtered teams
+  // count modified items only within the current filtered teams
   const dirtyCount = useMemo(() => {
     return filteredTeams.filter(t => edits[t.teamId]?.isDirty).length;
   }, [filteredTeams, edits]);
 
-  // fix: prepare data for batch confirmation modal
+  // prepare data for batch confirmation modal
   const batchConfirmData = useMemo<BatchItem[]>(() => {
     if (!selectedActivityId) return [];
     return filteredTeams.map(t => {
@@ -597,7 +619,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
     });
   }, [filteredTeams, edits, viewScope, selectedActivityId]);
 
-  // fix: prepare data for single confirmation modal based on the selected team id
+  // prepare data for single confirmation modal based on the selected team id
   const singleConfirmData = useMemo(() => {
       if (confirmState.type !== 'single' || !confirmState.teamId) return null;
       const team = filteredTeams.find(t => t.teamId === confirmState.teamId);
@@ -612,7 +634,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       };
   }, [confirmState, filteredTeams, edits]);
 
-  // fix: handle sharing individual score result via LIFF
+  // handle sharing individual score result via LIFF
   const handleShare = async (team: Team) => {
       const activityName = data.activities.find(a => a.id === team.activityId)?.name || '';
       const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
@@ -642,7 +664,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       }
   };
 
-  // fix: handle sharing top 3 results for current activity via LIFF
+  // handle sharing top 3 results for current activity via LIFF
   const handleShareTop3 = async () => {
     if (!selectedActivityId) return;
     const actName = availableActivities.find(a => a.id === selectedActivityId)?.name || '';
@@ -852,7 +874,11 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
             return await updateAreaResult(teamId, finalScore, finalRank, finalMedal);
         } else {
             const finalFlag = edit.flag === 'undefined' ? '' : edit.flag;
-            return await updateTeamResult(teamId, finalScore, finalRank, finalMedal, finalFlag);
+            // Logic เลื่อนระดับเป็น Area อัตโนมัติ (Condition: Rank 1 + Flag TRUE)
+            const shouldPromote = String(finalRank) === '1' && String(finalFlag).toUpperCase() === 'TRUE';
+            const stage = shouldPromote ? 'Area' : '';
+            
+            return await updateTeamResult(teamId, finalScore, finalRank, finalMedal, finalFlag, stage);
         }
   };
 
@@ -1102,7 +1128,18 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                 <div className="flex-1">
                     <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">ยังไม่บันทึก (ค้าง)</div>
                     <div className="text-2xl font-black text-amber-600">{completionStats.pendingActivities} <span className="text-xs font-normal text-gray-400">รายการ</span></div>
-                    <div className="text-[10px] text-amber-500 font-bold">{completionStats.pendingTeams} ทีม</div>
+                    <div className="flex flex-col gap-0.5 mt-0.5">
+                        {completionStats.totalPendingTeams > 0 && (
+                            <div className="text-[10px] text-red-500 font-bold flex items-center">
+                                <Calculator className="w-3 h-3 mr-1" /> ค้างคะแนน {completionStats.totalPendingTeams} ทีม
+                            </div>
+                        )}
+                        {viewScope === 'cluster' && (
+                             <div className="text-[10px] text-amber-600 font-bold flex items-center">
+                                <Trophy className="w-3 h-3 mr-1" /> ขาดตัวแทน {completionStats.pendingList.filter(a => a.reason.missingRep).length} รายการ
+                            </div>
+                        )}
+                    </div>
                 </div>
                 <ChevronDown className={`w-4 h-4 text-amber-300 transition-transform ${showPendingActivities ? 'rotate-180' : ''}`} />
           </div>
@@ -1135,9 +1172,10 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       {showPendingActivities && (
           <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 animate-in slide-in-from-top-2">
               <h4 className="text-xs font-bold text-amber-700 mb-3 flex items-center">
-                  <ListChecks className="w-4 h-4 mr-2" /> เลือกรายการที่ยังค้างอยู่เพื่อบันทึกทันที
+                  <ListChecks className="w-4 h-4 mr-2" /> 
+                  {viewScope === 'cluster' ? 'กิจกรรมที่ยังไม่สมบูรณ์ (ค้างคะแนน หรือ ขาดตัวแทนที่ 1 + Q)' : 'เลือกกิจกรรมที่ยังค้างคะแนน'}
               </h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                   {completionStats.pendingList.map(act => (
                       <button 
                         key={act.id}
@@ -1146,15 +1184,26 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                             setSelectedActivityId(act.id);
                             setShowPendingActivities(false);
                         }}
-                        className="text-left p-2 bg-white border border-amber-200 rounded-xl text-xs hover:border-amber-500 hover:shadow-sm transition-all truncate"
+                        className="text-left p-3 bg-white border border-amber-200 rounded-xl hover:border-amber-500 hover:shadow-md transition-all group"
                       >
-                          <span className="block font-bold text-gray-700 truncate">{act.name}</span>
-                          <span className="text-[10px] text-gray-400">{act.category}</span>
+                          <div className="font-bold text-gray-800 truncate mb-1">{act.name}</div>
+                          <div className="flex flex-wrap gap-1">
+                             {act.reason.unscored > 0 && (
+                                 <span className="text-[9px] bg-red-50 text-red-600 px-1.5 py-0.5 rounded border border-red-100">
+                                     ค้าง {act.reason.unscored} ทีม
+                                 </span>
+                             )}
+                             {viewScope === 'cluster' && act.reason.missingRep && (
+                                 <span className="text-[9px] bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded border border-amber-100 font-bold">
+                                     ขาดตัวแทน
+                                 </span>
+                             )}
+                          </div>
                       </button>
                   ))}
                   {completionStats.pendingList.length === 0 && (
-                      <div className="col-span-full py-4 text-center text-green-600 font-bold text-sm">
-                          ✨ ยอดเยี่ยม! บันทึกคะแนนครบทุกรายการแล้ว
+                      <div className="col-span-full py-6 text-center text-green-600 font-bold text-sm bg-white rounded-xl border border-dashed border-green-200">
+                          ✨ ยอดเยี่ยม! ดำเนินการครบถ้วนทุกกิจกรรมแล้ว
                       </div>
                   )}
               </div>
@@ -1294,9 +1343,9 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                          <button 
                             onClick={handleShareTop3}
                             className="p-2 bg-amber-50 text-amber-600 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors whitespace-nowrap flex items-center"
-                            title="แชร์ผล Top 3"
+                            title="แชร์ผลทาง LINE"
                          >
-                             <Crown className="w-4 h-4" />
+                             <Share2 className="w-4 h-4" />
                          </button>
                    </div>
               </div>
