@@ -433,8 +433,12 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
               else schoolMap[schoolName].participant++;
           }
 
-          // Rep check (Based on rank 1 + flag/area context)
-          const isRep = viewScope === 'area' ? true : (String(flag).toUpperCase() === 'TRUE' && String(rank) === '1');
+          // MODIFIED: Rep check (Based on rank 1 + flag/area context)
+          // ในระดับเขต: นับว่าเป็น "ตัวแทน" (ผู้ชนะ) เมื่อ Rank เขตเป็น 1
+          // ในระดับกลุ่ม: นับว่าเป็น "ตัวแทน" เมื่อ Rank กลุ่มเป็น 1 และติ๊ก Q
+          const isRep = viewScope === 'area' 
+            ? (String(rank) === '1') 
+            : (String(flag).toUpperCase() === 'TRUE' && String(rank) === '1');
           
           if (isRep) {
               schoolMap[schoolName].repCount++;
@@ -1343,9 +1347,9 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                          <button 
                             onClick={handleShareTop3}
                             className="p-2 bg-amber-50 text-amber-600 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors whitespace-nowrap flex items-center"
-                            title="แชร์ผลทาง LINE"
+                            title="แชร์ผล Top 3"
                          >
-                             <Share2 className="w-4 h-4" />
+                             <Crown className="w-4 h-4" />
                          </button>
                    </div>
               </div>
@@ -1542,7 +1546,9 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                               <Flag className="w-5 h-5 mr-2" />
                               สรุปรายชื่อโรงเรียนตัวแทนกิจกรรม ({viewScope === 'area' ? 'ระดับเขต' : 'ระดับกลุ่ม'})
                           </h3>
-                          <p className="text-purple-100 text-xs mt-0.5">รายการทั้งหมดที่มีตัวแทนเข้ารอบ</p>
+                          <p className="text-purple-100 text-xs mt-0.5">
+                              {viewScope === 'area' ? 'รายการกิจกรรมที่ได้ลำดับที่ 1 (ระดับเขต)' : 'รายการทั้งหมดที่มีตัวแทนเข้ารอบ'}
+                          </p>
                       </div>
                       <div className="flex gap-2">
                         <button onClick={handlePrintActivityReps} className="p-2 bg-white/20 hover:bg-white/30 rounded-full transition-colors" title="พิมพ์รายงาน">
@@ -1577,7 +1583,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                   </tr>
                               ))}
                               {representativesList.length === 0 && (
-                                  <tr><td colSpan={5} className="py-20 text-center text-gray-400 italic">ยังไม่มีการกำหนดตัวแทน</td></tr>
+                                  <tr><td colSpan={5} className="py-20 text-center text-gray-400 italic">ยังไม่มีข้อมูลตัวแทน (ที่ 1)</td></tr>
                               )}
                           </tbody>
                       </table>
@@ -1599,7 +1605,9 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                               <BarChart3 className="w-5 h-5 mr-2" />
                               ตารางสรุปเหรียญรางวัลแยกตามโรงเรียน ({viewScope === 'area' ? 'ระดับเขต' : 'ระดับกลุ่ม'})
                           </h3>
-                          <p className="text-blue-100 text-xs mt-0.5">เรียงลำดับจากจำนวนตัวแทน และเหรียญทอง</p>
+                          <p className="text-blue-100 text-xs mt-0.5">
+                              {viewScope === 'area' ? 'คอลัมน์ตัวแทน: นับเฉพาะทีมที่ได้ลำดับที่ 1 (ระดับเขต)' : 'เรียงลำดับจากจำนวนตัวแทน และเหรียญทอง'}
+                          </p>
                       </div>
                       <div className="flex gap-2">
                         <button onClick={handlePrintMedalSummary} className="p-2 bg-white/20 hover:bg-white/30 rounded-full transition-colors" title="พิมพ์รายงาน">
@@ -1619,7 +1627,9 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                   <th className="px-4 py-3 text-center text-amber-700 font-black">ทองแดง</th>
                                   <th className="px-4 py-3 text-center text-gray-400">ร่วม/ชมเชย</th>
                                   <th className="px-4 py-3 text-center bg-blue-50/50 font-black text-blue-800">รวม</th>
-                                  <th className="px-4 py-3 text-center bg-purple-50 text-purple-800 font-black">ตัวแทน</th>
+                                  <th className="px-4 py-3 text-center bg-purple-50 text-purple-800 font-black">
+                                      {viewScope === 'area' ? 'ชนะเลิศ (ที่ 1)' : 'ตัวแทน'}
+                                  </th>
                               </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-100">
