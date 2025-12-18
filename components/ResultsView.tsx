@@ -127,9 +127,12 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data }) => {
               displayMedalRaw = areaInfo?.medal || (displayScore > 0 ? calculateMedal(displayScore) : "Participant");
           }
 
-          // Representative Logic: Rank 1 AND Flag TRUE
-          // Note: Usually Rep flag applies to Cluster -> Area transition.
-          const isRep = stage === 'cluster' && String(team.rank) === '1' && String(team.flag).toUpperCase() === 'TRUE';
+          // Representative Logic: 
+          // ระดับเขต: นับเฉพาะที่ได้ที่ 1
+          // ระดับกลุ่ม: นับ Rank 1 และมี Flag Q
+          const isRep = stage === 'area' 
+            ? (String(displayRank) === '1') 
+            : (String(team.rank) === '1' && String(team.flag).toUpperCase() === 'TRUE');
 
           return {
               ...team,
@@ -180,7 +183,6 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data }) => {
   const summaryStats = useMemo(() => {
       type SchoolStat = { name: string; gold: number; silver: number; bronze: number; total: number; score: number; winnerCount: number };
       
-      // If Area: Single List. If Cluster: Map of Lists.
       if (stage === 'area') {
           const schoolMap: Record<string, SchoolStat> = {};
           processedData.forEach(t => {
@@ -193,7 +195,7 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data }) => {
               else if (medal.includes('Silver')) schoolMap[t.schoolName].silver++;
               else if (medal.includes('Bronze')) schoolMap[t.schoolName].bronze++;
               
-              // Winner check: Rank 1 in Area Stage
+              // MODIFIED: Winner check in Area Stage strictly Rank 1
               if (String(rank) === '1') schoolMap[t.schoolName].winnerCount++;
 
               schoolMap[t.schoolName].total++;
@@ -201,10 +203,9 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data }) => {
           });
           return {
               type: 'area',
-              data: Object.values(schoolMap).sort((a, b) => b.winnerCount - a.winnerCount || b.gold - a.gold || b.score - a.score).slice(0, 10) // Top 10
+              data: Object.values(schoolMap).sort((a, b) => b.winnerCount - a.winnerCount || b.gold - a.gold || b.score - a.score).slice(0, 10) 
           };
       } else {
-          // Cluster View: Group by Cluster
           const clusterMap: Record<string, Record<string, SchoolStat>> = {};
           
           processedData.forEach(t => {
@@ -228,7 +229,6 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data }) => {
               clusterMap[cName][t.schoolName].score += t.displayScore;
           });
 
-          // Convert to sorted arrays
           const sortedClusters: Record<string, SchoolStat[]> = {};
           Object.keys(clusterMap).forEach(k => {
               sortedClusters[k] = Object.values(clusterMap[k]).sort((a, b) => b.winnerCount - a.winnerCount || b.gold - a.gold || b.score - a.score);
@@ -250,7 +250,6 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data }) => {
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20">
       
-      {/* 1. Header & Stage Toggle */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-800 flex items-center font-kanit">
@@ -276,7 +275,6 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data }) => {
         </div>
       </div>
 
-      {/* 2. Medal Summary Dashboard */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
               <h3 className="text-sm font-bold text-gray-800 flex items-center uppercase tracking-wide">
@@ -287,7 +285,6 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data }) => {
           
           <div className="p-6 bg-gray-50 overflow-x-auto">
               {summaryStats.type === 'area' ? (
-                  // Area: Single Table
                   <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden min-w-[600px]">
                       <table className="w-full text-sm">
                           <thead className="bg-purple-50 text-purple-800 font-bold">
@@ -317,7 +314,6 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data }) => {
                       </table>
                   </div>
               ) : (
-                  // Cluster: Grid of Tables
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                       {Object.entries(summaryStats.data).map(([clusterName, schools]: [string, any]) => (
                           <div key={clusterName} className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden flex flex-col h-full">
@@ -356,10 +352,8 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data }) => {
           </div>
       </div>
 
-      {/* 3. Search & Quick Filters */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col gap-4">
         
-        {/* Quick Filters */}
         <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
             <button 
                 onClick={() => setQuickFilter('all')}
@@ -379,17 +373,14 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data }) => {
             >
                 <TrendingUp className="w-3 h-3 mr-1.5" /> Top 3 (1-3)
             </button>
-            {stage === 'cluster' && (
-                <button 
-                    onClick={() => setQuickFilter('rep')}
-                    className={`px-4 py-2 rounded-full text-xs font-bold border transition-all whitespace-nowrap flex items-center ${quickFilter === 'rep' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-50'}`}
-                >
-                    <Trophy className="w-3 h-3 mr-1.5" /> ตัวแทนกลุ่มฯ
-                </button>
-            )}
+            <button 
+                onClick={() => setQuickFilter('rep')}
+                className={`px-4 py-2 rounded-full text-xs font-bold border transition-all whitespace-nowrap flex items-center ${quickFilter === 'rep' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-50'}`}
+            >
+                <Trophy className="w-3 h-3 mr-1.5" /> {stage === 'area' ? 'ผู้ชนะ (ที่ 1)' : 'ตัวแทนกลุ่มฯ'}
+            </button>
         </div>
 
-        {/* Search Input */}
         <div className="relative w-full">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
             <Search className="h-5 w-5 text-gray-400" />
@@ -403,10 +394,7 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data }) => {
           />
         </div>
       </div>
-
-      {/* 4. Results List (Mobile Card / Desktop Table) */}
       
-      {/* Mobile Card View */}
       <div className="md:hidden space-y-3">
           {paginatedTeams.length > 0 ? paginatedTeams.map((team) => {
               const activity = data.activities.find(a => a.id === team.activityId);
@@ -418,10 +406,9 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data }) => {
 
               return (
                   <div key={team.teamId} className={`bg-white rounded-xl shadow-sm border border-gray-100 p-4 relative overflow-hidden group ${team.isRep ? 'ring-2 ring-indigo-400 ring-offset-2' : ''}`}>
-                      {/* Cluster Rep Banner */}
                       {team.isRep && (
                           <div className="absolute top-0 right-0 bg-indigo-600 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl shadow-sm z-10 flex items-center">
-                              <Trophy className="w-3 h-3 mr-1" /> ตัวแทนกลุ่มฯ
+                              <Trophy className="w-3 h-3 mr-1" /> {stage === 'area' ? 'ชนะเลิศระดับเขต' : 'ตัวแทนกลุ่มฯ'}
                           </div>
                       )}
                       
@@ -446,7 +433,6 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data }) => {
                               {activity?.name || team.activityId}
                           </div>
 
-                          {/* Stats Row */}
                           <div className="flex justify-between items-end mt-3">
                               <div>
                                   <div className="text-[10px] text-gray-400 uppercase font-bold">คะแนนรวม</div>
@@ -474,7 +460,6 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data }) => {
           )}
       </div>
 
-      {/* Desktop Table View */}
       <div className="hidden md:block bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
@@ -523,10 +508,9 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data }) => {
                                             {getMedalIcon(team.displayMedalRaw)}
                                             <span className="ml-2">{medalText}</span>
                                         </span>
-                                        {/* Cluster Representative Badge (Desktop) */}
                                         {isRep && (
                                             <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-700 border border-indigo-200 animate-pulse">
-                                                <Trophy className="w-3 h-3 mr-1" /> ตัวแทนกลุ่มเครือข่าย
+                                                <Trophy className="w-3 h-3 mr-1" /> {stage === 'area' ? 'ชนะเลิศระดับเขต' : 'ตัวแทนกลุ่มเครือข่าย'}
                                             </span>
                                         )}
                                     </div>
@@ -547,7 +531,6 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data }) => {
           </div>
       </div>
 
-      {/* 5. Pagination Controls */}
       {totalPages > 1 && (
           <div className="flex items-center justify-between border-t border-gray-200 bg-white px-4 py-3 sm:px-6 rounded-xl shadow-sm">
               <div className="flex flex-1 justify-between sm:hidden">
@@ -583,7 +566,6 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data }) => {
                               <ChevronLeft className="h-5 w-5" aria-hidden="true" />
                           </button>
                           
-                          {/* Simple Page Indicator */}
                           <span className="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-900 ring-1 ring-inset ring-gray-300 focus:outline-offset-0">
                               หน้า {currentPage} / {totalPages}
                           </span>
