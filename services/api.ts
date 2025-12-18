@@ -16,13 +16,10 @@ export const fetchData = async (): Promise<AppData> => {
     }
 
     const data = await response.json();
-    
-    // Check if the backend returned an explicit error object
     if (data.status === 'error') {
         throw new Error(data.message || "Backend script error");
     }
     
-    // Ensure all expected arrays exist to prevent undefined errors throughout the app
     return {
       activities: data.activities || [],
       teams: data.teams || [],
@@ -47,7 +44,6 @@ export const checkUserPermission = async (lineUserId: string): Promise<User | nu
     });
     if (!response.ok) return null;
     const user = await response.json();
-    // Verify that we actually got a user object with an ID
     return user.userid ? user : null;
    } catch (e) {
        console.error("Error checking user", e);
@@ -61,9 +57,7 @@ export const loginStandardUser = async (username: string, password: string): Pro
             method: 'GET',
             mode: 'cors'
         });
-        
         if (!response.ok) return null;
-        
         const result = await response.json();
         if (result.status === 'success' && result.user) {
             return result.user;
@@ -81,7 +75,6 @@ export const linkLineAccount = async (userId: string, lineId: string): Promise<b
             method: 'GET',
             mode: 'cors'
         });
-        
         if (!response.ok) return false;
         const result = await response.json();
         return result.status === 'success';
@@ -91,7 +84,6 @@ export const linkLineAccount = async (userId: string, lineId: string): Promise<b
     }
 }
 
-// New API to verify and link based on Email or Phone (Last 5 digits)
 export const verifyAndLinkLine = async (lineId: string, key: string): Promise<{ success: boolean; user?: User; message?: string }> => {
     try {
         const response = await fetch(`${API_URL}?action=verifyAndLinkLine`, {
@@ -115,10 +107,9 @@ export const registerUser = async (user: Partial<User>): Promise<User | null> =>
         const response = await fetch(`${API_URL}?action=registerUser`, {
             method: 'POST',
             mode: 'cors',
-            headers: { 'Content-Type': 'text/plain' }, // Force simple request
+            headers: { 'Content-Type': 'text/plain' }, 
             body: JSON.stringify(user)
         });
-        
         if (!response.ok) return null;
         const result = await response.json();
         if (result.status === 'success' && result.user) {
@@ -139,7 +130,6 @@ export const updateUser = async (user: Partial<User>): Promise<boolean> => {
             headers: { 'Content-Type': 'text/plain' },
             body: JSON.stringify(user)
         });
-        
         if (!response.ok) return false;
         const result = await response.json();
         return result.status === 'success';
@@ -149,14 +139,13 @@ export const updateUser = async (user: Partial<User>): Promise<boolean> => {
     }
 }
 
-export const updateTeamResult = async (teamId: string, score: number, rank: string, medal: string, flag: string = ''): Promise<boolean> => {
+// FULL VERSION: Added stage parameter to update CompetitionStage column
+export const updateTeamResult = async (teamId: string, score: number, rank: string, medal: string, flag: string = '', stage: string = ''): Promise<boolean> => {
     try {
-        // Use GET for simplicity with simple triggers, or POST if large data
-        const response = await fetch(`${API_URL}?action=updateTeamResult&teamId=${encodeURIComponent(teamId)}&score=${score}&rank=${encodeURIComponent(rank)}&medal=${encodeURIComponent(medal)}&flag=${encodeURIComponent(flag)}`, {
+        const response = await fetch(`${API_URL}?action=updateTeamResult&teamId=${encodeURIComponent(teamId)}&score=${score}&rank=${encodeURIComponent(rank)}&medal=${encodeURIComponent(medal)}&flag=${encodeURIComponent(flag)}&stage=${encodeURIComponent(stage)}`, {
             method: 'GET',
             mode: 'cors'
         });
-        
         if (!response.ok) return false;
         const result = await response.json();
         return result.status === 'success';
@@ -186,10 +175,9 @@ export const updateTeamStatus = async (teamId: string, status: string, reason: s
         const response = await fetch(`${API_URL}?action=updateTeamStatus`, {
             method: 'POST',
             mode: 'cors',
-            headers: { 'Content-Type': 'text/plain' }, // Avoid CORS Preflight
+            headers: { 'Content-Type': 'text/plain' }, 
             body: JSON.stringify({ teamId, status, reason, deadline })
         });
-        
         if (!response.ok) return false;
         const result = await response.json();
         return result.status === 'success';
@@ -205,7 +193,6 @@ export const deleteTeam = async (teamId: string): Promise<boolean> => {
             method: 'GET',
             mode: 'cors'
         });
-        
         if (!response.ok) return false;
         const result = await response.json();
         return result.status === 'success';
@@ -223,7 +210,6 @@ export const updateTeamDetails = async (team: any): Promise<boolean> => {
             headers: { 'Content-Type': 'text/plain' },
             body: JSON.stringify(team)
         });
-        
         if (!response.ok) return false;
         const result = await response.json();
         return result.status === 'success';
@@ -245,7 +231,6 @@ export const uploadFile = async (base64Data: string, filename: string, mimeType:
             headers: { 'Content-Type': 'text/plain' },
             body: JSON.stringify({ data: base64Data, filename, mimeType })
         });
-        
         if (!response.ok) return { status: 'error', message: 'Network error' };
         return await response.json();
     } catch (e: any) {
@@ -253,8 +238,6 @@ export const uploadFile = async (base64Data: string, filename: string, mimeType:
         return { status: 'error', message: e.toString() };
     }
 }
-
-// --- Announcement API ---
 
 export const addAnnouncement = async (title: string, content: string, type: 'news' | 'manual', link: string = '', author: string = 'Admin', clusterId: string = 'area', attachments: Attachment[] = []): Promise<boolean> => {
     try {
@@ -264,7 +247,6 @@ export const addAnnouncement = async (title: string, content: string, type: 'new
             headers: { 'Content-Type': 'text/plain' },
             body: JSON.stringify({ title, content, type, link, author, clusterId, attachments })
         });
-        
         if (!response.ok) return false;
         const result = await response.json();
         return result.status === 'success';
@@ -324,8 +306,6 @@ export const addComment = async (announcementId: string, comment: Comment): Prom
     } catch (e) { return { status: 'error' }; }
 }
 
-// --- Certificate Config API ---
-
 export const getCertificateConfig = async (): Promise<Record<string, CertificateTemplate>> => {
     try {
         const response = await fetch(`${API_URL}?action=getCertConfig`, {
@@ -334,10 +314,7 @@ export const getCertificateConfig = async (): Promise<Record<string, Certificate
         });
         if (!response.ok) return {};
         return await response.json();
-    } catch (e) {
-        console.error("Failed to get Cert Config", e);
-        return {};
-    }
+    } catch (e) { return {}; }
 };
 
 export const saveCertificateConfig = async (id: string, config: CertificateTemplate): Promise<boolean> => {
@@ -351,13 +328,8 @@ export const saveCertificateConfig = async (id: string, config: CertificateTempl
         if (!response.ok) return false;
         const result = await response.json();
         return result.status === 'success';
-    } catch (e) {
-        console.error("Failed to save Cert Config", e);
-        return false;
-    }
+    } catch (e) { return false; }
 };
-
-// --- Print Config API ---
 
 export const getPrintConfig = async (): Promise<Record<string, PrintConfig>> => {
     try {
@@ -367,10 +339,7 @@ export const getPrintConfig = async (): Promise<Record<string, PrintConfig>> => 
         });
         if (!response.ok) return {};
         return await response.json();
-    } catch (e) {
-        console.error("Failed to get Print Config", e);
-        return {};
-    }
+    } catch (e) { return {}; }
 };
 
 export const savePrintConfig = async (id: string, config: PrintConfig): Promise<boolean> => {
@@ -384,13 +353,8 @@ export const savePrintConfig = async (id: string, config: PrintConfig): Promise<
         if (!response.ok) return false;
         const result = await response.json();
         return result.status === 'success';
-    } catch (e) {
-        console.error("Failed to save Print Config", e);
-        return false;
-    }
+    } catch (e) { return false; }
 };
-
-// --- Judge Config API ---
 
 export const getJudgeConfig = async (): Promise<Record<string, JudgeConfig> | null> => {
     try {
@@ -400,10 +364,7 @@ export const getJudgeConfig = async (): Promise<Record<string, JudgeConfig> | nu
         });
         if (!response.ok) return null;
         return await response.json();
-    } catch (e) {
-        console.error("Failed to get Judge Config", e);
-        return null;
-    }
+    } catch (e) { return null; }
 };
 
 export const saveJudgeConfig = async (config: JudgeConfig): Promise<boolean> => {
@@ -417,13 +378,8 @@ export const saveJudgeConfig = async (config: JudgeConfig): Promise<boolean> => 
         if (!response.ok) return false;
         const result = await response.json();
         return result.status === 'success';
-    } catch (e) {
-        console.error("Failed to save Judge Config", e);
-        return false;
-    }
+    } catch (e) { return false; }
 };
-
-// --- Venues API ---
 
 export const saveVenue = async (venue: Venue): Promise<boolean> => {
     try {
@@ -436,10 +392,7 @@ export const saveVenue = async (venue: Venue): Promise<boolean> => {
         if (!response.ok) return false;
         const result = await response.json();
         return result.status === 'success';
-    } catch (e) {
-        console.error("Failed to save Venue", e);
-        return false;
-    }
+    } catch (e) { return false; }
 };
 
 export const deleteVenue = async (venueId: string): Promise<boolean> => {
@@ -451,13 +404,8 @@ export const deleteVenue = async (venueId: string): Promise<boolean> => {
         if (!response.ok) return false;
         const result = await response.json();
         return result.status === 'success';
-    } catch (e) {
-        console.error("Failed to delete Venue", e);
-        return false;
-    }
+    } catch (e) { return false; }
 };
-
-// --- Judges API ---
 
 export const saveJudge = async (judge: Judge): Promise<boolean> => {
     try {
@@ -470,10 +418,7 @@ export const saveJudge = async (judge: Judge): Promise<boolean> => {
         if (!response.ok) return false;
         const result = await response.json();
         return result.status === 'success';
-    } catch (e) {
-        console.error("Failed to save Judge", e);
-        return false;
-    }
+    } catch (e) { return false; }
 };
 
 export const deleteJudge = async (judgeId: string): Promise<boolean> => {
@@ -485,10 +430,7 @@ export const deleteJudge = async (judgeId: string): Promise<boolean> => {
         if (!response.ok) return false;
         const result = await response.json();
         return result.status === 'success';
-    } catch (e) {
-        console.error("Failed to delete Judge", e);
-        return false;
-    }
+    } catch (e) { return false; }
 };
 
 export const getTeamCountByStatus = (data: AppData) => {
