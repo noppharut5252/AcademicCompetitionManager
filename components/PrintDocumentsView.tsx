@@ -25,7 +25,7 @@ const DEFAULT_PRINT_CONFIG: PrintConfig = {
     scoreColsCount: 3,
     includeJudges: true,
     includeVenueDate: true,
-    headerTitle: 'งานศิลปหัตถกรรมนักเรียน ครั้งที่ 72'
+    headerTitle: 'งานศิลปหัตถกรรมนักเรียน ครั้งที่ 73'
 };
 
 const PrintConfigModal = ({ isOpen, onClose, onSave, data, currentUser, currentConfigs }: { 
