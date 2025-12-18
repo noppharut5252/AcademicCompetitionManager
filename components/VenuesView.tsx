@@ -124,7 +124,8 @@ const VenueScheduleModal = ({ venue, isOpen, onClose }: { venue: Venue, isOpen: 
                 `${sch.building || ''} ${sch.floor || ''} ${sch.room || ''}`.trim(),
                 sch.date,
                 sch.timeRange,
-                venue.locationUrl
+                venue.locationUrl,
+                sch.imageUrl || '' // Pass Image URL
             );
 
             if (result.success) {
@@ -606,26 +607,20 @@ const VenueModal = ({ venue, isOpen, onClose, onSave, onDelete, activities }: { 
                                 <button 
                                     onClick={() => fileInputRef.current?.click()}
                                     disabled={isUploading}
-                                    className="px-3 py-2 bg-blue-50 text-blue-600 rounded-lg border border-blue-200 hover:bg-blue-100 transition-colors flex items-center shrink-0"
-                                    title="อัปโหลดรูปภาพ"
+                                    className="px-3 py-2 bg-blue-50 text-blue-600 rounded-lg border border-blue-200 hover:bg-blue-100 flex items-center"
                                 >
                                     {isUploading ? <Loader2 className="w-4 h-4 animate-spin"/> : <Upload className="w-4 h-4"/>}
                                 </button>
                             </div>
-                            {formData.imageUrl && (
-                                <div className="mt-2 h-20 w-full bg-gray-100 rounded-lg overflow-hidden border border-gray-200">
-                                    <img src={formData.imageUrl} className="w-full h-full object-cover opacity-80" alt="Preview" />
-                                </div>
-                            )}
                         </div>
                         <div className="md:col-span-2">
-                            <label className="block text-sm font-medium text-gray-700 mb-2">สิ่งอำนวยความสะดวก</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">สิ่งอำนวยความสะดวก</label>
                             <div className="flex flex-wrap gap-2">
-                                {['ที่จอดรถ', 'โรงอาหาร', 'ห้องแอร์', 'Free Wifi', 'จุดปฐมพยาบาล', 'ร้านสะดวกซื้อ'].map(fac => (
+                                {['Parking', 'Canteen', 'Air Con', 'Wifi'].map(fac => (
                                     <button 
-                                        key={fac}
+                                        key={fac} 
                                         onClick={() => handleFacilityToggle(fac)}
-                                        className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${formData.facilities?.includes(fac) ? 'bg-blue-100 border-blue-200 text-blue-700' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}`}
+                                        className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${formData.facilities?.includes(fac) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}
                                     >
                                         {fac}
                                     </button>
@@ -633,153 +628,137 @@ const VenueModal = ({ venue, isOpen, onClose, onSave, onDelete, activities }: { 
                             </div>
                         </div>
                         <div className="md:col-span-2">
-                            <label className="block text-sm font-medium text-gray-700 mb-1">ข้อมูลติดต่อผู้ดูแล</label>
-                            <input className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={formData.contactInfo} onChange={e => handleChange('contactInfo', e.target.value)} placeholder="ชื่อผู้ดูแล เบอร์โทร" />
+                            <label className="block text-sm font-medium text-gray-700 mb-1">ผู้ดูแล / เบอร์ติดต่อ</label>
+                            <input className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={formData.contactInfo} onChange={e => handleChange('contactInfo', e.target.value)} placeholder="ชื่อครู - เบอร์โทร" />
                         </div>
                     </div>
 
-                    {/* Activity Schedule Mapping */}
-                    <div className="border-t border-gray-200 pt-4">
+                    {/* Schedule Section */}
+                    <div className="pt-4 border-t border-gray-100">
                         <div className="flex justify-between items-center mb-3">
-                            <h4 className="font-bold text-gray-800 flex items-center">
-                                <Calendar className="w-5 h-5 mr-2 text-blue-600" /> ตารางการใช้สนาม
+                            <h4 className="font-bold text-gray-800 text-sm flex items-center">
+                                <Calendar className="w-4 h-4 mr-2 text-orange-500"/>
+                                ตารางการใช้ห้อง/สนาม
                             </h4>
-                            {scheduleEditIndex !== null && (
-                                <span className="text-xs font-bold text-orange-600 bg-orange-50 px-2 py-1 rounded animate-pulse">กำลังแก้ไขรายการ</span>
-                            )}
                         </div>
                         
-                        {/* Add/Edit Form */}
-                        <div className={`p-4 rounded-xl border space-y-3 mb-4 transition-colors ${scheduleEditIndex !== null ? 'bg-orange-50 border-orange-200' : 'bg-blue-50 border-blue-100'}`}>
-                            <div className="flex justify-between items-center">
-                                <label className="text-xs font-bold uppercase tracking-wide opacity-70">
-                                    {scheduleEditIndex !== null ? 'แก้ไขข้อมูล' : 'เพิ่มรายการใหม่'}
-                                </label>
-                                <div className="flex items-center gap-2">
-                                    {/* Level Selector */}
-                                    <select 
-                                        className="text-xs border rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                        value={newSchedule.level || 'cluster'}
-                                        onChange={(e) => setNewSchedule(prev => ({...prev, level: e.target.value as any}))}
-                                    >
-                                        <option value="cluster">ระดับกลุ่มเครือข่าย</option>
-                                        <option value="area">ระดับเขตพื้นที่</option>
-                                    </select>
+                        {/* Add/Edit Schedule Form */}
+                        <div className="bg-orange-50 p-4 rounded-xl border border-orange-100 mb-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                                <div className="md:col-span-2">
+                                    <label className="block text-xs font-bold text-orange-800 mb-1">รายการแข่งขัน</label>
+                                    <SearchableSelect 
+                                        options={activities.map(a => ({ label: a.name, value: a.id }))}
+                                        value={newSchedule.activityId}
+                                        onChange={val => setNewSchedule(prev => ({ ...prev, activityId: val }))}
+                                        placeholder="เลือกกิจกรรม..."
+                                        className="bg-white"
+                                        icon={<Trophy className="w-3 h-3"/>}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-orange-800 mb-1">วันที่</label>
+                                    <input type="date" className="w-full border rounded px-2 py-1.5 text-sm" value={newSchedule.date} onChange={e => setNewSchedule(prev => ({ ...prev, date: e.target.value }))} />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-orange-800 mb-1">เวลา (เช่น 09:00-12:00)</label>
+                                    <input className="w-full border rounded px-2 py-1.5 text-sm" value={newSchedule.timeRange} onChange={e => setNewSchedule(prev => ({ ...prev, timeRange: e.target.value }))} placeholder="09:00 - 12:00" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-orange-800 mb-1">อาคาร</label>
+                                    <input className="w-full border rounded px-2 py-1.5 text-sm" value={newSchedule.building} onChange={e => setNewSchedule(prev => ({ ...prev, building: e.target.value }))} placeholder="อาคาร..." />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-orange-800 mb-1">ชั้น / ห้อง</label>
+                                    <div className="flex gap-2">
+                                        <input className="w-1/3 border rounded px-2 py-1.5 text-sm" value={newSchedule.floor} onChange={e => setNewSchedule(prev => ({ ...prev, floor: e.target.value }))} placeholder="ชั้น..." />
+                                        <input className="flex-1 border rounded px-2 py-1.5 text-sm" value={newSchedule.room} onChange={e => setNewSchedule(prev => ({ ...prev, room: e.target.value }))} placeholder="ห้อง..." />
+                                    </div>
+                                </div>
+                                <div className="md:col-span-2">
+                                    <label className="block text-xs font-bold text-orange-800 mb-1">หมายเหตุ</label>
+                                    <input className="w-full border rounded px-2 py-1.5 text-sm" value={newSchedule.note} onChange={e => setNewSchedule(prev => ({ ...prev, note: e.target.value }))} placeholder="เช่น เตรียมคอมพิวเตอร์มาเอง" />
+                                </div>
+                                
+                                {/* Room Image Upload */}
+                                <div className="md:col-span-2">
+                                    <label className="block text-xs font-bold text-orange-800 mb-1">รูปห้องสอบ/แผนผังห้อง</label>
+                                    <div className="flex gap-2 items-center">
+                                        <input className="flex-1 border rounded px-2 py-1.5 text-sm bg-white" value={newSchedule.imageUrl || ''} onChange={e => setNewSchedule(prev => ({ ...prev, imageUrl: e.target.value }))} placeholder="URL รูปภาพ..." />
+                                        <input type="file" ref={scheduleFileInputRef} className="hidden" accept="image/*" onChange={handleScheduleImageUpload} />
+                                        <button 
+                                            onClick={() => scheduleFileInputRef.current?.click()}
+                                            disabled={isUploadingScheduleImg}
+                                            className="px-3 py-1.5 bg-white border border-orange-200 text-orange-600 rounded text-xs hover:bg-orange-50 flex items-center"
+                                        >
+                                            {isUploadingScheduleImg ? <Loader2 className="w-3 h-3 animate-spin"/> : <ImageIcon className="w-3 h-3"/>}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="md:col-span-2 flex items-center gap-4 mt-1">
+                                    <div className="flex items-center">
+                                        <input type="radio" id="lvl_cluster" name="level" checked={newSchedule.level === 'cluster'} onChange={() => setNewSchedule(prev => ({ ...prev, level: 'cluster' }))} className="mr-1.5 text-blue-600 focus:ring-blue-500" />
+                                        <label htmlFor="lvl_cluster" className="text-xs text-gray-700">ระดับกลุ่มเครือข่าย</label>
+                                    </div>
+                                    <div className="flex items-center">
+                                        <input type="radio" id="lvl_area" name="level" checked={newSchedule.level === 'area'} onChange={() => setNewSchedule(prev => ({ ...prev, level: 'area' }))} className="mr-1.5 text-purple-600 focus:ring-purple-500" />
+                                        <label htmlFor="lvl_area" className="text-xs text-gray-700">ระดับเขตพื้นที่</label>
+                                    </div>
                                 </div>
                             </div>
-                            
-                            <SearchableSelect 
-                                options={activities.map(a => ({ label: a.name, value: a.id }))}
-                                value={newSchedule.activityId}
-                                onChange={(val) => setNewSchedule(prev => ({ ...prev, activityId: val }))}
-                                placeholder="-- ค้นหาและเลือกรายการแข่งขัน --"
-                                icon={<Search className="w-4 h-4"/>}
-                            />
-                            
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                                <input className="border rounded px-2 py-1.5 text-sm bg-white" placeholder="ตึก/อาคาร" value={newSchedule.building} onChange={e => setNewSchedule(prev => ({...prev, building: e.target.value}))} />
-                                <input className="border rounded px-2 py-1.5 text-sm bg-white" placeholder="ชั้น" value={newSchedule.floor} onChange={e => setNewSchedule(prev => ({...prev, floor: e.target.value}))} />
-                                <input className="border rounded px-2 py-1.5 text-sm bg-white" placeholder="ห้อง" value={newSchedule.room} onChange={e => setNewSchedule(prev => ({...prev, room: e.target.value}))} />
-                                <input className="border rounded px-2 py-1.5 text-sm bg-white" type="date" value={newSchedule.date} onChange={e => setNewSchedule(prev => ({...prev, date: e.target.value}))} />
-                            </div>
-                            
-                            <div className="flex flex-col md:flex-row gap-2">
-                                <input className="flex-1 border rounded px-2 py-1.5 text-sm bg-white" placeholder="เวลา (เช่น 09:00 - 12:00)" value={newSchedule.timeRange} onChange={e => setNewSchedule(prev => ({...prev, timeRange: e.target.value}))} />
-                                <input className="flex-[2] border rounded px-2 py-1.5 text-sm bg-white" placeholder="หมายเหตุ (เช่น เตรียมปลั๊กไฟมาเอง)" value={newSchedule.note} onChange={e => setNewSchedule(prev => ({...prev, note: e.target.value}))} />
-                            </div>
-
-                            {/* Schedule Specific Image Upload */}
-                            <div className="flex items-center gap-2">
-                                <input type="file" ref={scheduleFileInputRef} className="hidden" accept="image/*" onChange={handleScheduleImageUpload} />
-                                <button 
-                                    onClick={() => scheduleFileInputRef.current?.click()}
-                                    disabled={isUploadingScheduleImg}
-                                    className="px-3 py-1.5 bg-white border border-gray-300 text-gray-600 rounded-lg text-xs hover:bg-gray-50 flex items-center shrink-0"
-                                >
-                                    {isUploadingScheduleImg ? <Loader2 className="w-3 h-3 animate-spin mr-1"/> : <ImageIcon className="w-3 h-3 mr-1"/>}
-                                    {newSchedule.imageUrl ? 'เปลี่ยนรูปห้อง' : 'อัปโหลดรูปห้อง/สถานที่'}
+                            <div className="flex justify-end gap-2">
+                                {scheduleEditIndex !== null && (
+                                    <button onClick={cancelScheduleEdit} className="px-3 py-1.5 text-gray-600 text-xs font-bold hover:bg-white/50 rounded">ยกเลิกแก้ไข</button>
+                                )}
+                                <button onClick={addOrUpdateSchedule} className="px-4 py-1.5 bg-orange-500 text-white text-xs font-bold rounded shadow-sm hover:bg-orange-600">
+                                    {scheduleEditIndex !== null ? 'อัปเดตรายการ' : 'เพิ่มลงตาราง'}
                                 </button>
-                                {newSchedule.imageUrl && (
-                                    <div className="flex items-center gap-2">
-                                        <img src={newSchedule.imageUrl} className="h-8 w-8 rounded object-cover border border-gray-200" alt="Room" />
-                                        <button onClick={() => setNewSchedule(prev => ({...prev, imageUrl: ''}))} className="text-red-500 hover:text-red-700"><X className="w-3 h-3"/></button>
-                                    </div>
-                                )}
-                            </div>
-                            
-                            <div className="flex gap-2 pt-2 border-t border-dashed border-gray-300 mt-2">
-                                {scheduleEditIndex !== null ? (
-                                    <>
-                                        <button onClick={addOrUpdateSchedule} className="flex-1 px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-bold hover:bg-orange-600 flex items-center justify-center">
-                                            <Save className="w-4 h-4 mr-1"/> บันทึกแก้ไขทันที
-                                        </button>
-                                        <button onClick={cancelScheduleEdit} className="px-4 py-2 bg-white text-gray-600 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 flex items-center">
-                                            ยกเลิก
-                                        </button>
-                                    </>
-                                ) : (
-                                    <button onClick={addOrUpdateSchedule} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 flex items-center justify-center">
-                                        <Plus className="w-4 h-4 mr-1"/> เพิ่มและบันทึกทันที
-                                    </button>
-                                )}
                             </div>
                         </div>
 
-                        {/* List */}
+                        {/* List of Schedules */}
                         <div className="space-y-2">
-                            {formData.scheduledActivities?.map((item, idx) => (
-                                <div key={idx} className={`flex items-start justify-between p-3 bg-white border rounded-lg transition-colors shadow-sm group ${scheduleEditIndex === idx ? 'border-orange-400 ring-1 ring-orange-400 bg-orange-50/20' : 'border-gray-200 hover:border-blue-300'}`}>
-                                    <div className="flex-1" onClick={() => editScheduleItem(idx)}>
-                                        <div className="flex justify-between items-start pr-2">
-                                            <div className="font-bold text-sm text-gray-900 cursor-pointer hover:text-blue-600 transition-colors">{item.activityName}</div>
-                                            {item.level && <span className={`text-[9px] px-1.5 rounded border ${item.level === 'area' ? 'bg-purple-50 text-purple-700 border-purple-100' : 'bg-blue-50 text-blue-700 border-blue-100'}`}>{item.level === 'area' ? 'เขต' : 'กลุ่ม'}</span>}
+                            {formData.scheduledActivities?.map((sch, idx) => (
+                                <div key={idx} className={`flex justify-between items-start p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm group ${scheduleEditIndex === idx ? 'ring-2 ring-orange-400 bg-white' : ''}`}>
+                                    <div className="flex-1">
+                                        <div className="font-bold text-gray-800">{sch.activityName}</div>
+                                        <div className="text-xs text-gray-500 flex flex-wrap gap-2 mt-1">
+                                            <span className="flex items-center"><Calendar className="w-3 h-3 mr-1"/> {sch.date}</span>
+                                            <span className="flex items-center"><Clock className="w-3 h-3 mr-1"/> {sch.timeRange}</span>
+                                            <span className="flex items-center text-blue-600"><Building className="w-3 h-3 mr-1"/> {sch.building} {sch.room}</span>
                                         </div>
-                                        <div className="text-xs text-gray-500 mt-1 flex flex-wrap gap-x-4 gap-y-1">
-                                            <span className="flex items-center text-blue-600 font-medium"><MapPin className="w-3 h-3 mr-1"/> {item.building} {item.floor} {item.room}</span>
-                                            <span className="flex items-center"><Calendar className="w-3 h-3 mr-1"/> {item.date}</span>
-                                            <span className="flex items-center"><Clock className="w-3 h-3 mr-1"/> {item.timeRange}</span>
+                                        <div className="mt-1">
+                                            <span className={`text-[9px] px-1.5 py-0.5 rounded border ${sch.level === 'area' ? 'bg-purple-50 text-purple-700 border-purple-100' : 'bg-blue-50 text-blue-700 border-blue-100'}`}>
+                                                {sch.level === 'area' ? 'ระดับเขต' : 'ระดับกลุ่ม'}
+                                            </span>
                                         </div>
-                                        {item.note && <div className="text-xs text-orange-600 mt-1 bg-orange-50 inline-block px-2 py-0.5 rounded border border-orange-100">{item.note}</div>}
-                                        {item.imageUrl && (
-                                            <div className="mt-1">
-                                                <span className="text-[10px] text-green-600 flex items-center"><ImageIcon className="w-3 h-3 mr-1"/> มีรูปภาพประกอบ</span>
-                                            </div>
-                                        )}
                                     </div>
-                                    <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button onClick={() => editScheduleItem(idx)} className="text-blue-500 hover:text-blue-700 p-1.5 rounded hover:bg-blue-50" title="แก้ไข">
-                                            <Edit2 className="w-3.5 h-3.5"/>
-                                        </button>
-                                        <button onClick={() => removeSchedule(idx)} className="text-red-400 hover:text-red-600 p-1.5 rounded hover:bg-red-50" title="ลบ">
-                                            <Trash2 className="w-3.5 h-3.5"/>
-                                        </button>
+                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button onClick={() => editScheduleItem(idx)} className="p-1.5 bg-white border border-gray-200 rounded text-blue-600 hover:bg-blue-50"><Edit2 className="w-3 h-3"/></button>
+                                        <button onClick={() => removeSchedule(idx)} className="p-1.5 bg-white border border-gray-200 rounded text-red-600 hover:bg-red-50"><Trash2 className="w-3 h-3"/></button>
                                     </div>
                                 </div>
                             ))}
                             {(!formData.scheduledActivities || formData.scheduledActivities.length === 0) && (
-                                <div className="text-center py-6 text-gray-400 text-sm border-2 border-dashed border-gray-100 rounded-xl">
-                                    ยังไม่มีกิจกรรมที่กำหนด
+                                <div className="text-center py-6 text-gray-400 text-xs italic border-2 border-dashed border-gray-200 rounded-lg">
+                                    ยังไม่มีตารางการแข่งขัน
                                 </div>
                             )}
                         </div>
                     </div>
                 </div>
 
-                <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-between items-center">
-                    {venue ? (
-                        <button onClick={() => onDelete(venue.id)} className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium flex items-center">
-                            <Trash2 className="w-4 h-4 mr-2"/> ลบสนามนี้
+                <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-between">
+                    {venue && (
+                        <button onClick={() => { if(confirm('ยืนยันลบสนามนี้?')) onDelete(venue.id); }} className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg text-sm font-bold flex items-center">
+                            <Trash2 className="w-4 h-4 mr-2"/> ลบสนาม
                         </button>
-                    ) : <div></div>}
-                    <div className="flex gap-2">
-                        <button onClick={onClose} className="px-4 py-2 text-gray-600 text-sm hover:bg-gray-200 rounded-lg">ปิด</button>
-                        <button 
-                            onClick={handleMainSave} 
-                            disabled={isSaving}
-                            className="px-6 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 shadow-sm flex items-center disabled:opacity-70"
-                        >
-                            {isSaving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
-                            บันทึกข้อมูลหลัก
+                    )}
+                    <div className="flex gap-2 ml-auto">
+                        <button onClick={onClose} className="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded-lg text-sm font-medium">ปิด</button>
+                        <button onClick={handleMainSave} disabled={isSaving} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-bold flex items-center shadow-md disabled:opacity-70">
+                            {isSaving ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : <Save className="w-4 h-4 mr-2"/>} บันทึกข้อมูลสนาม
                         </button>
                     </div>
                 </div>
@@ -788,163 +767,225 @@ const VenueModal = ({ venue, isOpen, onClose, onSave, onDelete, activities }: { 
     );
 };
 
+// Main Venues View Component
 const VenuesView: React.FC<VenuesViewProps> = ({ data, user }) => {
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingVenue, setEditingVenue] = useState<Venue | null>(null);
-  
-  // New State for Viewing Schedule
-  const [scheduleVenue, setScheduleVenue] = useState<Venue | null>(null);
-  const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info', isVisible: boolean }>({ message: '', type: 'info', isVisible: false });
-  const [isLoading, setIsLoading] = useState(true);
-  
-  const [localVenues, setLocalVenues] = useState<Venue[]>(data.venues || []);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+    const [isLoading, setIsLoading] = useState(true);
+    
+    // Modal States
+    const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null);
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
+    
+    const isAdmin = user?.level === 'admin' || user?.level === 'area';
 
-  const canManage = ['admin', 'area', 'group_admin'].includes(user?.level?.toLowerCase());
+    // Fake Loading
+    useEffect(() => {
+        setIsLoading(true);
+        const t = setTimeout(() => setIsLoading(false), 500);
+        return () => clearTimeout(t);
+    }, []);
 
-  useEffect(() => {
-      // Simulate initial loading for Skeleton demonstration
-      setIsLoading(true);
-      const timer = setTimeout(() => {
-          setLocalVenues(data.venues || []);
-          setIsLoading(false);
-      }, 800);
-      return () => clearTimeout(timer);
-  }, [data.venues]);
+    const filteredVenues = useMemo(() => {
+        return (data.venues || []).filter(v => 
+            v.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+            v.description.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+    }, [data.venues, searchTerm]);
 
-  const showToast = (message: string, type: 'success' | 'error' | 'info') => {
-      setToast({ message, type, isVisible: true });
-  };
+    const handleEdit = (v: Venue) => {
+        setSelectedVenue(v);
+        setIsEditModalOpen(true);
+    };
 
-  const handleEdit = (v: Venue) => {
-      setEditingVenue(v);
-      setIsModalOpen(true);
-  };
+    const handleAdd = () => {
+        setSelectedVenue(null);
+        setIsEditModalOpen(true);
+    };
 
-  const handleAdd = () => {
-      setEditingVenue(null);
-      setIsModalOpen(true);
-  };
+    const handleViewSchedule = (v: Venue) => {
+        setSelectedVenue(v);
+        setIsScheduleModalOpen(true);
+    };
 
-  const handleSave = async (venueData: Venue): Promise<boolean> => {
-      try {
-        // 1. Determine ID and Final Object
-        let finalVenue = { ...venueData };
-        if (!finalVenue.id) {
-            finalVenue.id = `V${Date.now()}`;
-        }
-
-        // 2. Optimistic Update
-        let updatedList = [];
-        const exists = localVenues.some(v => v.id === finalVenue.id);
-        if (exists) {
-            updatedList = localVenues.map(v => v.id === finalVenue.id ? finalVenue : v);
+    const handleSaveVenue = async (venue: Venue) => {
+        const isNew = !venue.id;
+        const venueToSave = { ...venue, id: isNew ? `V${Date.now()}` : venue.id };
+        const success = await saveVenue(venueToSave);
+        if (success) {
+            // Optimistic update handled by parent reloading data usually, 
+            // but we can close modal here. Ideally trigger onDataUpdate.
+            setIsEditModalOpen(false);
+            window.location.reload(); // Simple reload to refresh data for now
+            return true;
         } else {
-            updatedList = [...localVenues, finalVenue];
+            alert('บันทึกไม่สำเร็จ');
+            return false;
         }
-        setLocalVenues(updatedList);
-        
-        // 3. Call API with the Correct Object (Including ID)
-        await saveVenue(finalVenue);
-        showToast('บันทึกข้อมูลสำเร็จ', 'success');
-        return true;
-      } catch (err) {
-        showToast('เกิดข้อผิดพลาดในการบันทึก', 'error');
-        return false;
-      }
-  };
+    };
 
-  const handleDelete = async (id: string) => {
-      if (!confirm('คุณต้องการลบสนามนี้ใช่หรือไม่?')) return;
-      
-      setLocalVenues(prev => prev.filter(v => v.id !== id));
-      setIsModalOpen(false);
-      showToast('ลบข้อมูลเรียบร้อยแล้ว', 'success');
-      
-      await deleteVenue(id);
-  };
+    const handleDeleteVenue = async (id: string) => {
+        const success = await deleteVenue(id);
+        if (success) {
+            setIsEditModalOpen(false);
+            window.location.reload();
+        } else {
+            alert('ลบไม่สำเร็จ');
+        }
+    };
 
-  return (
-    <div className="space-y-6 animate-in fade-in duration-500 pb-20 relative">
-        <Toast message={toast.message} type={toast.type} isVisible={toast.isVisible} onClose={() => setToast(prev => ({...prev, isVisible: false}))} />
-        
-        {/* Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-            <div>
-                <h2 className="text-xl font-bold text-gray-800 flex items-center font-kanit">
-                    <MapPin className="w-6 h-6 mr-2 text-blue-600" />
-                    สนามแข่งขันและกำหนดการ (Venues & Schedule)
-                </h2>
-                <p className="text-gray-500 text-sm mt-1">ข้อมูลสถานที่ อาคาร ห้องสอบ และเวลาแข่งขัน</p>
+    if (isLoading) return <VenuesSkeleton />;
+
+    return (
+        <div className="space-y-6 animate-in fade-in duration-500 pb-20">
+            {/* Header */}
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                    <h2 className="text-xl font-bold text-gray-800 flex items-center font-kanit">
+                        <MapPin className="w-6 h-6 mr-2 text-red-500" />
+                        สนามแข่งขัน (Venues)
+                    </h2>
+                    <p className="text-gray-500 text-sm mt-1">ข้อมูลสถานที่และตารางการใช้ห้องสอบ</p>
+                </div>
+                
+                <div className="flex items-center gap-3 w-full md:w-auto">
+                    {/* View Toggle */}
+                    <div className="bg-gray-100 p-1 rounded-lg flex shrink-0">
+                        <button 
+                            onClick={() => setViewMode('grid')}
+                            className={`p-2 rounded-md transition-all ${viewMode === 'grid' ? 'bg-white shadow text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
+                        >
+                            <LayoutGrid className="w-4 h-4" />
+                        </button>
+                        <button 
+                            onClick={() => setViewMode('list')}
+                            className={`p-2 rounded-md transition-all ${viewMode === 'list' ? 'bg-white shadow text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
+                        >
+                            <List className="w-4 h-4" />
+                        </button>
+                    </div>
+
+                    <div className="relative flex-1 md:w-64">
+                        <Search className="absolute inset-y-0 left-3 flex items-center pointer-events-none h-4 w-4 text-gray-400" />
+                        <input
+                            type="text"
+                            className="block w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:outline-none"
+                            placeholder="ค้นหาสนาม..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                    </div>
+
+                    {isAdmin && (
+                        <button 
+                            onClick={handleAdd}
+                            className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm font-medium text-sm whitespace-nowrap"
+                        >
+                            <Plus className="w-4 h-4 mr-2" /> เพิ่มสนาม
+                        </button>
+                    )}
+                </div>
             </div>
-            {canManage && (
-                <button 
-                    onClick={handleAdd}
-                    className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm font-medium text-sm"
-                >
-                    <Plus className="w-4 h-4 mr-2" /> เพิ่มสนามแข่ง
-                </button>
-            )}
-        </div>
 
-        {/* Content with Skeleton Loading */}
-        {isLoading ? (
-            <VenuesSkeleton />
-        ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {localVenues.length > 0 ? (
-                    localVenues.map(venue => (
+            {/* Content */}
+            {viewMode === 'grid' ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {filteredVenues.map(venue => (
                         <VenueCard 
                             key={venue.id} 
                             venue={venue} 
-                            isAdmin={canManage} 
-                            onEdit={handleEdit}
-                            onViewSchedule={(v) => setScheduleVenue(v)}
+                            isAdmin={isAdmin} 
+                            onEdit={handleEdit} 
+                            onViewSchedule={handleViewSchedule} 
                         />
-                    ))
-                ) : (
-                    <div className="col-span-full py-16 text-center bg-white rounded-xl border-2 border-dashed border-gray-200">
-                        <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4 text-gray-400">
-                            <MapPin className="w-8 h-8" />
+                    ))}
+                    {filteredVenues.length === 0 && (
+                        <div className="col-span-full py-12 text-center text-gray-400 border-2 border-dashed border-gray-200 rounded-xl bg-gray-50/50">
+                            <MapPin className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                            <p>ไม่พบข้อมูลสนามแข่งขัน</p>
                         </div>
-                        <h3 className="text-lg font-medium text-gray-900">ยังไม่มีข้อมูลสนามแข่งขัน</h3>
-                        <p className="text-gray-500 text-sm mt-1">
-                            {canManage ? 'กดปุ่ม "เพิ่มสนามแข่ง" เพื่อเริ่มต้นใช้งาน' : 'ผู้ดูแลระบบยังไม่ได้เพิ่มข้อมูล'}
-                        </p>
-                        {canManage && (
-                            <button 
-                                onClick={handleAdd}
-                                className="mt-4 px-6 py-2 bg-blue-50 text-blue-600 font-medium rounded-lg hover:bg-blue-100 transition-colors"
-                            >
-                                เพิ่มสนามแข่งแรก
-                            </button>
-                        )}
+                    )}
+                </div>
+            ) : (
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                                <tr>
+                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">ชื่อสนาม</th>
+                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">รายละเอียด</th>
+                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">สิ่งอำนวยความสะดวก</th>
+                                    <th className="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                                {filteredVenues.map((venue) => (
+                                    <tr key={venue.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => handleViewSchedule(venue)}>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <div className="flex items-center">
+                                                <div className="h-10 w-10 flex-shrink-0 bg-gray-100 rounded-lg overflow-hidden mr-3">
+                                                    <img className="h-10 w-10 object-cover" src={venue.imageUrl || "https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=100&q=80"} alt="" />
+                                                </div>
+                                                <div className="text-sm font-bold text-gray-900">{venue.name}</div>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <div className="text-sm text-gray-500 line-clamp-2 max-w-xs">{venue.description}</div>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <div className="flex gap-1">
+                                                {(venue.facilities || []).slice(0, 3).map((f, i) => (
+                                                    <span key={i} className="px-2 py-0.5 rounded text-[10px] bg-gray-100 border border-gray-200 text-gray-600">{f}</span>
+                                                ))}
+                                                {(venue.facilities?.length || 0) > 3 && <span className="text-xs text-gray-400 self-center">+{venue.facilities!.length - 3}</span>}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                            <div className="flex justify-end gap-2">
+                                                <button 
+                                                    onClick={(e) => { e.stopPropagation(); handleViewSchedule(venue); }}
+                                                    className="text-blue-600 hover:text-blue-900 bg-blue-50 p-1.5 rounded"
+                                                >
+                                                    <Calendar className="w-4 h-4" />
+                                                </button>
+                                                {isAdmin && (
+                                                    <button 
+                                                        onClick={(e) => { e.stopPropagation(); handleEdit(venue); }}
+                                                        className="text-gray-600 hover:text-gray-900 bg-gray-100 p-1.5 rounded"
+                                                    >
+                                                        <Edit2 className="w-4 h-4" />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
                     </div>
-                )}
-            </div>
-        )}
+                </div>
+            )}
 
-        {/* Edit Modal */}
-        {isModalOpen && (
+            {/* Modals */}
             <VenueModal 
-                isOpen={isModalOpen} 
-                venue={editingVenue} 
+                venue={selectedVenue} 
+                isOpen={isEditModalOpen} 
+                onClose={() => setIsEditModalOpen(false)} 
+                onSave={handleSaveVenue}
+                onDelete={handleDeleteVenue}
                 activities={data.activities}
-                onClose={() => setIsModalOpen(false)} 
-                onSave={handleSave} 
-                onDelete={handleDelete}
             />
-        )}
 
-        {/* Schedule Detail Modal */}
-        {scheduleVenue && (
-            <VenueScheduleModal
-                venue={scheduleVenue}
-                isOpen={!!scheduleVenue}
-                onClose={() => setScheduleVenue(null)}
-            />
-        )}
-    </div>
-  );
+            {selectedVenue && (
+                <VenueScheduleModal 
+                    venue={selectedVenue} 
+                    isOpen={isScheduleModalOpen} 
+                    onClose={() => setIsScheduleModalOpen(false)} 
+                />
+            )}
+        </div>
+    );
 };
 
 export default VenuesView;
