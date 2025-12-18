@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { AppData, User, Team, Judge, PrintConfig } from '../types';
-import { Printer, FileText, ClipboardList, Users, Mail, Trophy, LayoutGrid, Filter, Search, ChevronRight, School, UserCheck, CheckSquare, Square, Layers, Download, Settings, X, Save, CheckCircle, Loader2, Hash, Tag, UserRound, AlertTriangle, PrinterCheck } from 'lucide-react';
+import { Printer, FileText, ClipboardList, Users, Mail, Trophy, LayoutGrid, Filter, Search, ChevronRight, School, UserCheck, CheckSquare, Square, Layers, Download, Settings, X, Save, CheckCircle, Loader2, Hash, Tag, UserRound, AlertTriangle, PrinterCheck, Lock } from 'lucide-react';
 import SearchableSelect from './SearchableSelect';
 import { getPrintConfig, savePrintConfig } from '../services/api';
 
@@ -155,6 +155,7 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
   const role = user?.level?.toLowerCase();
   const isAdminOrArea = role === 'admin' || role === 'area';
   const isGroupAdmin = role === 'group_admin';
+  const isGuest = !user || user.isGuest;
   const userSchool = data.schools.find(s => s.SchoolID === user?.SchoolID);
   const userClusterID = userSchool?.SchoolCluster;
 
@@ -588,6 +589,10 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
   };
 
   const handlePrintAction = async (type: DocType, specificIds: string[]) => {
+    if (isGuest) {
+        alert('กรุณาเข้าสู่ระบบด้วยสิทธิ์แอดมินหรือสถานศึกษาเพื่อพิมพ์เอกสาร');
+        return;
+    }
     setIsGenerating(true);
     await new Promise(resolve => setTimeout(resolve, 800));
 
@@ -628,6 +633,17 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20 relative">
       
+      {/* Guest Lock Message */}
+      {isGuest && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center gap-3 text-amber-800 shadow-sm animate-pulse">
+            <Lock className="w-5 h-5 shrink-0" />
+            <div className="text-sm">
+                <p className="font-bold">โหมดผู้เยี่ยมชม (Read-only)</p>
+                <p>คุณสามารถดูรายการได้ แต่การสั่งพิมพ์เอกสารจำเป็นต้อง <b>Login</b> เข้าสู่ระบบด้วยบัญชีโรงเรียนหรือเขตพื้นที่</p>
+            </div>
+        </div>
+      )}
+
       {/* Bulk Print Confirmation Modal */}
       {bulkConfirm.isOpen && (
           <div className="fixed inset-0 bg-black/60 z-[300] flex items-center justify-center p-4 backdrop-blur-sm animate-in zoom-in duration-300">
@@ -671,13 +687,15 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
         </div>
         
         <div className="flex gap-2 w-full md:w-auto">
-            <button 
-                onClick={() => setShowConfigModal(true)}
-                className="flex items-center px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium border border-gray-200"
-            >
-                <Settings className="w-4 h-4 mr-2" />
-                ตั้งค่าการพิมพ์
-            </button>
+            {!isGuest && (
+                <button 
+                    onClick={() => setShowConfigModal(true)}
+                    className="flex items-center px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium border border-gray-200"
+                >
+                    <Settings className="w-4 h-4 mr-2" />
+                    ตั้งค่าการพิมพ์
+                </button>
+            )}
         </div>
       </div>
 
@@ -763,31 +781,36 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
           <div className="flex flex-wrap gap-2 justify-center lg:justify-end flex-1">
               <button 
                 onClick={() => handlePrintAllDirect('judge-signin')}
-                className="bg-white hover:bg-blue-600 hover:text-white px-4 py-2.5 rounded-xl text-xs font-bold border border-blue-200 text-blue-700 transition-all flex items-center shadow-sm"
+                disabled={isGuest}
+                className="bg-white hover:enabled:bg-blue-600 hover:enabled:text-white px-4 py-2.5 rounded-xl text-xs font-bold border border-blue-200 text-blue-700 transition-all flex items-center shadow-sm disabled:opacity-50"
               >
                   <UserCheck className="w-4 h-4 mr-2" /> ใบเซ็นกรรมการ
               </button>
               <button 
                 onClick={() => handlePrintAllDirect('competitor-signin')}
-                className="bg-white hover:bg-blue-600 hover:text-white px-4 py-2.5 rounded-xl text-xs font-bold border border-blue-200 text-blue-700 transition-all flex items-center shadow-sm"
+                disabled={isGuest}
+                className="bg-white hover:enabled:bg-blue-600 hover:enabled:text-white px-4 py-2.5 rounded-xl text-xs font-bold border border-blue-200 text-blue-700 transition-all flex items-center shadow-sm disabled:opacity-50"
               >
                   <Users className="w-4 h-4 mr-2" /> ใบเซ็นผู้แข่ง
               </button>
               <button 
                 onClick={() => handlePrintAllDirect('score-sheet-individual')}
-                className="bg-white hover:bg-blue-600 hover:text-white px-4 py-2.5 rounded-xl text-xs font-bold border border-blue-200 text-blue-700 transition-all flex items-center shadow-sm"
+                disabled={isGuest}
+                className="bg-white hover:enabled:bg-blue-600 hover:enabled:text-white px-4 py-2.5 rounded-xl text-xs font-bold border border-blue-200 text-blue-700 transition-all flex items-center shadow-sm disabled:opacity-50"
               >
                   <UserRound className="w-4 h-4 mr-2" /> ใบให้คะแนนรายคน
               </button>
               <button 
                 onClick={() => handlePrintAllDirect('score-sheet')}
-                className="bg-white hover:bg-blue-600 hover:text-white px-4 py-2.5 rounded-xl text-xs font-bold border border-blue-200 text-blue-700 transition-all flex items-center shadow-sm"
+                disabled={isGuest}
+                className="bg-white hover:enabled:bg-blue-600 hover:enabled:text-white px-4 py-2.5 rounded-xl text-xs font-bold border border-blue-200 text-blue-700 transition-all flex items-center shadow-sm disabled:opacity-50"
               >
                   <ClipboardList className="w-4 h-4 mr-2" /> ใบให้คะแนนรวม
               </button>
               <button 
                 onClick={() => handlePrintAllDirect('envelope')}
-                className="bg-white hover:bg-blue-600 hover:text-white px-4 py-2.5 rounded-xl text-xs font-bold border border-blue-200 text-blue-700 transition-all flex items-center shadow-sm"
+                disabled={isGuest}
+                className="bg-white hover:enabled:bg-blue-600 hover:enabled:text-white px-4 py-2.5 rounded-xl text-xs font-bold border border-blue-200 text-blue-700 transition-all flex items-center shadow-sm disabled:opacity-50"
               >
                   <Mail className="w-4 h-4 mr-2" /> ปะหน้าซอง
               </button>
@@ -854,35 +877,40 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                                       <div className="flex justify-center gap-1">
                                           <button 
                                               onClick={() => handlePrintAction('judge-signin', [act.id])}
-                                              className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors border border-transparent hover:border-blue-200"
+                                              disabled={isGuest}
+                                              className="p-2 text-blue-600 hover:enabled:bg-blue-100 rounded-lg transition-colors border border-transparent hover:enabled:border-blue-200 disabled:opacity-30"
                                               title="พิมพ์ใบเซ็นชื่อกรรมการ"
                                           >
                                               <UserCheck className="w-5 h-5" />
                                           </button>
                                           <button 
                                               onClick={() => handlePrintAction('competitor-signin', [act.id])}
-                                              className="p-2 text-indigo-600 hover:bg-indigo-100 rounded-lg transition-colors border border-transparent hover:border-indigo-200"
+                                              disabled={isGuest}
+                                              className="p-2 text-indigo-600 hover:enabled:bg-indigo-100 rounded-lg transition-colors border border-transparent hover:enabled:border-indigo-200 disabled:opacity-30"
                                               title="พิมพ์ใบเซ็นชื่อผู้แข่ง"
                                           >
                                               <Users className="w-5 h-5" />
                                           </button>
                                           <button 
                                               onClick={() => handlePrintAction('score-sheet-individual', [act.id])}
-                                              className="p-2 text-blue-800 hover:bg-blue-100 rounded-lg transition-colors border border-transparent hover:border-blue-200"
+                                              disabled={isGuest}
+                                              className="p-2 text-blue-800 hover:enabled:bg-blue-100 rounded-lg transition-colors border border-transparent hover:enabled:border-blue-200 disabled:opacity-30"
                                               title="พิมพ์ใบให้คะแนนรายบุคคล"
                                           >
                                               <UserRound className="w-5 h-5" />
                                           </button>
                                           <button 
                                               onClick={() => handlePrintAction('score-sheet', [act.id])}
-                                              className="p-2 text-emerald-600 hover:bg-emerald-100 rounded-lg transition-colors border border-transparent hover:border-emerald-200"
+                                              disabled={isGuest}
+                                              className="p-2 text-emerald-600 hover:enabled:bg-emerald-100 rounded-lg transition-colors border border-transparent hover:enabled:border-emerald-200 disabled:opacity-30"
                                               title="พิมพ์แบบบันทึกคะแนนรวม"
                                           >
                                               <ClipboardList className="w-5 h-5" />
                                           </button>
                                           <button 
                                               onClick={() => handlePrintAction('envelope', [act.id])}
-                                              className="p-2 text-orange-600 hover:bg-orange-100 rounded-lg transition-colors border border-transparent hover:border-orange-200"
+                                              disabled={isGuest}
+                                              className="p-2 text-orange-600 hover:enabled:bg-orange-100 rounded-lg transition-colors border border-transparent hover:enabled:border-orange-200 disabled:opacity-30"
                                               title="พิมพ์ใบปะหน้าซองกิจกรรม"
                                           >
                                               <Mail className="w-5 h-5" />
@@ -907,14 +935,16 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
           </div>
       </div>
 
-      <PrintConfigModal 
-          isOpen={showConfigModal} 
-          onClose={() => setShowConfigModal(false)}
-          onSave={(id, config) => setPrintConfigs({...printConfigs, [id]: config})}
-          data={data}
-          currentUser={user}
-          currentConfigs={printConfigs}
-      />
+      {!isGuest && (
+        <PrintConfigModal 
+            isOpen={showConfigModal} 
+            onClose={() => setShowConfigModal(false)}
+            onSave={(id, config) => setPrintConfigs({...printConfigs, [id]: config})}
+            data={data}
+            currentUser={user}
+            currentConfigs={printConfigs}
+        />
+      )}
 
       {isGenerating && (
           <div className="fixed inset-0 bg-black/60 z-[500] flex flex-col items-center justify-center text-white backdrop-blur-md animate-in fade-in duration-300">
@@ -936,3 +966,4 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
 };
 
 export default PrintDocumentsView;
+
