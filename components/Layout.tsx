@@ -506,7 +506,7 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
                 </button>
                 <button onClick={() => handleNav('venues')} className={`flex flex-col items-center justify-center w-full space-y-1 ${['venues', 'settings','certificates','idcards','profile','score', 'judges', 'announcements', 'documents'].includes(activeTab) ? 'text-blue-600' : 'text-gray-400'}`}>
                     <MapPin className="w-6 h-6" />
-                    <span className="text-[10px] font-medium">เมนูอื่นๆ</span>
+                    <span className="text-[10px] font-medium">สนาม</span>
                 </button>
             </div>
         </div>
