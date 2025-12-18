@@ -6,15 +6,6 @@ import SearchableSelect from './SearchableSelect';
 import { saveVenue, deleteVenue, uploadImage } from '../services/api';
 import { resizeImage } from '../services/utils';
 import { shareVenue, shareSchedule } from '../services/liff';
-// @ts-ignore
-import pdfMake from "pdfmake/build/pdfmake";
-// @ts-ignore
-import pdfFonts from "pdfmake/build/vfs_fonts";
-
-// Assign vfs to pdfMake
-if (pdfMake && pdfMake.vfs === undefined && pdfFonts) {
-  pdfMake.vfs = pdfFonts.pdfMake ? pdfFonts.pdfMake.vfs : pdfFonts.vfs;
-}
 
 interface VenuesViewProps {
   data: AppData;
@@ -30,59 +21,6 @@ const FACILITY_ICONS: Record<string, React.ReactNode> = {
     'ห้องแอร์': <Wind className="w-4 h-4" />,
     'Wifi': <Wifi className="w-4 h-4" />,
     'Free Wifi': <Wifi className="w-4 h-4" />,
-};
-
-// --- Helper: Load Thai Fonts for pdfMake ---
-const loadThaiFonts = async () => {
-    // Check if fonts are already loaded (custom check)
-    if (pdfMake.fonts && pdfMake.fonts.Sarabun) return;
-
-    const fontBaseUrl = "https://raw.githubusercontent.com/google/fonts/main/ofl/sarabun/";
-    const regularUrl = fontBaseUrl + "Sarabun-Regular.ttf";
-    const boldUrl = fontBaseUrl + "Sarabun-Bold.ttf";
-
-    const toBase64 = (buffer: ArrayBuffer) => {
-        let binary = '';
-        const bytes = new Uint8Array(buffer);
-        const len = bytes.byteLength;
-        for (let i = 0; i < len; i++) {
-            binary += String.fromCharCode(bytes[i]);
-        }
-        return window.btoa(binary);
-    };
-
-    try {
-        const [regRes, boldRes] = await Promise.all([
-            fetch(regularUrl),
-            fetch(boldUrl)
-        ]);
-
-        const [regBlob, boldBlob] = await Promise.all([
-            regRes.arrayBuffer(),
-            boldRes.arrayBuffer()
-        ]);
-
-        // Initialize vfs if missing
-        if (!pdfMake.vfs) pdfMake.vfs = {};
-
-        // Add to VFS
-        pdfMake.vfs["Sarabun-Regular.ttf"] = toBase64(regBlob);
-        pdfMake.vfs["Sarabun-Bold.ttf"] = toBase64(boldBlob);
-
-        // Define Fonts
-        pdfMake.fonts = {
-            ...pdfMake.fonts,
-            Sarabun: {
-                normal: "Sarabun-Regular.ttf",
-                bold: "Sarabun-Bold.ttf",
-                italics: "Sarabun-Regular.ttf", 
-                bolditalics: "Sarabun-Bold.ttf"
-            }
-        };
-    } catch (e) {
-        console.error("Failed to load Thai fonts", e);
-        throw new Error("ไม่สามารถโหลดฟอนต์ภาษาไทยได้");
-    }
 };
 
 // --- Skeleton Component ---
@@ -150,7 +88,6 @@ const Toast = ({ message, type, isVisible, onClose }: { message: string, type: '
 const VenueScheduleModal = ({ venue, isOpen, onClose }: { venue: Venue, isOpen: boolean, onClose: () => void }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info', isVisible: boolean }>({ message: '', type: 'info', isVisible: false });
-    const [isGenerating, setIsGenerating] = useState(false);
 
     const groupedSchedules = useMemo(() => {
         if (!venue.scheduledActivities) return {};
@@ -203,129 +140,104 @@ const VenueScheduleModal = ({ venue, isOpen, onClose }: { venue: Venue, isOpen: 
         }
     };
 
-    const handlePrint = async () => {
-        setIsGenerating(true);
-        try {
-            await loadThaiFonts();
-
-            const tableBody: any[] = [];
-            
-            // Header Row
-            tableBody.push([
-                { text: 'เวลา', style: 'tableHeader' },
-                { text: 'รายการแข่งขัน', style: 'tableHeader' },
-                { text: 'อาคาร', style: 'tableHeader' },
-                { text: 'ชั้น', style: 'tableHeader' },
-                { text: 'ห้อง', style: 'tableHeader' },
-                { text: 'ระดับ', style: 'tableHeader' }
-            ]);
-
-            sortedDates.forEach(date => {
-                // Date Separator Row
-                tableBody.push([{ 
-                    text: `📅 วันที่ ${date}`, 
-                    colSpan: 6, 
-                    fillColor: '#dbeafe', 
-                    color: '#1e3a8a', 
-                    bold: true,
-                    margin: [0, 5, 0, 5]
-                }, {}, {}, {}, {}, {}]);
-
-                groupedSchedules[date].forEach(sch => {
-                    tableBody.push([
-                        { text: sch.timeRange || '-', alignment: 'center', color: '#e11d48', bold: true },
-                        { 
-                            stack: [
-                                { text: sch.activityName, bold: true },
-                                sch.note ? { text: `Note: ${sch.note}`, fontSize: 9, color: '#dc2626', italics: true } : ''
-                            ] 
-                        },
-                        { text: sch.building || '-', alignment: 'center' },
-                        { text: sch.floor || '-', alignment: 'center' },
-                        { text: sch.room || '-', alignment: 'center', bold: true, color: '#2563eb' },
-                        { 
-                            text: sch.level === 'area' ? 'ระดับเขต' : 'ระดับกลุ่ม', 
-                            alignment: 'center', 
-                            fillColor: sch.level === 'area' ? '#f3e8ff' : '#eff6ff',
-                            color: sch.level === 'area' ? '#7e22ce' : '#1d4ed8',
-                            fontSize: 10
-                        }
-                    ]);
-                });
-            });
-
-            const docDefinition: any = {
-                content: [
-                    { text: venue.name, style: 'header' },
-                    { text: venue.description || 'ตารางการใช้ห้องและสนามแข่งขัน', style: 'subheader' },
-                    { 
-                        text: venue.locationUrl ? `พิกัด: ${venue.locationUrl}` : '', 
-                        link: venue.locationUrl, 
-                        color: 'blue', 
-                        decoration: 'underline', 
-                        fontSize: 10,
-                        margin: [0, 0, 0, 10]
-                    },
-                    {
-                        table: {
-                            headerRows: 1,
-                            widths: ['auto', '*', 'auto', 'auto', 'auto', 'auto'],
-                            body: tableBody
-                        },
-                        layout: {
-                            fillColor: function (rowIndex: number, node: any, columnIndex: number) {
-                                // Alternating rows, skip header (0)
-                                if (rowIndex > 0) {
-                                    // Check if it's a date separator (colSpan 6)
-                                    if (node.table.body[rowIndex][0].colSpan === 6) return '#dbeafe'; 
-                                    return (rowIndex % 2 === 0) ? '#f8fafc' : null;
-                                }
-                                return null;
-                            }
-                        }
-                    },
-                    {
-                        text: `พิมพ์จากระบบบริหารจัดการการแข่งขันวิชาการ | ข้อมูล ณ ${new Date().toLocaleString('th-TH')}`,
-                        alignment: 'right',
-                        fontSize: 8,
-                        color: 'gray',
-                        margin: [0, 20, 0, 0]
-                    }
-                ],
-                styles: {
-                    header: {
-                        fontSize: 18,
-                        bold: true,
-                        color: '#1e3a8a',
-                        margin: [0, 0, 0, 5]
-                    },
-                    subheader: {
-                        fontSize: 14,
-                        color: '#64748b',
-                        margin: [0, 0, 0, 5]
-                    },
-                    tableHeader: {
-                        bold: true,
-                        fontSize: 11,
-                        color: 'black',
-                        fillColor: '#e2e8f0',
-                        alignment: 'center'
-                    }
-                },
-                defaultStyle: {
-                    font: 'Sarabun',
-                    fontSize: 12
-                }
-            };
-
-            pdfMake.createPdf(docDefinition).open();
-
-        } catch (error) {
-            console.error(error);
-            alert('เกิดข้อผิดพลาดในการสร้าง PDF หรือโหลดฟอนต์');
-        } finally {
-            setIsGenerating(false);
+    const handlePrint = () => {
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) {
+            alert('Pop-up ถูกบล็อก กรุณาอนุญาตให้เปิดหน้าต่างใหม่');
+            return;
         }
+
+        const dateGroups = sortedDates.map(date => {
+            const schedules = groupedSchedules[date];
+            const rows = schedules.map((sch, idx) => `
+                <tr style="${idx % 2 === 0 ? 'background-color: #ffffff;' : 'background-color: #f8fafc;'}">
+                    <td style="text-align: center; color: #e11d48; font-weight: bold;">${sch.timeRange || '-'}</td>
+                    <td>
+                        <div style="font-weight: bold; color: #0f172a;">${sch.activityName}</div>
+                        ${sch.note ? `<div style="font-size: 11px; color: #dc2626; margin-top: 2px; background: #fef2f2; padding: 2px 6px; border-radius: 4px; display: inline-block;">Note: ${sch.note}</div>` : ''}
+                    </td>
+                    <td>${sch.building || '-'}</td>
+                    <td>${sch.floor || '-'}</td>
+                    <td style="font-weight: bold; color: #2563eb;">${sch.room || '-'}</td>
+                    <td style="text-align: center;">
+                        <span style="border: 1px solid ${sch.level === 'area' ? '#a855f7' : '#3b82f6'}; color: ${sch.level === 'area' ? '#7e22ce' : '#1d4ed8'}; padding: 2px 6px; border-radius: 4px; font-size: 10px;">
+                            ${sch.level === 'area' ? 'ระดับเขต' : 'ระดับกลุ่ม'}
+                        </span>
+                    </td>
+                </tr>
+            `).join('');
+
+            return `
+                <div style="margin-bottom: 25px; break-inside: avoid;">
+                    <div style="background-color: #eff6ff; padding: 10px 15px; border-radius: 8px 8px 0 0; border: 1px solid #bfdbfe; border-bottom: none; display: flex; align-items: center;">
+                        <span style="font-size: 18px; margin-right: 8px;">📅</span>
+                        <h3 style="margin: 0; color: #1e3a8a; font-size: 16px;">${date}</h3>
+                    </div>
+                    <table style="width: 100%; border-collapse: collapse; border: 1px solid #e2e8f0; font-size: 13px; border-radius: 0 0 8px 8px; overflow: hidden;">
+                        <thead>
+                            <tr style="background-color: #f1f5f9; text-align: left;">
+                                <th style="padding: 10px; border-bottom: 2px solid #cbd5e1; width: 100px;">เวลา</th>
+                                <th style="padding: 10px; border-bottom: 2px solid #cbd5e1;">รายการแข่งขัน</th>
+                                <th style="padding: 10px; border-bottom: 2px solid #cbd5e1; width: 100px;">อาคาร</th>
+                                <th style="padding: 10px; border-bottom: 2px solid #cbd5e1; width: 60px;">ชั้น</th>
+                                <th style="padding: 10px; border-bottom: 2px solid #cbd5e1; width: 80px;">ห้อง</th>
+                                <th style="padding: 10px; border-bottom: 2px solid #cbd5e1; width: 80px; text-align: center;">ระดับ</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>
+            `;
+        }).join('');
+
+        const content = `
+            <html>
+            <head>
+                <title>ตารางการแข่งขัน - ${venue.name}</title>
+                <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
+                <style>
+                    body { font-family: 'Sarabun', sans-serif; padding: 40px; color: #1e293b; max-width: 210mm; margin: 0 auto; background: white; }
+                    .header { text-align: center; margin-bottom: 40px; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; }
+                    .header h1 { margin: 0 0 10px 0; color: #1e3a8a; font-size: 24px; font-weight: 700; }
+                    .header p { margin: 5px 0; color: #64748b; font-size: 14px; }
+                    .meta { font-size: 11px; color: #94a3b8; text-align: center; margin-top: 40px; border-top: 1px solid #f1f5f9; padding-top: 10px; }
+                    @media print {
+                        body { padding: 0; }
+                        .no-print { display: none !important; }
+                        .header { margin-top: 0; }
+                    }
+                    .btn-print {
+                        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+                        color: white; border: none; padding: 10px 24px; 
+                        border-radius: 50px; font-family: 'Sarabun'; font-weight: 600; font-size: 14px;
+                        cursor: pointer; box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.3);
+                        transition: all 0.2s; display: inline-flex; align-items: center; gap: 8px;
+                    }
+                    .btn-print:hover { transform: translateY(-1px); box-shadow: 0 6px 8px -1px rgba(37, 99, 235, 0.4); }
+                </style>
+            </head>
+            <body>
+                <div class="no-print" style="position: fixed; top: 20px; right: 20px; z-index: 100;">
+                    <button onclick="window.print()" class="btn-print">
+                        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
+                        พิมพ์ตาราง
+                    </button>
+                </div>
+                <div class="header">
+                    <h1>${venue.name}</h1>
+                    <p>${venue.description || 'ตารางการใช้ห้องและสนามแข่งขัน'}</p>
+                    <p style="font-size: 12px; color: #64748b;">📍 ${venue.locationUrl ? 'มีพิกัดแผนที่ GPS' : 'ยังไม่ระบุพิกัด'}</p>
+                </div>
+                ${dateGroups}
+                <div class="meta">
+                    พิมพ์จากระบบบริหารจัดการการแข่งขันวิชาการ | ข้อมูล ณ วันที่ ${new Date().toLocaleString('th-TH', { dateStyle: 'long', timeStyle: 'short' })}
+                </div>
+            </body>
+            </html>
+        `;
+
+        printWindow.document.write(content);
+        printWindow.document.close();
     };
 
     if (!isOpen) return null;
@@ -346,19 +258,16 @@ const VenueScheduleModal = ({ venue, isOpen, onClose }: { venue: Venue, isOpen: 
                     <div className="flex gap-2 items-center">
                         <button 
                             onClick={handlePrint}
-                            disabled={isGenerating}
-                            className="hidden sm:flex items-center px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-medium backdrop-blur-sm border border-white/10 transition-colors disabled:opacity-50"
+                            className="hidden sm:flex items-center px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-medium backdrop-blur-sm border border-white/10 transition-colors"
                         >
-                            {isGenerating ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Printer className="w-4 h-4 mr-1.5" />}
-                            {isGenerating ? 'กำลังสร้าง PDF...' : 'พิมพ์ตาราง (PDF)'}
+                            <Printer className="w-4 h-4 mr-1.5" /> พิมพ์ตาราง
                         </button>
                         {/* Mobile print icon only */}
                         <button 
                             onClick={handlePrint}
-                            disabled={isGenerating}
-                            className="sm:hidden p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors disabled:opacity-50"
+                            className="sm:hidden p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors"
                         >
-                            {isGenerating ? <Loader2 className="w-5 h-5 animate-spin" /> : <Printer className="w-5 h-5" />}
+                            <Printer className="w-5 h-5" />
                         </button>
 
                         {venue.locationUrl && (
