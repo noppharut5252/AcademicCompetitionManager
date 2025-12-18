@@ -88,6 +88,7 @@ const Toast = ({ message, type, isVisible, onClose }: { message: string, type: '
 const VenueScheduleModal = ({ venue, isOpen, onClose }: { venue: Venue, isOpen: boolean, onClose: () => void }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info', isVisible: boolean }>({ message: '', type: 'info', isVisible: false });
+    const [isPrinting, setIsPrinting] = useState(false);
 
     const groupedSchedules = useMemo(() => {
         if (!venue.scheduledActivities) return {};
@@ -140,10 +141,15 @@ const VenueScheduleModal = ({ venue, isOpen, onClose }: { venue: Venue, isOpen: 
         }
     };
 
-    const handlePrint = () => {
+    const handlePrint = async () => {
+        setIsPrinting(true);
+        // Delay to allow UI to update and show loader
+        await new Promise(resolve => setTimeout(resolve, 800));
+
         const printWindow = window.open('', '_blank');
         if (!printWindow) {
             alert('Pop-up ถูกบล็อก กรุณาอนุญาตให้เปิดหน้าต่างใหม่');
+            setIsPrinting(false);
             return;
         }
 
@@ -151,16 +157,16 @@ const VenueScheduleModal = ({ venue, isOpen, onClose }: { venue: Venue, isOpen: 
             const schedules = groupedSchedules[date];
             const rows = schedules.map((sch, idx) => `
                 <tr style="${idx % 2 === 0 ? 'background-color: #ffffff;' : 'background-color: #f8fafc;'}">
-                    <td style="text-align: center; color: #e11d48; font-weight: bold;">${sch.timeRange || '-'}</td>
-                    <td>
-                        <div style="font-weight: bold; color: #0f172a;">${sch.activityName}</div>
+                    <td style="text-align: center; color: #e11d48; font-weight: bold; padding: 8px;">${sch.timeRange || '-'}</td>
+                    <td style="padding: 8px;">
+                        <div style="font-weight: bold; color: #0f172a; font-size: 14px;">${sch.activityName}</div>
                         ${sch.note ? `<div style="font-size: 11px; color: #dc2626; margin-top: 2px; background: #fef2f2; padding: 2px 6px; border-radius: 4px; display: inline-block;">Note: ${sch.note}</div>` : ''}
                     </td>
-                    <td>${sch.building || '-'}</td>
-                    <td>${sch.floor || '-'}</td>
-                    <td style="font-weight: bold; color: #2563eb;">${sch.room || '-'}</td>
-                    <td style="text-align: center;">
-                        <span style="border: 1px solid ${sch.level === 'area' ? '#a855f7' : '#3b82f6'}; color: ${sch.level === 'area' ? '#7e22ce' : '#1d4ed8'}; padding: 2px 6px; border-radius: 4px; font-size: 10px;">
+                    <td style="padding: 8px;">${sch.building || '-'}</td>
+                    <td style="padding: 8px;">${sch.floor || '-'}</td>
+                    <td style="font-weight: bold; color: #2563eb; padding: 8px;">${sch.room || '-'}</td>
+                    <td style="text-align: center; padding: 8px;">
+                        <span style="border: 1px solid ${sch.level === 'area' ? '#a855f7' : '#3b82f6'}; color: ${sch.level === 'area' ? '#7e22ce' : '#1d4ed8'}; padding: 2px 6px; border-radius: 4px; font-size: 10px; display: inline-block;">
                             ${sch.level === 'area' ? 'ระดับเขต' : 'ระดับกลุ่ม'}
                         </span>
                     </td>
@@ -168,20 +174,28 @@ const VenueScheduleModal = ({ venue, isOpen, onClose }: { venue: Venue, isOpen: 
             `).join('');
 
             return `
-                <div style="margin-bottom: 25px; break-inside: avoid;">
-                    <div style="background-color: #eff6ff; padding: 10px 15px; border-radius: 8px 8px 0 0; border: 1px solid #bfdbfe; border-bottom: none; display: flex; align-items: center;">
+                <div class="date-group">
+                    <div class="date-header">
                         <span style="font-size: 18px; margin-right: 8px;">📅</span>
                         <h3 style="margin: 0; color: #1e3a8a; font-size: 16px;">${date}</h3>
                     </div>
-                    <table style="width: 100%; border-collapse: collapse; border: 1px solid #e2e8f0; font-size: 13px; border-radius: 0 0 8px 8px; overflow: hidden;">
+                    <table>
+                        <colgroup>
+                            <col style="width: 15%;">
+                            <col style="width: 35%;">
+                            <col style="width: 15%;">
+                            <col style="width: 10%;">
+                            <col style="width: 15%;">
+                            <col style="width: 10%;">
+                        </colgroup>
                         <thead>
                             <tr style="background-color: #f1f5f9; text-align: left;">
-                                <th style="padding: 10px; border-bottom: 2px solid #cbd5e1; width: 100px;">เวลา</th>
+                                <th style="padding: 10px; border-bottom: 2px solid #cbd5e1; text-align: center;">เวลา</th>
                                 <th style="padding: 10px; border-bottom: 2px solid #cbd5e1;">รายการแข่งขัน</th>
-                                <th style="padding: 10px; border-bottom: 2px solid #cbd5e1; width: 100px;">อาคาร</th>
-                                <th style="padding: 10px; border-bottom: 2px solid #cbd5e1; width: 60px;">ชั้น</th>
-                                <th style="padding: 10px; border-bottom: 2px solid #cbd5e1; width: 80px;">ห้อง</th>
-                                <th style="padding: 10px; border-bottom: 2px solid #cbd5e1; width: 80px; text-align: center;">ระดับ</th>
+                                <th style="padding: 10px; border-bottom: 2px solid #cbd5e1;">อาคาร</th>
+                                <th style="padding: 10px; border-bottom: 2px solid #cbd5e1;">ชั้น</th>
+                                <th style="padding: 10px; border-bottom: 2px solid #cbd5e1;">ห้อง</th>
+                                <th style="padding: 10px; border-bottom: 2px solid #cbd5e1; text-align: center;">ระดับ</th>
                             </tr>
                         </thead>
                         <tbody>${rows}</tbody>
@@ -196,15 +210,71 @@ const VenueScheduleModal = ({ venue, isOpen, onClose }: { venue: Venue, isOpen: 
                 <title>ตารางการแข่งขัน - ${venue.name}</title>
                 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
                 <style>
-                    body { font-family: 'Sarabun', sans-serif; padding: 40px; color: #1e293b; max-width: 210mm; margin: 0 auto; background: white; }
-                    .header { text-align: center; margin-bottom: 40px; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; }
+                    @page { 
+                        size: A4 landscape; 
+                        margin: 10mm; 
+                    }
+                    body { 
+                        font-family: 'Sarabun', sans-serif; 
+                        padding: 20px; 
+                        color: #1e293b; 
+                        width: 100%; 
+                        margin: 0; 
+                        background: white; 
+                        box-sizing: border-box;
+                        -webkit-print-color-adjust: exact; 
+                        print-color-adjust: exact; 
+                    }
+                    .container {
+                        width: 100%;
+                    }
+                    .header { 
+                        text-align: center; 
+                        margin-bottom: 20px; 
+                        border-bottom: 2px solid #e2e8f0; 
+                        padding-bottom: 15px; 
+                    }
                     .header h1 { margin: 0 0 10px 0; color: #1e3a8a; font-size: 24px; font-weight: 700; }
                     .header p { margin: 5px 0; color: #64748b; font-size: 14px; }
-                    .meta { font-size: 11px; color: #94a3b8; text-align: center; margin-top: 40px; border-top: 1px solid #f1f5f9; padding-top: 10px; }
+                    .meta { font-size: 11px; color: #94a3b8; text-align: center; margin-top: 20px; border-top: 1px solid #f1f5f9; padding-top: 10px; }
+                    
+                    /* Date Group: Allow breaking inside to prevent empty pages */
+                    .date-group {
+                        margin-bottom: 25px;
+                    }
+                    
+                    /* Header: Avoid breaking right after the header */
+                    .date-header {
+                        background-color: #eff6ff; 
+                        padding: 10px 15px; 
+                        border-radius: 8px 8px 0 0; 
+                        border: 1px solid #bfdbfe; 
+                        border-bottom: none; 
+                        display: flex; 
+                        align-items: center;
+                        page-break-after: avoid;
+                    }
+
+                    table {
+                        width: 100%; 
+                        border-collapse: collapse; 
+                        border: 1px solid #e2e8f0; 
+                        font-size: 13px; 
+                        /* overflow: hidden; Removed to fix print cutting */
+                        table-layout: fixed;
+                    }
+                    
+                    thead {
+                        display: table-header-group; /* Repeat header on new pages */
+                    }
+                    
+                    tr {
+                        page-break-inside: avoid;
+                    }
+
                     @media print {
-                        body { padding: 0; }
                         .no-print { display: none !important; }
-                        .header { margin-top: 0; }
+                        body { padding: 0; }
                     }
                     .btn-print {
                         background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
@@ -220,24 +290,33 @@ const VenueScheduleModal = ({ venue, isOpen, onClose }: { venue: Venue, isOpen: 
                 <div class="no-print" style="position: fixed; top: 20px; right: 20px; z-index: 100;">
                     <button onclick="window.print()" class="btn-print">
                         <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
-                        พิมพ์ตาราง
+                        พิมพ์ตาราง (แนวนอน)
                     </button>
                 </div>
-                <div class="header">
-                    <h1>${venue.name}</h1>
-                    <p>${venue.description || 'ตารางการใช้ห้องและสนามแข่งขัน'}</p>
-                    <p style="font-size: 12px; color: #64748b;">📍 ${venue.locationUrl ? 'มีพิกัดแผนที่ GPS' : 'ยังไม่ระบุพิกัด'}</p>
+                <div class="container">
+                    <div class="header">
+                        <h1>${venue.name}</h1>
+                        <p>${venue.description || 'ตารางการใช้ห้องและสนามแข่งขัน'}</p>
+                        <p style="font-size: 12px; color: #64748b;">📍 ${venue.locationUrl ? 'มีพิกัดแผนที่ GPS' : 'ยังไม่ระบุพิกัด'}</p>
+                    </div>
+                    ${dateGroups}
+                    <div class="meta">
+                        พิมพ์จากระบบบริหารจัดการการแข่งขันวิชาการ | ข้อมูล ณ วันที่ ${new Date().toLocaleString('th-TH', { dateStyle: 'long', timeStyle: 'short' })}
+                    </div>
                 </div>
-                ${dateGroups}
-                <div class="meta">
-                    พิมพ์จากระบบบริหารจัดการการแข่งขันวิชาการ | ข้อมูล ณ วันที่ ${new Date().toLocaleString('th-TH', { dateStyle: 'long', timeStyle: 'short' })}
-                </div>
+                <script>
+                    window.onload = function() {
+                        // Auto-print option commented out to allow user to check first
+                        // setTimeout(function(){ window.print(); }, 500);
+                    }
+                </script>
             </body>
             </html>
         `;
 
         printWindow.document.write(content);
         printWindow.document.close();
+        setIsPrinting(false);
     };
 
     if (!isOpen) return null;
@@ -246,7 +325,21 @@ const VenueScheduleModal = ({ venue, isOpen, onClose }: { venue: Venue, isOpen: 
         <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
             <Toast message={toast.message} type={toast.type} isVisible={toast.isVisible} onClose={() => setToast(prev => ({...prev, isVisible: false}))} />
             
-            <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] relative">
+                {/* Loading Overlay */}
+                {isPrinting && (
+                    <div className="absolute inset-0 bg-white/90 z-50 flex flex-col items-center justify-center backdrop-blur-sm">
+                        <div className="relative mb-4">
+                            <div className="absolute inset-0 bg-blue-100 rounded-full animate-ping opacity-75"></div>
+                            <div className="relative bg-white p-4 rounded-full shadow-lg border border-blue-100">
+                                <Printer className="w-8 h-8 text-blue-600 animate-pulse" />
+                            </div>
+                        </div>
+                        <h3 className="text-lg font-bold text-gray-800">กำลังจัดเตรียมเอกสาร...</h3>
+                        <p className="text-sm text-gray-500 mt-1">กำลังสร้างตารางแบบแนวนอน (Landscape)</p>
+                    </div>
+                )}
+
                 {/* Header */}
                 <div className="bg-blue-600 p-4 flex justify-between items-center text-white shrink-0">
                     <div>
@@ -258,14 +351,16 @@ const VenueScheduleModal = ({ venue, isOpen, onClose }: { venue: Venue, isOpen: 
                     <div className="flex gap-2 items-center">
                         <button 
                             onClick={handlePrint}
-                            className="hidden sm:flex items-center px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-medium backdrop-blur-sm border border-white/10 transition-colors"
+                            disabled={isPrinting}
+                            className="hidden sm:flex items-center px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-medium backdrop-blur-sm border border-white/10 transition-colors disabled:opacity-50"
                         >
                             <Printer className="w-4 h-4 mr-1.5" /> พิมพ์ตาราง
                         </button>
                         {/* Mobile print icon only */}
                         <button 
                             onClick={handlePrint}
-                            className="sm:hidden p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors"
+                            disabled={isPrinting}
+                            className="sm:hidden p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors disabled:opacity-50"
                         >
                             <Printer className="w-5 h-5" />
                         </button>
