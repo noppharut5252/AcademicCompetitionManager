@@ -119,7 +119,7 @@ const Toast: React.FC<ToastProps> = ({ message, type, isVisible, onClose }) => {
         <div className={`fixed top-4 right-4 z-[100] flex items-center p-4 mb-4 text-white rounded-lg shadow-lg ${bgClass} animate-in slide-in-from-top-5 duration-300`}>
             <div className="mr-3">{icon}</div>
             <div className="text-sm font-medium">{message}</div>
-            <button onClose={onClose} className="ml-4 p-1 hover:bg-white/20 rounded-full transition-colors">
+            <button onClick={onClose} className="ml-4 p-1 hover:bg-white/20 rounded-full transition-colors">
                 <X className="w-4 h-4" />
             </button>
         </div>
