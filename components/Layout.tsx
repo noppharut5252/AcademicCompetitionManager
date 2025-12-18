@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { LayoutDashboard, Users, Trophy, School, Settings, LogOut, Award, FileBadge, IdCard, LogIn, UserCircle, Edit3, ScanLine, X, Camera, Search, ChevronRight, LayoutGrid, RotateCcw, Loader2, Zap, MapPin, Gavel, Megaphone } from 'lucide-react';
+import { LayoutDashboard, Users, Trophy, School, Settings, LogOut, Award, FileBadge, IdCard, LogIn, UserCircle, Edit3, ScanLine, X, Camera, Search, ChevronRight, LayoutGrid, RotateCcw, Loader2, Zap, MapPin, Gavel, Megaphone, Printer, Hash } from 'lucide-react';
 import { logoutLiff } from '../services/liff';
 import { User, AppData } from '../types';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import SearchableSelect from './SearchableSelect';
 // @ts-ignore
 import jsQR from 'jsqr';
@@ -14,7 +14,6 @@ interface LayoutProps {
   data?: AppData;
 }
 
-// ... (ScannerModal code remains unchanged) ...
 const ScannerModal = ({ 
     isOpen, 
     onClose, 
@@ -40,23 +39,27 @@ const ScannerModal = ({
 
     const myTeams = useMemo(() => {
         if (!data || !user) return [];
-        let teams = data.teams;
+        // Ensure arrays exist
+        let teams = data.teams || [];
+        let activities = data.activities || [];
+        let schools = data.schools || [];
+
         const role = user.level?.toLowerCase();
 
         if (role === 'admin' || role === 'area') {
         } else if (role === 'group_admin') {
-            const userSchool = data.schools.find(s => s.SchoolID === user.SchoolID);
+            const userSchool = schools.find(s => s.SchoolID === user.SchoolID);
             if (userSchool) {
                 const userClusterId = userSchool.SchoolCluster;
                 teams = teams.filter(t => {
-                    const teamSchool = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
+                    const teamSchool = schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
                     return teamSchool && teamSchool.SchoolCluster === userClusterId;
                 });
             } else {
                 teams = [];
             }
         } else if (role === 'school_admin' || role === 'user') {
-            const userSchool = data.schools.find(s => s.SchoolID === user.SchoolID);
+            const userSchool = schools.find(s => s.SchoolID === user.SchoolID);
             if (user.SchoolID) {
                 teams = teams.filter(t => 
                     t.schoolId === user.SchoolID || 
@@ -77,7 +80,7 @@ const ScannerModal = ({
         }
 
         return teams.map(t => {
-            const activityName = data.activities.find(a => a.id === t.activityId)?.name || t.activityId;
+            const activityName = activities.find(a => a.id === t.activityId)?.name || t.activityId;
             return {
                 label: `${t.teamName} (${activityName})`,
                 value: t.teamId
@@ -328,6 +331,7 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
   const userRole = userProfile?.level?.toLowerCase();
   const canScore = ['admin', 'area', 'group_admin', 'score'].includes(userRole);
   const canManageAnnouncements = ['admin', 'area', 'group_admin'].includes(userRole);
+  const canPrintDocs = ['admin', 'area', 'group_admin', 'school_admin', 'user'].includes(userRole);
   
   const menuItems = [
     { id: 'dashboard', label: 'หน้าหลัก', icon: LayoutDashboard },
@@ -336,6 +340,7 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
     { id: 'activities', label: 'รายการ', icon: Trophy },
     ...(canScore ? [{ id: 'score', label: 'บันทึกคะแนน', icon: Edit3 }] : []),
     { id: 'results', label: 'ผลรางวัล', icon: Award },
+    ...(canPrintDocs ? [{ id: 'documents', label: 'เอกสารการแข่งขัน', icon: Printer }] : []),
     { id: 'certificates', label: 'เกียรติบัตร', icon: FileBadge },
     { id: 'idcards', label: 'บัตร', icon: IdCard },
     { id: 'judges', label: 'ทำเนียบกรรมการ', icon: Gavel },
@@ -496,7 +501,7 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
                     <Award className="w-6 h-6" />
                     <span className="text-[10px] font-medium">ผลรางวัล</span>
                 </button>
-                <button onClick={() => handleNav('venues')} className={`flex flex-col items-center justify-center w-full space-y-1 ${['venues', 'settings','certificates','idcards','profile','score', 'judges', 'announcements'].includes(activeTab) ? 'text-blue-600' : 'text-gray-400'}`}>
+                <button onClick={() => handleNav('venues')} className={`flex flex-col items-center justify-center w-full space-y-1 ${['venues', 'settings','certificates','idcards','profile','score', 'judges', 'announcements', 'documents'].includes(activeTab) ? 'text-blue-600' : 'text-gray-400'}`}>
                     <MapPin className="w-6 h-6" />
                     <span className="text-[10px] font-medium">เมนูอื่นๆ</span>
                 </button>
