@@ -607,15 +607,16 @@ export const shareSchedule = async (
     await ensureLiffInitialized();
 
     const appUrl = `${window.location.origin}${window.location.pathname}#/venues`;
-    const displayRoom = room || 'ยังไม่ระบุห้อง';
-    const displayTime = time || 'ยังไม่ระบุเวลา';
-    const displayDate = date || 'ยังไม่ระบุวันที่';
+    const displayActivity = activityName || 'กิจกรรมการแข่งขัน';
+    const displayRoom = room || '-';
+    const displayTime = time || 'ไม่ระบุ';
+    const displayDate = date || 'ไม่ระบุ';
     const cleanVenueName = venueName || 'สนามแข่งขัน';
     
-    // Fallback if locationUrl is missing or invalid, use appUrl
-    const mapUrl = (locationUrl && locationUrl.startsWith('http')) ? locationUrl : '';
+    // Only use locationUrl if it is valid http
+    const mapUrl = (locationUrl && locationUrl.startsWith('http')) ? locationUrl : null;
     
-    const textSummary = `📅 กำหนดการแข่งขัน\n${activityName}\n\n📍 สถานที่: ${cleanVenueName} ${displayRoom}\n🗓️ วันที่: ${displayDate}\n⏰ เวลา: ${displayTime}\n\nดูรายละเอียดเพิ่มเติม: ${appUrl}`;
+    const textSummary = `📅 กำหนดการแข่งขัน\n${displayActivity}\n\n📍 สถานที่: ${cleanVenueName} ${displayRoom}\n🗓️ วันที่: ${displayDate}\n⏰ เวลา: ${displayTime}\n\nดูรายละเอียดเพิ่มเติม: ${appUrl}`;
 
     // @ts-ignore
     const isLoggedIn = liff.isLoggedIn();
@@ -633,7 +634,7 @@ export const shareSchedule = async (
         if (isShareTargetPickerSupported()) {
             const flexMessage = {
                 type: "flex",
-                altText: `กำหนดการ: ${activityName.substring(0, 40)}...`,
+                altText: `กำหนดการ: ${displayActivity.substring(0, 40)}...`,
                 contents: {
                     "type": "bubble",
                     "header": {
@@ -650,7 +651,7 @@ export const shareSchedule = async (
                         "type": "box",
                         "layout": "vertical",
                         "contents": [
-                            { "type": "text", "text": activityName || "กิจกรรม", "weight": "bold", "size": "md", "wrap": true, "color": "#333333" },
+                            { "type": "text", "text": displayActivity, "weight": "bold", "size": "md", "wrap": true, "color": "#333333" },
                             { "type": "separator", "margin": "lg" },
                             {
                                 "type": "box",
@@ -727,7 +728,7 @@ export const shareSchedule = async (
     if (navigator.share) {
         try {
             await navigator.share({
-                title: `กำหนดการ: ${activityName}`,
+                title: `กำหนดการ: ${displayActivity}`,
                 text: textSummary,
                 url: appUrl,
             });
