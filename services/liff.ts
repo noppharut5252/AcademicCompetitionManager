@@ -568,18 +568,18 @@ export const shareSchedule = async (
     const appUrl = `${window.location.origin}${window.location.pathname}#/venues`;
     
     // Valid defaults for potentially missing data. Ensure string type.
-    const displayActivity = (activityName && activityName.trim() !== '') ? activityName.substring(0, 300) : 'กิจกรรมการแข่งขัน';
-    const displayRoom = (room && room.trim() !== '') ? room.substring(0, 100) : '-';
-    const displayTime = (time && time.trim() !== '') ? time.substring(0, 50) : 'ไม่ระบุ';
-    const displayDate = (date && date.trim() !== '') ? date.substring(0, 50) : 'ไม่ระบุ';
-    const cleanVenueName = (venueName && venueName.trim() !== '') ? venueName.substring(0, 100) : 'สนามแข่งขัน';
+    const displayActivity = (activityName && activityName.trim() !== '') ? activityName.substring(0, 100) : 'ไม่มีข้อมูลกิจกรรม';
+    const displayVenue = (venueName && venueName.trim() !== '') ? venueName.substring(0, 50) : 'ไม่มีข้อมูลสนาม';
+    const displayRoom = (room && room.trim() !== '') ? room.substring(0, 50) : '-';
+    const displayTime = (time && time.trim() !== '') ? time.substring(0, 50) : 'ไม่มีข้อมูลเวลา';
+    const displayDate = (date && date.trim() !== '') ? date.substring(0, 50) : 'ไม่มีข้อมูลวันที่';
     
     // Only use locationUrl if it is valid http
     const mapUrl = (locationUrl && locationUrl.startsWith('http')) ? locationUrl : null;
     // Only use imageUrl if it is valid http and safe
     const validImageUrl = (imageUrl && imageUrl.startsWith('http')) ? imageUrl : null;
     
-    const textSummary = `📅 กำหนดการแข่งขัน\n${displayActivity}\n\n📍 สถานที่: ${cleanVenueName} ${displayRoom}\n🗓️ วันที่: ${displayDate}\n⏰ เวลา: ${displayTime}\n\nดูรายละเอียดเพิ่มเติม: ${appUrl}`;
+    const textSummary = `📅 กำหนดการแข่งขัน\n${displayActivity}\n\n📍 สถานที่: ${displayVenue} ${displayRoom}\n🗓️ วันที่: ${displayDate}\n⏰ เวลา: ${displayTime}\n\nดูรายละเอียดเพิ่มเติม: ${appUrl}`;
 
     // @ts-ignore
     const isLoggedIn = liff.isLoggedIn();
@@ -636,7 +636,7 @@ export const shareSchedule = async (
                                 "spacing": "sm",
                                 "contents": [
                                     { "type": "text", "text": "สถานที่", "color": "#aaaaaa", "size": "sm", "flex": 1 },
-                                    { "type": "text", "text": `${cleanVenueName}`, "wrap": true, "color": "#666666", "size": "sm", "flex": 4 },
+                                    { "type": "text", "text": `${displayVenue}`, "wrap": true, "color": "#666666", "size": "sm", "flex": 4 },
                                 ]
                             },
                             {
