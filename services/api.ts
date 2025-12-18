@@ -1,5 +1,5 @@
 
-import { AppData, User, Team, CertificateTemplate, Venue, Judge, JudgeConfig, Announcement, Attachment, Comment } from '../types';
+import { AppData, User, Team, CertificateTemplate, Venue, Judge, JudgeConfig, Announcement, Attachment, Comment, PrintConfig } from '../types';
 import { getMockData } from './mockData';
 
 const API_URL = "https://script.google.com/macros/s/AKfycbyYcf6m-3ypN3aX8F6prN0BLQcz0JyW0gj3Tq8dJyMs54gaTXSv_1uytthNu9H4CmMy/exec";
@@ -16,10 +16,23 @@ export const fetchData = async (): Promise<AppData> => {
     }
 
     const data = await response.json();
-    // Ensure arrays exist to prevent undefined errors
-    if (!data.venues) data.venues = [];
-    if (!data.judges) data.judges = [];
-    return data;
+    
+    // Check if the backend returned an explicit error object
+    if (data.status === 'error') {
+        throw new Error(data.message || "Backend script error");
+    }
+    
+    // Ensure all expected arrays exist to prevent undefined errors throughout the app
+    return {
+      activities: data.activities || [],
+      teams: data.teams || [],
+      schools: data.schools || [],
+      clusters: data.clusters || [],
+      files: data.files || [],
+      announcements: data.announcements || [],
+      venues: data.venues || [],
+      judges: data.judges || []
+    };
   } catch (error) {
     console.warn("Fetching from live API failed, falling back to mock data.", error);
     return getMockData();
@@ -340,6 +353,39 @@ export const saveCertificateConfig = async (id: string, config: CertificateTempl
         return result.status === 'success';
     } catch (e) {
         console.error("Failed to save Cert Config", e);
+        return false;
+    }
+};
+
+// --- Print Config API ---
+
+export const getPrintConfig = async (): Promise<Record<string, PrintConfig>> => {
+    try {
+        const response = await fetch(`${API_URL}?action=getPrintConfig`, {
+            method: 'GET',
+            mode: 'cors'
+        });
+        if (!response.ok) return {};
+        return await response.json();
+    } catch (e) {
+        console.error("Failed to get Print Config", e);
+        return {};
+    }
+};
+
+export const savePrintConfig = async (id: string, config: PrintConfig): Promise<boolean> => {
+    try {
+        const response = await fetch(`${API_URL}?action=savePrintConfig`, {
+            method: 'POST',
+            mode: 'cors',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify({ id, config })
+        });
+        if (!response.ok) return false;
+        const result = await response.json();
+        return result.status === 'success';
+    } catch (e) {
+        console.error("Failed to save Print Config", e);
         return false;
     }
 };
