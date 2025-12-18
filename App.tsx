@@ -12,6 +12,7 @@ import VerifyCertificate from './components/VerifyCertificate';
 import VenuesView from './components/VenuesView'; 
 import JudgesView from './components/JudgesView'; 
 import AnnouncementManager from './components/AnnouncementManager'; 
+import PrintDocumentsView from './components/PrintDocumentsView';
 import { AppData, User } from './types';
 import { fetchData, loginStandardUser, checkUserPermission, verifyAndLinkLine } from './services/api';
 import { initLiff, loginLiff, LiffProfile } from './services/liff';
@@ -493,6 +494,7 @@ const App: React.FC = () => {
                             <Route path="/results" element={<ResultsView data={data} />} />
                             <Route path="/certificates" element={<DocumentsView data={data} type="certificate" user={currentUser} />} />
                             <Route path="/idcards" element={<DocumentsView data={data} type="idcard" user={currentUser} />} />
+                            <Route path="/documents" element={<PrintDocumentsView data={data} user={currentUser} />} />
                             <Route path="/announcements" element={<AnnouncementManager data={data} user={currentUser} onDataUpdate={() => fetchAppData(true)} />} />
                             <Route path="/schools" element={<PlaceholderMenu title="ข้อมูลโรงเรียน" />} />
                             <Route path="/settings" element={<PlaceholderMenu title="ตั้งค่าระบบ" />} />
