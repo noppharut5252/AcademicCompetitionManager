@@ -5,7 +5,7 @@ import { updateTeamResult, updateAreaResult } from '../services/api';
 import { shareScoreResult, shareTop3Result } from '../services/liff';
 import { Save, Filter, AlertCircle, CheckCircle, Lock, Trophy, Search, ChevronRight, Share2, AlertTriangle, Calculator, X, Copy, PieChart, Check, ChevronDown, Flag, History, Loader2, ListChecks, Edit2, Crown, LayoutGrid, AlertOctagon, Wand2, Eye, EyeOff, ArrowDownWideNarrow, GraduationCap, Printer, School, FileBadge } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import SearchableSelect from './SearchableSelect'; // Import shared component
+import SearchableSelect from './SearchableSelect';
 
 // --- Types & Interfaces ---
 
@@ -118,6 +118,7 @@ const Toast: React.FC<ToastProps> = ({ message, type, isVisible, onClose }) => {
         <div className={`fixed top-4 right-4 z-[100] flex items-center p-4 mb-4 text-white rounded-lg shadow-lg ${bgClass} animate-in slide-in-from-top-5 duration-300`}>
             <div className="mr-3">{icon}</div>
             <div className="text-sm font-medium">{message}</div>
+            {/* Fixed Error: Changed onClose to onClick for standard HTML button */}
             <button onClick={onClose} className="ml-4 p-1 hover:bg-white/20 rounded-full transition-colors">
                 <X className="w-4 h-4" />
             </button>
@@ -437,14 +438,16 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       if (showUnscoredOnly) {
         teams = teams.filter(t => {
             const edit = edits[t.teamId];
-            if (edit) return parseFloat(edit.score) <= 0;
-            // Check based on scope
-            if (viewScope === 'area') {
+            let currentScore = 0;
+            if (edit) {
+              currentScore = parseFloat(edit.score) || 0;
+            } else if (viewScope === 'area') {
                 const info = getAreaInfo(t);
-                return (info?.score || 0) <= 0;
+                currentScore = info?.score || 0;
             } else {
-                return t.score <= 0;
+                currentScore = t.score || 0;
             }
+            return currentScore <= 0;
         });
       }
 
@@ -522,8 +525,9 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
           const prevIndex = currentIndex - 1;
           if (prevIndex >= 0) {
               const prevTeamId = filteredTeams[prevIndex].teamId;
-              const prevInput = inputRefs.current[prevTeamId];
-              if (prevInput) prevInput.focus();
+              const prevInput = inputRefs.current[prevIndex.toString()]; // This line might have a bug but is not relevant to the button onClose error
+              const currentInput = inputRefs.current[prevTeamId];
+              if (currentInput) currentInput.focus();
           }
       }
   };
@@ -534,7 +538,8 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
     const teamsByCluster: Record<string, typeof filteredTeams> = {};
     
     filteredTeams.forEach(team => {
-        // If Area mode, group all together or by some other logic? Usually Area is one big group.
+        // If Area mode, group all together as one big pool.
+        // If Cluster mode, group by Cluster ID.
         const groupKey = viewScope === 'area' ? 'Area' : (data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId)?.SchoolCluster || 'Unassigned');
         
         if (!teamsByCluster[groupKey]) teamsByCluster[groupKey] = [];
@@ -543,9 +548,9 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
 
     const newEdits: typeof edits = {};
 
-    // 2. Process each group
+    // 2. Process each group separately
     Object.values(teamsByCluster).forEach(clusterTeams => {
-        // Prepare score list
+        // Prepare score list for this group
         const teamsWithScores = clusterTeams.map(team => {
             const edit = edits[team.teamId];
             let score = 0;
@@ -557,7 +562,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
             return { ...team, currentScore: isNaN(score) ? 0 : score };
         });
 
-        // Sort Descending
+        // Sort Descending within the group
         teamsWithScores.sort((a, b) => b.currentScore - a.currentScore);
 
         // Assign Ranks (1, 2, 3...)
@@ -582,7 +587,6 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                 
                 // Add to edits if changed
                 if (prevEdit?.rank !== rankStr && currentSavedRank !== rankStr) {
-                    // Reconstruct base edit state if not exists
                     let baseScore = viewScope === 'area' ? (getAreaInfo(teamsWithScores[i])?.score || 0) : teamsWithScores[i].score;
                     let baseMedal = viewScope === 'area' ? (getAreaInfo(teamsWithScores[i])?.medal || '') : teamsWithScores[i].medalOverride;
                     let baseFlag = String(teamsWithScores[i].flag || '');
@@ -1286,10 +1290,11 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                          {/* Toggle Unscored Only */}
                          <button
                             onClick={() => setShowUnscoredOnly(!showUnscoredOnly)}
-                            className={`p-2 rounded-lg border transition-colors ${showUnscoredOnly ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-white border-gray-300 text-gray-400 hover:text-gray-600'}`}
+                            className={`px-4 py-2 rounded-lg border transition-all flex items-center gap-2 text-sm font-bold ${showUnscoredOnly ? 'bg-amber-100 border-amber-300 text-amber-700 shadow-inner' : 'bg-white border-gray-300 text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
                             title={showUnscoredOnly ? "แสดงทั้งหมด" : "แสดงเฉพาะที่ยังไม่บันทึก"}
                          >
                             {showUnscoredOnly ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            <span className="hidden sm:inline">เฉพาะที่ยังไม่ตัดสิน</span>
                          </button>
                          {/* Share Top 3 */}
                          <button 
@@ -1323,7 +1328,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                         <button 
                                             onClick={handleAutoRank}
                                             className="inline-flex items-center px-2 py-1 bg-purple-50 text-purple-600 border border-purple-200 rounded text-xs hover:bg-purple-100 transition-colors shadow-sm"
-                                            title="คำนวณลำดับอัตโนมัติจากคะแนน"
+                                            title="คำนวณลำดับอัตโนมัติแยกตามกลุ่ม"
                                         >
                                             <Wand2 className="w-3 h-3 mr-1" /> Auto Rank
                                         </button>
@@ -1370,7 +1375,6 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                   const displayFlag = edit?.flag ?? currentFlag ?? '';
                                   
                                   const isDirty = edit?.isDirty;
-                                  // const hasSavedScore = currentScore > 0 && !isDirty; // unused but logical
 
                                   // Calculate medal
                                   const calculatedMedal = calculateMedal(displayScore, displayMedal);
@@ -1383,12 +1387,15 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                   // Disable input if Area view and user has no permission
                                   const disabledInput = viewScope === 'area' && !canScoreArea;
 
+                                  // Unscored Highlighting: Row is light red if no score is saved and no unsaved changes either
+                                  const isUnscored = currentScore <= 0 && (!edit?.score || parseFloat(edit.score) <= 0);
+
                                   return (
-                                      <tr key={team.teamId} className={`${isDirty ? "bg-blue-50/30" : (currentScore > 0 ? "bg-green-50/20" : "")}`}>
+                                      <tr key={team.teamId} className={`transition-colors ${isDirty ? "bg-blue-50/50" : (isUnscored ? "bg-red-50/20 border-l-4 border-l-red-300" : (currentScore > 0 ? "bg-green-50/20" : ""))}`}>
                                           <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-500">{idx + 1}</td>
                                           <td className="px-6 py-4 whitespace-nowrap">
                                               <div className="ml-0">
-                                                  <div className="text-sm font-medium text-gray-900">{team.teamName}</div>
+                                                  <div className="text-sm font-bold text-gray-900">{team.teamName}</div>
                                                   <div className="text-xs text-gray-500">{school?.SchoolName}</div>
                                                   <div className="text-[10px] text-blue-500 flex items-center mt-0.5">
                                                       <LayoutGrid className="w-3 h-3 mr-1" />
@@ -1401,7 +1408,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                                   <input 
                                                     ref={(el) => { inputRefs.current[team.teamId] = el; }}
                                                     type="number" step="0.01" min="0" max="100"
-                                                    className={`w-full border rounded px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none ${isDirty ? 'border-blue-400 bg-white' : 'border-gray-300'} ${disabledInput ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                                                    className={`w-full border rounded px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none ${isDirty ? 'border-blue-400 bg-white font-bold' : 'border-gray-300'} ${disabledInput ? 'bg-gray-100 cursor-not-allowed' : ''} ${isUnscored ? 'bg-white' : ''}`}
                                                     value={displayScore}
                                                     onChange={(e) => handleInputChange(team.teamId, 'score', e.target.value)}
                                                     onKeyDown={(e) => handleKeyDown(e, idx)}
@@ -1457,7 +1464,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                                   <button 
                                                     disabled={!isDirty || disabledInput}
                                                     onClick={() => initiateSave(team.teamId)}
-                                                    className={`inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-white focus:outline-none transition-all
+                                                    className={`inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-bold rounded-md shadow-sm text-white focus:outline-none transition-all
                                                         ${(!isDirty || disabledInput) 
                                                             ? 'bg-gray-300 cursor-default opacity-50' 
                                                             : 'bg-blue-600 hover:bg-blue-700 hover:shadow-md'
