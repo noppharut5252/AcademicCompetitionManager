@@ -987,7 +987,8 @@ const VenuesView: React.FC<VenuesViewProps> = ({ data, user }) => {
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
     
-    const isAdmin = user?.level === 'admin' || user?.level === 'area';
+    // Updated: Include group_admin in admin privileges for Venues
+    const isAdmin = user?.level === 'admin' || user?.level === 'area' || user?.level === 'group_admin';
 
     // Fake Loading
     useEffect(() => {
