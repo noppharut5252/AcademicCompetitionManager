@@ -237,7 +237,7 @@ const PhotoOpSlide = ({ teams }: { teams: any[] }) => {
     return (
         <div className="flex flex-col h-full justify-center items-center px-4 animate-in fade-in duration-1000 relative overflow-hidden bg-black">
             {/* Mosaic Background */}
-            <div className="absolute inset-0 grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-1 opacity-40">
+            <div className="absolute inset-0 grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-1 opacity-70">
                 {photos.map((url, i) => (
                     <div 
                         key={i} 
@@ -255,8 +255,9 @@ const PhotoOpSlide = ({ teams }: { teams: any[] }) => {
                 ))}
             </div>
 
-            {/* Gradient Overlay */}
-            <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/80 to-slate-900/60"></div>
+            {/* Gradient Overlay - Darker at bottom/center for text readability */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-black/60"></div>
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(0,0,0,0.6)_0%,_transparent_70%)]"></div>
 
             {/* Animated Viewfinder Borders */}
             <div className="absolute top-10 left-10 w-24 h-24 border-t-8 border-l-8 border-white/80 rounded-tl-3xl shadow-[0_0_20px_white] animate-pulse"></div>
@@ -264,7 +265,7 @@ const PhotoOpSlide = ({ teams }: { teams: any[] }) => {
             <div className="absolute bottom-10 left-10 w-24 h-24 border-b-8 border-l-8 border-white/80 rounded-bl-3xl shadow-[0_0_20px_white] animate-pulse"></div>
             <div className="absolute bottom-10 right-10 w-24 h-24 border-b-8 border-r-8 border-white/80 rounded-br-3xl shadow-[0_0_20px_white] animate-pulse"></div>
 
-            <div className="text-center z-10 space-y-8 relative">
+            <div className="text-center z-10 space-y-8 relative drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)]">
                 <div className="flex justify-center">
                     <div className="w-24 h-24 bg-white text-black rounded-full flex items-center justify-center shadow-[0_0_50px_rgba(255,255,255,0.5)] animate-bounce border-4 border-slate-200">
                         <Camera className="w-12 h-12" />
@@ -647,6 +648,7 @@ const TeamsToWatchSlide = ({ teams }: { teams: any[] }) => {
                             <img src={getTeamImage(t)} className="w-full h-full object-cover" alt="" />
                         </div>
                         <div className="flex-1 min-w-0 mr-4">
+                            <div className="text-xs text-pink-400 font-bold uppercase tracking-wider mb-1 truncate">{t.activityName}</div>
                             <div className="flex items-center gap-2 mb-1">
                                 <h3 className="text-lg md:text-xl font-bold text-white truncate">{t.teamName}</h3>
                                 {(t.medal || '').includes('Gold') && <Star className="w-4 h-4 text-yellow-400 fill-current" />}
