@@ -364,6 +364,17 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
         user={userProfile}
         onSearch={(scannedValue) => {
             setShowScanner(false);
+            
+            // 1. Check for Score Input URL (contains 'score-input' and 'activityId')
+            if (scannedValue.includes('score-input') && scannedValue.includes('activityId=')) {
+                const match = scannedValue.match(/[?&]activityId=([^&]+)/);
+                if (match && match[1]) {
+                    setTimeout(() => navigate(`/score-input?activityId=${match[1]}`), 100);
+                    return;
+                }
+            }
+
+            // 2. Default ID Card Logic
             let teamId = scannedValue;
             let levelParam = '';
             try {
