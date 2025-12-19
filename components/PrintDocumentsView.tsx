@@ -42,13 +42,21 @@ const PrintConfigModal = ({ isOpen, onClose, onSave, data, currentUser, currentC
     currentUser?: User | null,
     currentConfigs: Record<string, PrintConfig>
 }) => {
-    const isAdminOrArea = currentUser?.level === 'admin' || currentUser?.level === 'area';
+    const role = currentUser?.level?.toLowerCase();
+    const isAdminOrArea = role === 'admin' || role === 'area';
     const userSchool = data.schools.find(s => s.SchoolID === currentUser?.SchoolID);
     const userClusterID = userSchool?.SchoolCluster;
 
     const [selectedContext, setSelectedContext] = useState<string>(isAdminOrArea ? 'area' : (userClusterID || 'area'));
     const [config, setConfig] = useState<PrintConfig>({ ...DEFAULT_PRINT_CONFIG });
     const [isSaving, setIsSaving] = useState(false);
+
+    // Force Area selection when opening modal if user is Admin/Area
+    useEffect(() => {
+        if (isOpen && isAdminOrArea) {
+            setSelectedContext('area');
+        }
+    }, [isOpen, isAdminOrArea]);
 
     useEffect(() => {
         // Load Server Config
