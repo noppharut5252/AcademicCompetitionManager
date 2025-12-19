@@ -627,7 +627,7 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
                         </span>
                         {(team.stageStatus === 'Area' || team.flag === 'TRUE') && (
                             <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 shrink-0">
-                                <Flag className="w-3 h-3 mr-1" /> ตัวแทนเขต
+                                <Flag className="w-3 h-3 mr-1" /> ตัวแทนกลุ่มเครือข่าย
                             </span>
                         )}
                     </div>
