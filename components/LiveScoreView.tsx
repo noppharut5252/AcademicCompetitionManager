@@ -2,7 +2,8 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { AppData, Team, School } from '../types';
 import { fetchData } from '../services/api';
-import { Trophy, Medal, Activity, Clock, Crown, TrendingUp, Sparkles, MonitorPlay, Maximize2, Minimize2, Wifi, WifiOff, RefreshCw, LayoutGrid, Users, Star, Heart, Zap, Award, School as SchoolIcon, Calendar, Image as ImageIcon, ChevronLeft, ChevronRight, MapPin, Camera, Aperture, Share2 } from 'lucide-react';
+import { Trophy, Medal, Activity, Clock, Crown, TrendingUp, Sparkles, MonitorPlay, Maximize2, Minimize2, Wifi, WifiOff, RefreshCw, LayoutGrid, Users, Star, Heart, Zap, Award, School as SchoolIcon, Calendar, Image as ImageIcon, ChevronLeft, ChevronRight, MapPin, Camera, Aperture, Share2, X, Grid, ShieldCheck, Flame } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 // @ts-ignore
 import confetti from 'canvas-confetti';
 
@@ -222,35 +223,195 @@ const PodiumSlide = ({ schools }: { schools: any[] }) => {
     );
 };
 
-// New Slide 3: Photo Moment (Selfie Frame)
-const PhotoOpSlide = () => (
-    <div className="flex flex-col h-full justify-center items-center px-4 animate-in zoom-in duration-1000 relative overflow-hidden bg-white/5">
-        {/* Animated Borders simulating a viewfinder */}
-        <div className="absolute top-10 left-10 w-16 h-16 border-t-8 border-l-8 border-white/80 rounded-tl-xl animate-pulse"></div>
-        <div className="absolute top-10 right-10 w-16 h-16 border-t-8 border-r-8 border-white/80 rounded-tr-xl animate-pulse"></div>
-        <div className="absolute bottom-10 left-10 w-16 h-16 border-b-8 border-l-8 border-white/80 rounded-bl-xl animate-pulse"></div>
-        <div className="absolute bottom-10 right-10 w-16 h-16 border-b-8 border-r-8 border-white/80 rounded-br-xl animate-pulse"></div>
+// IMPROVED: Photo Moment Slide (Mosaic)
+const PhotoOpSlide = ({ teams }: { teams: any[] }) => {
+    // Pick up to 24 photos
+    const photos = useMemo(() => {
+        return teams
+            .map(getTeamImage)
+            .filter(url => url && !url.includes('flaticon')) // Only real photos
+            .sort(() => 0.5 - Math.random())
+            .slice(0, 30);
+    }, [teams]);
 
-        <div className="text-center z-10 space-y-8">
-            <div className="flex justify-center">
-                <div className="w-24 h-24 bg-white text-black rounded-full flex items-center justify-center shadow-[0_0_50px_rgba(255,255,255,0.5)] animate-bounce">
-                    <Camera className="w-12 h-12" />
+    return (
+        <div className="flex flex-col h-full justify-center items-center px-4 animate-in fade-in duration-1000 relative overflow-hidden bg-black">
+            {/* Mosaic Background */}
+            <div className="absolute inset-0 grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-1 opacity-40">
+                {photos.map((url, i) => (
+                    <div 
+                        key={i} 
+                        className="w-full h-full bg-cover bg-center animate-pulse" 
+                        style={{ 
+                            backgroundImage: `url(${url})`,
+                            animationDuration: `${Math.random() * 2 + 2}s`,
+                            animationDelay: `${Math.random()}s`
+                        }} 
+                    />
+                ))}
+                {/* Fill empty spots with generic pattern if needed */}
+                {[...Array(Math.max(0, 32 - photos.length))].map((_, i) => (
+                    <div key={`fill-${i}`} className="w-full h-full bg-white/5 animate-pulse"></div>
+                ))}
+            </div>
+
+            {/* Gradient Overlay */}
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/80 to-slate-900/60"></div>
+
+            {/* Animated Viewfinder Borders */}
+            <div className="absolute top-10 left-10 w-24 h-24 border-t-8 border-l-8 border-white/80 rounded-tl-3xl shadow-[0_0_20px_white] animate-pulse"></div>
+            <div className="absolute top-10 right-10 w-24 h-24 border-t-8 border-r-8 border-white/80 rounded-tr-3xl shadow-[0_0_20px_white] animate-pulse"></div>
+            <div className="absolute bottom-10 left-10 w-24 h-24 border-b-8 border-l-8 border-white/80 rounded-bl-3xl shadow-[0_0_20px_white] animate-pulse"></div>
+            <div className="absolute bottom-10 right-10 w-24 h-24 border-b-8 border-r-8 border-white/80 rounded-br-3xl shadow-[0_0_20px_white] animate-pulse"></div>
+
+            <div className="text-center z-10 space-y-8 relative">
+                <div className="flex justify-center">
+                    <div className="w-24 h-24 bg-white text-black rounded-full flex items-center justify-center shadow-[0_0_50px_rgba(255,255,255,0.5)] animate-bounce border-4 border-slate-200">
+                        <Camera className="w-12 h-12" />
+                    </div>
+                </div>
+                
+                <div>
+                    <h2 className="text-5xl md:text-8xl font-black text-white mb-4 drop-shadow-2xl tracking-tighter">
+                        CAPTURE THE<br/>
+                        <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-pink-500 to-purple-500 animate-pulse">MOMENT</span>
+                    </h2>
+                    <p className="text-xl md:text-2xl text-white/90 font-medium tracking-widest uppercase">
+                        Take a photo with the scoreboard!
+                    </p>
+                </div>
+
+                <div className="flex items-center justify-center gap-4 bg-black/60 px-8 py-4 rounded-full backdrop-blur-md border border-white/20 shadow-xl">
+                    <Share2 className="w-6 h-6 text-blue-400" />
+                    <span className="text-white font-bold text-lg">#AcademicCompetition2024</span>
                 </div>
             </div>
-            
-            <div>
-                <h2 className="text-5xl md:text-8xl font-black text-white mb-4 drop-shadow-2xl tracking-tighter">
-                    CAPTURE THE<br/>
-                    <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-pink-500 to-purple-500">MOMENT</span>
+        </div>
+    );
+};
+
+// NEW: School of Excellence (Honor Roll)
+const SchoolExcellenceSlide = ({ schools }: { schools: any[] }) => {
+    // Show schools with at least 1 gold medal
+    const goldSchools = useMemo(() => {
+        return schools
+            .filter(s => s.gold > 0)
+            .sort((a, b) => b.gold - a.gold)
+            .slice(0, 12);
+    }, [schools]);
+
+    if (goldSchools.length === 0) return null;
+
+    return (
+        <div className="flex flex-col h-full justify-center px-4 md:px-20 animate-in slide-in-from-bottom duration-700 bg-gradient-to-br from-slate-900 via-slate-800 to-black">
+            <div className="text-center mb-10">
+                <div className="inline-flex items-center gap-2 bg-yellow-500/20 text-yellow-400 px-4 py-1 rounded-full text-sm font-bold uppercase tracking-widest border border-yellow-500/50 mb-3">
+                    <ShieldCheck className="w-4 h-4" /> Honor Roll
+                </div>
+                <h2 className="text-4xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-100 via-yellow-300 to-amber-500 uppercase tracking-wide drop-shadow-sm">
+                    School of Excellence
                 </h2>
-                <p className="text-xl md:text-2xl text-white/80 font-medium tracking-widest uppercase">
-                    Take a photo with the scoreboard!
-                </p>
+                <p className="text-white/50 text-lg mt-2 font-light">Schools achieving Gold Medal standard</p>
+            </div>
+            
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 max-w-7xl mx-auto w-full">
+                {goldSchools.map((s, idx) => (
+                    <div key={idx} className="relative bg-gradient-to-b from-white/10 to-white/5 border border-yellow-500/30 p-6 rounded-xl flex flex-col items-center justify-center text-center hover:bg-white/15 transition-all duration-300 group hover:-translate-y-1 shadow-lg">
+                        {/* Gold Badge Icon */}
+                        <div className="absolute -top-4 -right-4 w-10 h-10 bg-yellow-500 rounded-full flex items-center justify-center font-black text-black shadow-lg z-10 border-2 border-slate-900">
+                            {s.gold}
+                        </div>
+                        <div className="w-16 h-16 bg-gradient-to-br from-yellow-400 to-amber-600 rounded-full flex items-center justify-center mb-4 shadow-[0_0_20px_rgba(234,179,8,0.3)]">
+                            <Award className="w-8 h-8 text-white" />
+                        </div>
+                        <h3 className="text-lg font-bold text-white leading-tight line-clamp-2 group-hover:text-yellow-200 transition-colors">{s.name}</h3>
+                        <div className="mt-2 text-xs text-yellow-500 font-bold uppercase tracking-widest">Gold Medalist</div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+// NEW: Best in Class (Category Leaders)
+const BestInClassSlide = ({ teams, categories }: { teams: any[], categories: string[] }) => {
+    // Pick 3 random categories and find top scorer for each
+    const leaders = useMemo(() => {
+        const result: any[] = [];
+        const shuffledCats = [...categories].sort(() => 0.5 - Math.random()).slice(0, 3);
+        
+        shuffledCats.forEach(cat => {
+            const teamsInCat = teams.filter(t => t.activityName && teams.some(tm => tm.activityName === t.activityName && tm.category === cat));
+            // Note: Since 'teams' here is processedTeams from main component, it might not have 'category' directly on it if not enriched.
+            // Let's assume 'teams' passed here has category info. If not, we might need to look up.
+            // *Correction*: In main component, `processedTeams` has score/school/name but might lack category.
+            // Let's filter by checking if any activity in the category matches.
+            // Simplified approach: Group all teams by category first.
+            const categoryTeams = teams.filter(t => t.category === cat);
+            if (categoryTeams.length > 0) {
+                const top = categoryTeams.reduce((prev, current) => (prev.score > current.score) ? prev : current);
+                result.push({ ...top, category: cat });
+            }
+        });
+        return result;
+    }, [teams, categories]);
+
+    if (leaders.length === 0) return null;
+
+    return (
+        <div className="flex flex-col h-full justify-center px-4 md:px-16 animate-in zoom-in-95 duration-700">
+            <h2 className="text-3xl md:text-5xl font-black text-white mb-12 text-center uppercase tracking-wider flex items-center justify-center">
+                <Flame className="w-12 h-12 md:w-16 md:h-16 mr-4 text-orange-500" />
+                Best in Class
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto w-full">
+                {leaders.map((item, idx) => (
+                    <div key={idx} className="bg-white/5 border border-white/10 rounded-2xl p-6 relative overflow-hidden hover:bg-white/10 transition-all duration-500 group">
+                        <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                            <Zap className="w-32 h-32 text-white" />
+                        </div>
+                        <div className="relative z-10">
+                            <div className="text-sm font-bold text-blue-400 uppercase tracking-widest mb-2 border-b border-white/10 pb-2">
+                                {item.category}
+                            </div>
+                            <div className="text-4xl font-black text-white mb-1">{item.score}</div>
+                            <div className="text-xs text-green-400 font-bold uppercase mb-4">Highest Score</div>
+                            <h3 className="text-xl font-bold text-white leading-tight mb-1 truncate">{item.teamName}</h3>
+                            <p className="text-white/50 text-sm truncate">{item.schoolName}</p>
+                            <p className="text-white/30 text-xs mt-4 truncate">{item.activityName}</p>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+// NEW: Champion Backdrop (Photo Booth)
+const ChampionBackdropSlide = () => (
+    <div className="flex flex-col h-full justify-center items-center px-4 animate-in fade-in duration-1000 relative overflow-hidden bg-gradient-to-br from-indigo-900 via-purple-900 to-black">
+        {/* Bokeh Effects */}
+        <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-blue-500/20 rounded-full blur-[100px] animate-pulse"></div>
+        <div className="absolute bottom-1/3 right-1/4 w-80 h-80 bg-purple-500/20 rounded-full blur-[120px] animate-pulse" style={{ animationDelay: '1s' }}></div>
+        <div className="absolute top-10 right-10 w-32 h-32 bg-yellow-500/10 rounded-full blur-[60px]"></div>
+
+        <div className="relative z-10 text-center flex flex-col items-center">
+            {/* Giant Trophy */}
+            <div className="mb-6 relative">
+                <div className="absolute inset-0 bg-yellow-500/30 blur-[60px] rounded-full"></div>
+                <Trophy className="w-48 h-48 md:w-64 md:h-64 text-yellow-400 drop-shadow-[0_10px_20px_rgba(0,0,0,0.5)]" />
+                <Sparkles className="absolute -top-4 -right-4 w-16 h-16 text-white animate-spin-slow" />
+                <Sparkles className="absolute bottom-4 -left-8 w-10 h-10 text-yellow-200 animate-pulse" />
             </div>
 
-            <div className="flex items-center justify-center gap-4 bg-black/40 px-8 py-4 rounded-full backdrop-blur-sm border border-white/10">
-                <Share2 className="w-6 h-6 text-blue-400" />
-                <span className="text-white font-bold text-lg">#AcademicCompetition2024</span>
+            <h1 className="text-6xl md:text-9xl font-black text-transparent bg-clip-text bg-gradient-to-b from-yellow-300 via-yellow-100 to-amber-600 drop-shadow-2xl tracking-tighter mb-4">
+                CHAMPION
+            </h1>
+            
+            <div className="bg-white/10 backdrop-blur-md border border-white/20 px-8 py-3 rounded-full">
+                <span className="text-xl md:text-2xl text-white font-medium tracking-[0.5em] uppercase">
+                    ACADEMIC COMPETITION
+                </span>
             </div>
         </div>
     </div>
@@ -557,7 +718,7 @@ const EngagementSlide = () => (
 // --- Main View ---
 
 const LiveScoreView: React.FC<LiveScoreViewProps> = ({ initialData }) => {
-    // ... (Existing state and logic) ...
+    const navigate = useNavigate();
     const [data, setData] = useState<AppData>(initialData);
     const [currentSlide, setCurrentSlide] = useState(0);
     const [isFullScreen, setIsFullScreen] = useState(false);
@@ -573,8 +734,9 @@ const LiveScoreView: React.FC<LiveScoreViewProps> = ({ initialData }) => {
     const minSwipeDistance = 50; 
 
     // Derived Data Calculation
-    const { leaderboard, recentResults, spotlightWinner, stats, teamsToWatch, allTeams } = useMemo(() => {
+    const { leaderboard, recentResults, spotlightWinner, stats, teamsToWatch, allTeams, categories } = useMemo(() => {
         const teams = data.teams || [];
+        const activities = data.activities || [];
         
         let targetTeams = teams;
         if (viewLevel === 'area') {
@@ -588,8 +750,13 @@ const LiveScoreView: React.FC<LiveScoreViewProps> = ({ initialData }) => {
         const goldWinners: any[] = [];
         const watchList: any[] = [];
         const processedTeams: any[] = [];
+        const uniqueCategories = new Set<string>();
 
         targetTeams.forEach(t => {
+            const activity = activities.find(a => a.id === t.activityId);
+            const category = activity?.category || 'General';
+            uniqueCategories.add(category);
+
             let score = 0;
             let medal = '';
             
@@ -605,7 +772,7 @@ const LiveScoreView: React.FC<LiveScoreViewProps> = ({ initialData }) => {
                         ...t,
                         schoolName: data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId)?.SchoolName || t.schoolId,
                         prevScore: t.score,
-                        activityName: data.activities.find(a => a.id === t.activityId)?.name || t.activityId
+                        activityName: activity?.name || t.activityId
                     });
                 }
 
@@ -615,7 +782,7 @@ const LiveScoreView: React.FC<LiveScoreViewProps> = ({ initialData }) => {
             }
 
             const schoolName = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId)?.SchoolName || t.schoolId;
-            const activityName = data.activities.find(a => a.id === t.activityId)?.name || t.activityId;
+            const activityName = activity?.name || t.activityId;
 
             if (score > 0) {
                 scoredCount++;
@@ -626,7 +793,7 @@ const LiveScoreView: React.FC<LiveScoreViewProps> = ({ initialData }) => {
                 
                 // Track Full Team Data for Gold Club
                 processedTeams.push({
-                    ...t, score, medal, schoolName, activityName
+                    ...t, score, medal, schoolName, activityName, category
                 });
 
                 if ((medal || '').includes('Gold')) {
@@ -676,7 +843,8 @@ const LiveScoreView: React.FC<LiveScoreViewProps> = ({ initialData }) => {
             spotlightWinner: randomWinner,
             stats: { totalTeams: targetTeams.length, totalGold: goldCount, totalScored: scoredCount },
             teamsToWatch: sortedWatchList,
-            allTeams: processedTeams // For Gold Club
+            allTeams: processedTeams,
+            categories: Array.from(uniqueCategories)
         };
     }, [data, viewLevel]);
 
@@ -709,23 +877,26 @@ const LiveScoreView: React.FC<LiveScoreViewProps> = ({ initialData }) => {
         } else {
             // Active Mode
             list.push(<LeaderboardSlide key="leaderboard" schools={leaderboard} viewLevel={viewLevel} />);
-            list.push(<PodiumSlide key="podium" schools={leaderboard} />); // Added Podium
+            list.push(<PodiumSlide key="podium" schools={leaderboard} />);
             
             if (recentResults.length > 0) list.push(<RecentResultsSlide key="recent" teams={recentResults} />);
             if (data.teams.length > 0) list.push(<GallerySlide key="gallery" teams={data.teams} />); 
             
-            list.push(<GoldClubSlide key="gold" teams={allTeams} />); // Added Gold Club
+            list.push(<GoldClubSlide key="gold" teams={allTeams} />);
+            list.push(<SchoolExcellenceSlide key="excellence" schools={leaderboard} />); // NEW
+            list.push(<BestInClassSlide key="best" teams={allTeams} categories={categories} />); // NEW
             
             if (spotlightWinner) list.push(<HighlightSlide key="highlight" winner={spotlightWinner} />);
             if (viewLevel === 'area' && teamsToWatch.length > 0) list.push(<TeamsToWatchSlide key="watch" teams={teamsToWatch} />);
             if (data.venues.length > 0) list.push(<ScheduleSlide key="schedule" venues={data.venues} />);
             
             list.push(<StatsSlide key="stats" totalTeams={stats.totalTeams} totalGold={stats.totalGold} totalScored={stats.totalScored} viewLevel={viewLevel} />);
-            list.push(<PhotoOpSlide key="photo" />); // Added Photo Op
+            list.push(<PhotoOpSlide key="photo" teams={allTeams} />); // Updated Mosaic
+            list.push(<ChampionBackdropSlide key="backdrop" />); // NEW
             list.push(<EngagementSlide key="engagement" />);
         }
         return list;
-    }, [stats.totalScored, viewLevel, leaderboard, recentResults, spotlightWinner, teamsToWatch, data.schools, data.teams, data.venues, allTeams]);
+    }, [stats.totalScored, viewLevel, leaderboard, recentResults, spotlightWinner, teamsToWatch, data.schools, data.teams, data.venues, allTeams, categories]);
 
     const SLIDES_COUNT = slides.length;
     const SLIDE_DURATION = 15000; 
@@ -781,9 +952,10 @@ const LiveScoreView: React.FC<LiveScoreViewProps> = ({ initialData }) => {
         const isWelcome = currentComponent.key === 'welcome';
         const isGold = currentComponent.key === 'gold';
         const isPodium = currentComponent.key === 'podium';
+        const isBackdrop = currentComponent.key === 'backdrop';
 
-        if ((isHighlight && spotlightWinner) || isEngagement || (isWelcome && stats.totalScored === 0) || isGold || isPodium) {
-            const colorSet = isGold ? ['#FFD700', '#F59E0B'] : isEngagement ? ['#ec4899', '#8b5cf6', '#3b82f6'] : ['#FFD700', '#F59E0B', '#FFFFFF'];
+        if ((isHighlight && spotlightWinner) || isEngagement || (isWelcome && stats.totalScored === 0) || isGold || isPodium || isBackdrop) {
+            const colorSet = isGold || isBackdrop ? ['#FFD700', '#F59E0B'] : isEngagement ? ['#ec4899', '#8b5cf6', '#3b82f6'] : ['#FFD700', '#F59E0B', '#FFFFFF'];
             confetti({
                 particleCount: 100,
                 spread: 70,
@@ -844,6 +1016,10 @@ const LiveScoreView: React.FC<LiveScoreViewProps> = ({ initialData }) => {
                     )}
                     <button onClick={toggleFullScreen} className="hover:text-white transition-colors">
                         {isFullScreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
+                    </button>
+                    {/* NEW: Close Button */}
+                    <button onClick={() => navigate('/dashboard')} className="p-2 bg-white/10 rounded-full hover:bg-red-500/80 hover:text-white transition-colors">
+                        <X className="w-5 h-5" />
                     </button>
                 </div>
             </div>
