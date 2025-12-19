@@ -31,6 +31,7 @@ interface ConfirmModalProps {
     count?: number;
     totalCount?: number;
     teamName?: string;
+    schoolName?: string;
     newScore?: string;
     newRank?: string;
     newMedal?: string;
@@ -140,8 +141,9 @@ const ConfirmModal: React.FC<ConfirmModalProps> = (props) => {
                 {props.type === 'single' ? (
                     <div className="overflow-y-auto">
                         <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 mb-4 text-center">
-                            <p className="text-xs text-blue-600 font-bold uppercase tracking-wider mb-1">TEAM</p>
-                            <h2 className="text-xl font-black text-gray-900 leading-tight">{props.teamName}</h2>
+                            <p className="text-xs text-blue-600 font-bold uppercase tracking-wider mb-1">SCHOOL</p>
+                            <h2 className="text-xl font-black text-gray-900 leading-tight mb-1">{props.schoolName || '-'}</h2>
+                            <p className="text-sm text-gray-500 font-medium">{props.teamName}</p>
                         </div>
                         
                         <div className="bg-gray-50 p-4 rounded-lg border border-gray-100 space-y-2 text-sm mt-2">
@@ -575,15 +577,19 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
       if (confirmState.type !== 'single' || !confirmState.teamId) return null;
       const team = teams.find(t => t.teamId === confirmState.teamId);
       if (!team) return null;
+      
+      const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
       const edit = edits[team.teamId];
+      
       return {
           teamName: team.teamName,
+          schoolName: school?.SchoolName || team.schoolId,
           newScore: edit?.score,
           newRank: edit?.rank,
           newMedal: edit?.medal,
           newFlag: edit?.flag
       };
-  }, [confirmState, teams, edits]);
+  }, [confirmState, teams, edits, data.schools]);
 
   if (!user) {
       return (
@@ -610,6 +616,7 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
             count={dirtyCount}
             totalCount={teams.length}
             teamName={singleConfirmData?.teamName}
+            schoolName={singleConfirmData?.schoolName}
             newScore={singleConfirmData?.newScore}
             newRank={singleConfirmData?.newRank}
             newMedal={singleConfirmData?.newMedal}
@@ -824,7 +831,8 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
                                         </div>
                                         <button 
                                             onClick={() => handleShare(team)}
-                                            className="px-3 bg-white text-green-600 border border-green-200 rounded-lg flex items-center justify-center hover:bg-green-50"
+                                            className="p-1.5 bg-green-50 text-green-600 rounded-md hover:bg-green-100 transition-colors border border-green-200"
+                                            title="แชร์ผลทาง LINE"
                                         >
                                             <Share2 className="w-4 h-4" />
                                         </button>
