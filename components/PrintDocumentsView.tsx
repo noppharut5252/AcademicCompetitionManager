@@ -25,7 +25,7 @@ const DEFAULT_PRINT_CONFIG: PrintConfig = {
     scoreColsCount: 3,
     includeJudges: true,
     includeVenueDate: true,
-    headerTitle: 'งานศิลปหัตถกรรมนักเรียน ครั้งที่ 73'
+    headerTitle: 'งานศิลปหัตถกรรมนักเรียน ครั้งที่ 72'
 };
 
 const PrintConfigModal = ({ isOpen, onClose, onSave, data, currentUser, currentConfigs }: { 
@@ -193,7 +193,31 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
       let teams = allTeams.filter(t => t.activityId === activityId);
       
       if (viewScope === 'area') {
-          teams = teams.filter(t => t.stageStatus === 'Area' || (String(t.rank) === '1' && String(t.flag).toUpperCase() === 'TRUE'));
+          // 1. Filter candidates: Rank 1 & Flag TRUE, or explicitly stageStatus='Area'
+          const candidates = teams.filter(t => t.stageStatus === 'Area' || (String(t.rank) === '1' && String(t.flag).toUpperCase() === 'TRUE'));
+          
+          // 2. Deduplicate by Cluster (Requirement: 1 rep per cluster per activity)
+          const seenClusters = new Set<string>();
+          teams = [];
+          
+          // Sort candidates by score descending to prioritize the best one if duplicates exist
+          candidates.sort((a, b) => b.score - a.score);
+
+          for (const t of candidates) {
+              const school = allSchools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
+              const clusterId = school?.SchoolCluster;
+              
+              if (clusterId) {
+                  if (!seenClusters.has(clusterId)) {
+                      seenClusters.add(clusterId);
+                      teams.push(t);
+                  }
+              } else {
+                  // If no cluster (e.g. external?), just add it
+                  teams.push(t);
+              }
+          }
+
       } else {
           if (clusterFilter) {
               teams = teams.filter(t => {
@@ -202,12 +226,23 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
               });
           }
       }
+      
       return teams.sort((a, b) => {
-          const schoolA = allSchools.find(s => s.SchoolID === a.schoolId)?.SchoolName || a.schoolId;
-          const schoolB = allSchools.find(s => s.SchoolID === b.schoolId)?.SchoolName || b.schoolId;
-          return schoolA.localeCompare(schoolB) || a.teamName.localeCompare(b.teamName);
+          const schoolA = allSchools.find(s => s.SchoolID === a.schoolId);
+          const schoolB = allSchools.find(s => s.SchoolID === b.schoolId);
+          
+          // For Area view, sort by Cluster Name first for better organization
+          if (viewScope === 'area') {
+              const clusterA = data.clusters?.find(c => c.ClusterID === schoolA?.SchoolCluster)?.ClusterName || '';
+              const clusterB = data.clusters?.find(c => c.ClusterID === schoolB?.SchoolCluster)?.ClusterName || '';
+              if (clusterA !== clusterB) return clusterA.localeCompare(clusterB);
+          }
+
+          const nameA = schoolA?.SchoolName || a.schoolId;
+          const nameB = schoolB?.SchoolName || b.schoolId;
+          return nameA.localeCompare(nameB) || a.teamName.localeCompare(b.teamName);
       });
-  }, [data.teams, data.schools, viewScope, clusterFilter]);
+  }, [data.teams, data.schools, data.clusters, viewScope, clusterFilter]);
 
   const getJudgesForActivity = useCallback((activityId: string) => {
       const allJudges = data.judges || [];
@@ -423,7 +458,12 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                                     const schoolName = (data.schools || []).find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId)?.SchoolName || t.schoolId;
                                     let members: any[] = [];
                                     try {
-                                        const raw = typeof t.members === 'string' ? JSON.parse(t.members) : t.members;
+                                        let memberSource = t.members;
+                                        if (viewScope === 'area' && t.stageInfo) {
+                                            const info = JSON.parse(t.stageInfo);
+                                            if (info.members) memberSource = info.members;
+                                        }
+                                        const raw = typeof memberSource === 'string' ? JSON.parse(memberSource) : memberSource;
                                         if (memberType === 'นักเรียน') {
                                             if (Array.isArray(raw)) members = raw;
                                             else if (raw && raw.students) members = raw.students;
@@ -966,4 +1006,3 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
 };
 
 export default PrintDocumentsView;
-
