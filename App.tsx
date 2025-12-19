@@ -315,7 +315,11 @@ const App: React.FC = () => {
   }
 
   // 3. Registration Mode
-  if (isRegistering && data) {
+  if (isRegistering) {
+      if (!data) {
+          // Prevent falling through to main app if data isn't loaded yet
+          return <LoadingScreen />;
+      }
       return (
         <div className="min-h-screen bg-gray-50 p-4 font-kanit">
              <div className="max-w-4xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden mt-10">
@@ -337,7 +341,7 @@ const App: React.FC = () => {
   }
 
   // 4. Login Screen (Fallback / Standard Login)
-  if (!isAuthenticated && !isRegistering && !isLinkingMode) {
+  if (!isAuthenticated && !isLinkingMode) {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col justify-center px-4 font-kanit">
         <div className="max-w-md w-full mx-auto bg-white rounded-2xl shadow-xl overflow-hidden">
@@ -520,4 +524,5 @@ const TrophyIcon = ({ className }: { className?: string }) => (
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
     </svg>
 );
+
 export default App;
