@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { LayoutDashboard, Users, Trophy, School, Settings, LogOut, Award, FileBadge, IdCard, LogIn, UserCircle, Edit3, ScanLine, X, Camera, Search, ChevronRight, LayoutGrid, RotateCcw, Loader2, Zap, MapPin, Gavel, Megaphone, Printer, Hash, MonitorPlay } from 'lucide-react';
+import { LayoutDashboard, Users, Trophy, School, Settings, LogOut, Award, FileBadge, IdCard, LogIn, UserCircle, Edit3, ScanLine, X, Camera, Search, ChevronRight, LayoutGrid, RotateCcw, Loader2, Zap, MapPin, Gavel, Megaphone, Printer, Hash, MonitorPlay, Menu } from 'lucide-react';
 import { logoutLiff } from '../services/liff';
 import { User, AppData } from '../types';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
@@ -304,6 +304,7 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [showScanner, setShowScanner] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const currentPath = location.pathname.substring(1) || 'dashboard';
   const activeTab = currentPath.split('/')[0] || 'dashboard';
@@ -480,37 +481,68 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
         </main>
       </div>
 
-      {/* Enhanced Mobile Bottom Navigation Bar */}
+      {/* Updated Mobile Bottom Navigation Bar (Grid 5) */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-white border-t border-gray-200 z-30 safe-area-bottom shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-        <div className="relative flex justify-between items-center h-full px-2">
-            <div className="flex-1 flex justify-around">
-                <button onClick={() => handleNav('dashboard')} className={`flex flex-col items-center justify-center w-full space-y-1 ${activeTab === 'dashboard' ? 'text-blue-600' : 'text-gray-400'}`}>
-                    <LayoutDashboard className="w-6 h-6" />
-                    <span className="text-[10px] font-medium">หน้าหลัก</span>
-                </button>
-                <button onClick={() => handleNav('live')} className={`flex flex-col items-center justify-center w-full space-y-1 ${activeTab === 'live' ? 'text-blue-600' : 'text-gray-400'}`}>
-                    <MonitorPlay className="w-6 h-6" />
-                    <span className="text-[10px] font-medium">LIVE</span>
-                </button>
+        <div className="grid grid-cols-5 h-full relative">
+            {/* 1. หน้าหลัก */}
+            <button onClick={() => handleNav('dashboard')} className={`flex flex-col items-center justify-center space-y-1 ${activeTab === 'dashboard' ? 'text-blue-600' : 'text-gray-400'}`}>
+                <LayoutDashboard className="w-5 h-5" />
+                <span className="text-[10px] font-medium">หน้าหลัก</span>
+            </button>
+            
+            {/* 2. ทีม */}
+            <button onClick={() => handleNav('teams')} className={`flex flex-col items-center justify-center space-y-1 ${activeTab === 'teams' ? 'text-blue-600' : 'text-gray-400'}`}>
+                <Users className="w-5 h-5" />
+                <span className="text-[10px] font-medium">ทีม</span>
+            </button>
+
+            {/* 3. สแกน (Center Floating) */}
+            <div className="relative flex justify-center items-center">
+                 <div className="absolute -top-6">
+                    <button onClick={() => setShowScanner(true)} className="w-14 h-14 bg-blue-600 rounded-full shadow-lg flex items-center justify-center text-white border-4 border-gray-50 transform transition-transform active:scale-95 group">
+                        <ScanLine className="w-7 h-7 group-hover:scale-110 transition-transform" />
+                    </button>
+                 </div>
+                 <span className="text-[10px] font-medium text-gray-400 mt-8">สแกน</span>
             </div>
-            <div className="relative -top-6 w-16 flex justify-center">
-                <div className="absolute top-4 w-16 h-8 bg-transparent rounded-full shadow-[0_8px_0_0_white]"></div>
-                <button onClick={() => setShowScanner(true)} className="w-16 h-16 bg-blue-600 rounded-full shadow-lg flex items-center justify-center text-white border-4 border-gray-50 transform transition-transform active:scale-95 group">
-                    <ScanLine className="w-8 h-8 group-hover:scale-110 transition-transform" />
-                </button>
-            </div>
-            <div className="flex-1 flex justify-around">
-                <button onClick={() => handleNav('results')} className={`flex flex-col items-center justify-center w-full space-y-1 ${activeTab === 'results' ? 'text-blue-600' : 'text-gray-400'}`}>
-                    <Award className="w-6 h-6" />
-                    <span className="text-[10px] font-medium">ผลรางวัล</span>
-                </button>
-                <button onClick={() => handleNav('venues')} className={`flex flex-col items-center justify-center w-full space-y-1 ${['venues', 'teams', 'settings','certificates','idcards','profile','score', 'judges', 'announcements', 'documents'].includes(activeTab) ? 'text-blue-600' : 'text-gray-400'}`}>
-                    <MapPin className="w-6 h-6" />
-                    <span className="text-[10px] font-medium">อื่นๆ</span>
-                </button>
-            </div>
+
+            {/* 4. ผลรางวัล */}
+            <button onClick={() => handleNav('results')} className={`flex flex-col items-center justify-center space-y-1 ${activeTab === 'results' ? 'text-blue-600' : 'text-gray-400'}`}>
+                <Award className="w-5 h-5" />
+                <span className="text-[10px] font-medium">ผลรางวัล</span>
+            </button>
+            
+            {/* 5. เมนูอื่นๆ */}
+            <button onClick={() => setIsMobileMenuOpen(true)} className={`flex flex-col items-center justify-center space-y-1 ${!['dashboard', 'teams', 'results'].includes(activeTab) ? 'text-blue-600' : 'text-gray-400'}`}>
+                <Menu className="w-5 h-5" />
+                <span className="text-[10px] font-medium">เมนูอื่นๆ</span>
+            </button>
         </div>
       </div>
+
+      {/* Mobile Menu Overlay */}
+      {isMobileMenuOpen && (
+        <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm md:hidden flex flex-col justify-end" onClick={() => setIsMobileMenuOpen(false)}>
+            <div className="bg-white rounded-t-2xl p-4 animate-in slide-in-from-bottom-10 max-h-[70vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                <div className="flex justify-between items-center mb-4 px-2">
+                    <h3 className="font-bold text-gray-800 text-lg">เมนูทั้งหมด</h3>
+                    <button onClick={() => setIsMobileMenuOpen(false)} className="p-1 bg-gray-100 rounded-full"><X className="w-5 h-5 text-gray-500"/></button>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                    {menuItems.map(item => (
+                        <button 
+                            key={item.id}
+                            onClick={() => { handleNav(item.id); setIsMobileMenuOpen(false); }}
+                            className={`flex flex-col items-center justify-center p-3 rounded-xl border transition-all ${activeTab === item.id ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-white border-gray-100 text-gray-600 hover:bg-gray-50'}`}
+                        >
+                            <item.icon className="w-6 h-6 mb-2" />
+                            <span className="text-xs font-medium text-center leading-tight">{item.label}</span>
+                        </button>
+                    ))}
+                </div>
+            </div>
+        </div>
+      )}
     </div>
   );
 };
