@@ -14,7 +14,8 @@ import VenuesView from './components/VenuesView';
 import JudgesView from './components/JudgesView'; 
 import AnnouncementManager from './components/AnnouncementManager'; 
 import PrintDocumentsView from './components/PrintDocumentsView';
-import LiveScoreView from './components/LiveScoreView'; // Import new component
+import LiveScoreView from './components/LiveScoreView'; 
+import PublicResultView from './components/PublicResultView'; // Import
 import { AppData, User } from './types';
 import { fetchData, loginStandardUser, checkUserPermission, verifyAndLinkLine } from './services/api';
 import { initLiff, loginLiff, LiffProfile } from './services/liff';
@@ -344,110 +345,121 @@ const App: React.FC = () => {
   // 4. Login Screen (Fallback / Standard Login)
   if (!isAuthenticated && !isLinkingMode) {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col justify-center px-4 font-kanit">
-        <div className="max-w-md w-full mx-auto bg-white rounded-2xl shadow-xl overflow-hidden">
-            <div className="bg-blue-600 p-6 text-center">
-                 <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
-                    <TrophyIcon className="w-8 h-8 text-blue-600" />
-                 </div>
-                 <h1 className="text-2xl font-bold text-white">CompManager</h1>
-                 <p className="text-blue-100 text-sm mt-1">ระบบจัดการการแข่งขันวิชาการ</p>
-            </div>
-
-            <div className="p-6">
-                {/* Login Method Tabs */}
-                <div className="flex border-b border-gray-200 mb-6">
-                    <button 
-                        className={`flex-1 py-2 text-sm font-medium border-b-2 transition-colors ${loginMethod === 'line' ? 'border-[#06C755] text-[#06C755]' : 'border-transparent text-gray-500'}`}
-                        onClick={() => setLoginMethod('line')}
-                    >
-                        LINE Login
-                    </button>
-                    <button 
-                        className={`flex-1 py-2 text-sm font-medium border-b-2 transition-colors ${loginMethod === 'standard' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500'}`}
-                        onClick={() => setLoginMethod('standard')}
-                    >
-                        เข้าระบบทั่วไป
-                    </button>
-                </div>
-
-                {loginMethod === 'line' ? (
-                    <div className="text-center py-4">
-                        <p className="text-gray-500 mb-6 text-sm">เข้าใช้งานสะดวกรวดเร็วผ่านบัญชี LINE ของคุณ</p>
-                        <button 
-                            onClick={handleLineLogin}
-                            className="w-full bg-[#06C755] hover:bg-[#05b34c] text-white font-bold py-3 px-4 rounded-xl flex items-center justify-center transition-colors shadow-sm"
-                        >
-                            <span className="mr-2 font-bold">Log in with LINE</span>
-                        </button>
-                        <p className="text-xs text-gray-400 mt-4">
-                            * ระบบจะตรวจสอบบัญชีอัตโนมัติ หากยังไม่เคยลงทะเบียน ระบบจะพาไปหน้าลงทะเบียน
-                        </p>
+      <HashRouter>
+        <Routes>
+            <Route path="/verify" element={data ? <VerifyCertificate data={data} /> : <LoadingScreen />} />
+            <Route path="/live" element={data ? <LiveScoreView initialData={data} /> : <LoadingScreen />} />
+            {/* NEW: Public Share Result Route */}
+            <Route path="/share-result" element={data ? <PublicResultView data={data} /> : <LoadingScreen />} />
+            
+            <Route path="*" element={
+              <div className="min-h-screen bg-gray-50 flex flex-col justify-center px-4 font-kanit">
+                <div className="max-w-md w-full mx-auto bg-white rounded-2xl shadow-xl overflow-hidden">
+                    <div className="bg-blue-600 p-6 text-center">
+                        <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
+                            <TrophyIcon className="w-8 h-8 text-blue-600" />
+                        </div>
+                        <h1 className="text-2xl font-bold text-white">CompManager</h1>
+                        <p className="text-blue-100 text-sm mt-1">ระบบจัดการการแข่งขันวิชาการ</p>
                     </div>
-                ) : (
-                    <form onSubmit={handleStandardLogin} className="space-y-4">
-                        <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">ชื่อผู้ใช้งาน (Username)</label>
-                            <div className="relative">
-                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                    <UserIcon className="h-4 w-4 text-gray-400" />
-                                </div>
-                                <input
-                                    type="text"
-                                    required
-                                    className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500"
-                                    placeholder="Username"
-                                    value={username}
-                                    onChange={(e) => setUsername(e.target.value)}
-                                />
-                            </div>
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">รหัสผ่าน (Password)</label>
-                            <div className="relative">
-                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                    <Lock className="h-4 w-4 text-gray-400" />
-                                </div>
-                                <input
-                                    type="password"
-                                    required
-                                    className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500"
-                                    placeholder="Password"
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                />
-                            </div>
+
+                    <div className="p-6">
+                        {/* Login Method Tabs */}
+                        <div className="flex border-b border-gray-200 mb-6">
+                            <button 
+                                className={`flex-1 py-2 text-sm font-medium border-b-2 transition-colors ${loginMethod === 'line' ? 'border-[#06C755] text-[#06C755]' : 'border-transparent text-gray-500'}`}
+                                onClick={() => setLoginMethod('line')}
+                            >
+                                LINE Login
+                            </button>
+                            <button 
+                                className={`flex-1 py-2 text-sm font-medium border-b-2 transition-colors ${loginMethod === 'standard' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500'}`}
+                                onClick={() => setLoginMethod('standard')}
+                            >
+                                เข้าระบบทั่วไป
+                            </button>
                         </div>
 
-                        {loginError && (
-                            <div className="text-red-500 text-xs text-center">{loginError}</div>
+                        {loginMethod === 'line' ? (
+                            <div className="text-center py-4">
+                                <p className="text-gray-500 mb-6 text-sm">เข้าใช้งานสะดวกรวดเร็วผ่านบัญชี LINE ของคุณ</p>
+                                <button 
+                                    onClick={handleLineLogin}
+                                    className="w-full bg-[#06C755] hover:bg-[#05b34c] text-white font-bold py-3 px-4 rounded-xl flex items-center justify-center transition-colors shadow-sm"
+                                >
+                                    <span className="mr-2 font-bold">Log in with LINE</span>
+                                </button>
+                                <p className="text-xs text-gray-400 mt-4">
+                                    * ระบบจะตรวจสอบบัญชีอัตโนมัติ หากยังไม่เคยลงทะเบียน ระบบจะพาไปหน้าลงทะเบียน
+                                </p>
+                            </div>
+                        ) : (
+                            <form onSubmit={handleStandardLogin} className="space-y-4">
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">ชื่อผู้ใช้งาน (Username)</label>
+                                    <div className="relative">
+                                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                            <UserIcon className="h-4 w-4 text-gray-400" />
+                                        </div>
+                                        <input
+                                            type="text"
+                                            required
+                                            className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500"
+                                            placeholder="Username"
+                                            value={username}
+                                            onChange={(e) => setUsername(e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">รหัสผ่าน (Password)</label>
+                                    <div className="relative">
+                                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                            <Lock className="h-4 w-4 text-gray-400" />
+                                        </div>
+                                        <input
+                                            type="password"
+                                            required
+                                            className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500"
+                                            placeholder="Password"
+                                            value={password}
+                                            onChange={(e) => setPassword(e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+
+                                {loginError && (
+                                    <div className="text-red-500 text-xs text-center">{loginError}</div>
+                                )}
+
+                                <button 
+                                    type="submit"
+                                    disabled={isLoggingIn}
+                                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl flex items-center justify-center transition-colors shadow-sm disabled:opacity-70"
+                                >
+                                    {isLoggingIn ? <Loader2 className="w-5 h-5 animate-spin" /> : 'เข้าสู่ระบบ'}
+                                </button>
+                            </form>
                         )}
 
-                        <button 
-                            type="submit"
-                            disabled={isLoggingIn}
-                            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl flex items-center justify-center transition-colors shadow-sm disabled:opacity-70"
-                        >
-                            {isLoggingIn ? <Loader2 className="w-5 h-5 animate-spin" /> : 'เข้าสู่ระบบ'}
-                        </button>
-                    </form>
-                )}
-
-                <div className="mt-8 pt-6 border-t border-gray-100 text-center">
-                    <button 
-                        onClick={handleGuestAccess}
-                        className="text-gray-500 hover:text-gray-700 text-sm flex items-center justify-center mx-auto"
-                    >
-                        <Globe className="w-4 h-4 mr-1" />
-                        เข้าชมในฐานะบุคคลทั่วไป (Guest)
-                    </button>
+                        <div className="mt-8 pt-6 border-t border-gray-100 text-center">
+                            <button 
+                                onClick={handleGuestAccess}
+                                className="text-gray-500 hover:text-gray-700 text-sm flex items-center justify-center mx-auto"
+                            >
+                                <Globe className="w-4 h-4 mr-1" />
+                                เข้าชมในฐานะบุคคลทั่วไป (Guest)
+                            </button>
+                        </div>
+                    </div>
                 </div>
-            </div>
-        </div>
-        <div className="text-center mt-6 text-gray-400 text-xs">
-            &copy; 2024 Competition Manager System
-        </div>
-      </div>
+                <div className="text-center mt-6 text-gray-400 text-xs">
+                    &copy; 2024 Competition Manager System
+                </div>
+              </div>
+            } />
+        </Routes>
+      </HashRouter>
     );
   }
 
@@ -487,6 +499,10 @@ const App: React.FC = () => {
             } />
             <Route path="/live" element={
                 data ? <LiveScoreView initialData={data} /> : <LoadingScreen />
+            } />
+            {/* Add Public Share Result for authenticated context as well if needed, or public */}
+            <Route path="/share-result" element={
+                data ? <PublicResultView data={data} /> : <LoadingScreen />
             } />
             <Route path="/score-input" element={
                 data ? <ScoreInputView data={data} user={currentUser} onDataUpdate={() => fetchAppData(true)} /> : <LoadingScreen />
