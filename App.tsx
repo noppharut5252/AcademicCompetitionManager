@@ -13,6 +13,7 @@ import VenuesView from './components/VenuesView';
 import JudgesView from './components/JudgesView'; 
 import AnnouncementManager from './components/AnnouncementManager'; 
 import PrintDocumentsView from './components/PrintDocumentsView';
+import LiveScoreView from './components/LiveScoreView'; // Import new component
 import { AppData, User } from './types';
 import { fetchData, loginStandardUser, checkUserPermission, verifyAndLinkLine } from './services/api';
 import { initLiff, loginLiff, LiffProfile } from './services/liff';
@@ -479,6 +480,9 @@ const App: React.FC = () => {
             <Route path="/verify" element={
                 data ? <VerifyCertificate data={data} /> : <LoadingScreen />
             } />
+            <Route path="/live" element={
+                data ? <LiveScoreView initialData={data} /> : <LoadingScreen />
+            } />
             <Route path="*" element={
                 // Pass data to Layout for global access (e.g., Scanner Modal)
                 <Layout userProfile={currentUser} data={data || undefined}>
@@ -518,4 +522,3 @@ const TrophyIcon = ({ className }: { className?: string }) => (
 );
 
 export default App;
-
