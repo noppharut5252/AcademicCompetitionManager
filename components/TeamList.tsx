@@ -350,7 +350,9 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
         team.teamName.toLowerCase().includes(term) || 
         team.teamId.toLowerCase().includes(term) ||
         (school && school.SchoolName.toLowerCase().includes(term)) ||
-        (cluster && cluster.ClusterName.toLowerCase().includes(term));
+        (cluster && cluster.ClusterName.toLowerCase().includes(term)) ||
+        (activity && activity.name.toLowerCase().includes(term)) || // SEARCH BY ACTIVITY NAME
+        (activity && activity.category.toLowerCase().includes(term)); // SEARCH BY CATEGORY
       
       const matchesStatus = statusFilter === 'All' || normalizedStatus === statusFilter;
       const matchesCategory = categoryFilter === 'All' || (activity && activity.category === categoryFilter);
@@ -821,9 +823,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
           </div>
       )}
 
-      {/* Rest of the component content (Filters, Mobile Cards, Table, Pagination) remains largely same but updated Modal prop */}
-      
-      {/* ... Filters Section ... */}
+      {/* Filters Section */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col gap-4">
         
         {/* Quick Filter Buttons */}
@@ -848,26 +848,38 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
             </button>
         </div>
 
-        <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-            <div className="relative w-full md:flex-1">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Search className="h-5 w-5 text-gray-400" />
-                </div>
-                <input
-                    type="text"
-                    className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm transition-shadow"
-                    placeholder="ค้นหาชื่อทีม, โรงเรียน, กลุ่มเครือข่าย..."
-                    value={searchTerm}
-                    onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-                />
+        {/* Search Bar - Full Width on own line */}
+        <div className="relative w-full">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Search className="h-5 w-5 text-gray-400" />
             </div>
+            <input
+                type="text"
+                className="block w-full pl-10 pr-10 py-2.5 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm transition-shadow shadow-sm"
+                placeholder="ค้นหาชื่อทีม, โรงเรียน, กลุ่มเครือข่าย, หรือชื่อกิจกรรม..."
+                value={searchTerm}
+                onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+            />
+            {searchTerm && (
+                <button 
+                    onClick={() => setSearchTerm('')}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                    <X className="h-4 w-4" />
+                </button>
+            )}
+        </div>
 
-            <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-                {(!isGroupAdmin && !isSchoolAdmin) && (
-                    <div className="flex items-center gap-2 w-full sm:w-auto">
-                        <LayoutGrid className="w-5 h-5 text-gray-500 hidden sm:block" />
+        {/* Filters - Below Search */}
+        <div className="flex flex-wrap gap-3 w-full">
+            {(!isGroupAdmin && !isSchoolAdmin) && (
+                <div className="flex-1 min-w-[200px]">
+                    <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <LayoutGrid className="h-4 w-4 text-gray-500" />
+                        </div>
                         <select 
-                            className="block w-full pl-3 pr-8 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-lg"
+                            className="block w-full pl-9 pr-8 py-2.5 text-sm border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 rounded-lg bg-gray-50 hover:bg-white transition-colors cursor-pointer"
                             value={clusterFilter}
                             onChange={(e) => { setClusterFilter(e.target.value); setCurrentPage(1); }}
                         >
@@ -877,12 +889,16 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
                             ))}
                         </select>
                     </div>
-                )}
+                </div>
+            )}
 
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                    <Filter className="w-5 h-5 text-gray-500 hidden sm:block" />
+            <div className="flex-1 min-w-[180px]">
+                <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <Filter className="h-4 w-4 text-gray-500" />
+                    </div>
                     <select 
-                        className="block w-full pl-3 pr-8 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-lg"
+                        className="block w-full pl-9 pr-8 py-2.5 text-sm border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 rounded-lg bg-gray-50 hover:bg-white transition-colors cursor-pointer"
                         value={categoryFilter}
                         onChange={(e) => { setCategoryFilter(e.target.value); setCurrentPage(1); }}
                     >
@@ -892,19 +908,19 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
                         ))}
                     </select>
                 </div>
+            </div>
 
-                 <div className="flex items-center gap-2 w-full sm:w-auto">
-                    <select 
-                        className="block w-full pl-3 pr-8 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-lg"
-                        value={statusFilter}
-                        onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
-                    >
-                        <option value="All">ทุกสถานะ</option>
-                        {Object.values(TeamStatus).map(s => (
-                        <option key={s} value={s}>{s}</option>
-                        ))}
-                    </select>
-                </div>
+             <div className="flex-1 min-w-[150px]">
+                <select 
+                    className="block w-full px-3 py-2.5 text-sm border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 rounded-lg bg-gray-50 hover:bg-white transition-colors cursor-pointer"
+                    value={statusFilter}
+                    onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
+                >
+                    <option value="All">ทุกสถานะ</option>
+                    {Object.values(TeamStatus).map(s => (
+                    <option key={s} value={s}>{s}</option>
+                    ))}
+                </select>
             </div>
         </div>
       </div>
@@ -926,71 +942,103 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
                 <div 
                     key={team.teamId} 
                     onClick={() => setSelectedTeam(team)}
-                    className={`bg-white p-4 rounded-xl shadow-sm border ${canEdit ? 'border-l-4 border-l-blue-500 border-gray-100' : 'border-gray-100'} flex items-start space-x-4 cursor-pointer hover:shadow-md transition-all active:scale-[0.98]`}
+                    className={`bg-white p-4 rounded-xl shadow-sm border ${canEdit ? 'border-l-4 border-l-blue-500 border-gray-100' : 'border-gray-100'} flex flex-col cursor-pointer hover:shadow-md transition-all active:scale-[0.98]`}
                 >
-                    <div className="flex-shrink-0 relative">
-                        <img className="h-16 w-16 rounded-lg object-cover border border-gray-100" src={imageUrl} alt="" />
-                        {warnings.length > 0 && (
-                            <div className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-1 border-2 border-white shadow-sm z-10">
-                                <AlertTriangle className="w-3 h-3" />
-                            </div>
-                        )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                        <div className="flex justify-between items-start">
-                            <h3 className="text-sm font-bold text-gray-900 truncate">
-                                {viewRound === 'area' && areaInfo?.name ? areaInfo.name : team.teamName}
-                            </h3>
-                            {getStatusBadge(team)}
+                    <div className="flex items-start space-x-4">
+                        <div className="flex-shrink-0 relative">
+                            <img className="h-16 w-16 rounded-lg object-cover border border-gray-100" src={imageUrl} alt="" />
+                            {warnings.length > 0 && (
+                                <div className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-1 border-2 border-white shadow-sm z-10">
+                                    <AlertTriangle className="w-3 h-3" />
+                                </div>
+                            )}
                         </div>
-                        {warnings.length > 0 && (
-                            <div className="flex flex-wrap gap-1 mt-1 mb-1">
-                                {warnings.map((w, idx) => (
-                                    <span key={idx} className="bg-red-50 text-red-700 font-bold text-[10px] px-1.5 py-0.5 rounded-md flex items-center border border-red-200">
-                                        <AlertCircle className="w-3 h-3 mr-1" />{w}
-                                    </span>
-                                ))}
+                        <div className="flex-1 min-w-0">
+                            <div className="flex justify-between items-start">
+                                <h3 className="text-sm font-bold text-gray-900 truncate">
+                                    {viewRound === 'area' && areaInfo?.name ? areaInfo.name : team.teamName}
+                                </h3>
+                                {getStatusBadge(team)}
                             </div>
-                        )}
-                        <p className="text-xs text-gray-500 mt-1 truncate">{school?.SchoolName}</p>
-                         <p className="text-[10px] text-gray-400 mt-0.5 truncate flex items-center">
-                            <LayoutGrid className="w-3 h-3 mr-1"/> {cluster?.ClusterName}
-                        </p>
-                        <p className="text-xs text-gray-500 mt-1">
-                            {activity?.name} 
-                            <span className="ml-2 text-[10px] text-gray-400 border border-gray-200 rounded px-1">
-                                เกณฑ์: ครู {activity?.reqTeachers}, นร. {activity?.reqStudents}
-                            </span>
-                        </p>
-                        
-                        <div className="mt-3 flex items-center justify-between border-t border-gray-50 pt-2">
-                            <div className="flex items-center space-x-2">
-                                <span className={`text-sm font-bold ${viewRound === 'area' ? 'text-purple-600' : 'text-gray-700'}`}>
-                                    {showScore ? `${showScore} คะแนน` : '-'}
+                            {warnings.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-1 mb-1">
+                                    {warnings.map((w, idx) => (
+                                        <span key={idx} className="bg-red-50 text-red-700 font-bold text-[10px] px-1.5 py-0.5 rounded-md flex items-center border border-red-200">
+                                            <AlertCircle className="w-3 h-3 mr-1" />{w}
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+                            <p className="text-xs text-gray-500 mt-1 truncate">{school?.SchoolName}</p>
+                             <p className="text-[10px] text-gray-400 mt-0.5 truncate flex items-center">
+                                <LayoutGrid className="w-3 h-3 mr-1"/> {cluster?.ClusterName}
+                            </p>
+                            <p className="text-xs text-gray-500 mt-1">
+                                {activity?.name} 
+                                <span className="ml-2 text-[10px] text-gray-400 border border-gray-200 rounded px-1">
+                                    เกณฑ์: ครู {activity?.reqTeachers}, นร. {activity?.reqStudents}
                                 </span>
-                                {showRank && (
-                                    <span className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
-                                        #{showRank}
+                            </p>
+                            
+                            <div className="mt-3 flex items-center justify-between border-t border-gray-50 pt-2">
+                                <div className="flex items-center space-x-2">
+                                    <span className={`text-sm font-bold ${viewRound === 'area' ? 'text-purple-600' : 'text-gray-700'}`}>
+                                        {showScore ? `${showScore} คะแนน` : '-'}
                                     </span>
-                                )}
-                            </div>
-                            <div className="flex items-center gap-2">
-                                {canEdit && (
-                                    <span className="text-[10px] text-blue-600 font-bold bg-blue-50 px-1.5 py-0.5 rounded">
-                                        Edit
+                                    {showRank && (
+                                        <span className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
+                                            #{showRank}
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    {canEdit && (
+                                        <span className="text-[10px] text-blue-600 font-bold bg-blue-50 px-1.5 py-0.5 rounded">
+                                            Edit
+                                        </span>
+                                    )}
+                                    <span className="text-xs text-gray-400">
+                                        <ChevronRight className="w-3 h-3" />
                                     </span>
-                                )}
-                                <span className="text-xs text-gray-400">
-                                    <ChevronRight className="w-3 h-3" />
-                                </span>
+                                </div>
                             </div>
+                            {team.lastEditedBy && (
+                                <div className="mt-2 pt-1 border-t border-dashed border-gray-100 text-[9px] text-gray-400 flex items-center">
+                                    <History className="w-3 h-3 mr-1" /> แก้ไขล่าสุด {formatDeadline(team.lastEditedAt!)} โดย {team.lastEditedBy}
+                                </div>
+                            )}
                         </div>
-                        {team.lastEditedBy && (
-                            <div className="mt-2 pt-1 border-t border-dashed border-gray-100 text-[9px] text-gray-400 flex items-center">
-                                <History className="w-3 h-3 mr-1" /> แก้ไขล่าสุด {formatDeadline(team.lastEditedAt!)} โดย {team.lastEditedBy}
-                            </div>
-                        )}
                     </div>
+
+                    {/* Quick Actions for Admin/Area on Mobile */}
+                    {isSuperUser && (
+                        <div className="grid grid-cols-4 gap-2 mt-3 pt-3 border-t border-gray-100">
+                            <button 
+                                onClick={(e) => { e.stopPropagation(); promptAction('updateStatus', '1', team.teamId); }}
+                                className="flex items-center justify-center py-2 bg-green-50 text-green-700 rounded-lg text-xs font-bold border border-green-100 active:scale-95 transition-transform"
+                            >
+                                <CheckCircle className="w-4 h-4 mr-1" /> อนุมัติ
+                            </button>
+                            <button 
+                                onClick={(e) => { e.stopPropagation(); promptAction('updateStatus', '0', team.teamId); }}
+                                className="flex items-center justify-center py-2 bg-yellow-50 text-yellow-700 rounded-lg text-xs font-bold border border-yellow-100 active:scale-95 transition-transform"
+                            >
+                                <Clock className="w-4 h-4 mr-1" /> รอตรวจ
+                            </button>
+                            <button 
+                                onClick={(e) => { e.stopPropagation(); promptAction('updateStatus', '2', team.teamId); }}
+                                className="flex items-center justify-center py-2 bg-red-50 text-red-700 rounded-lg text-xs font-bold border border-red-100 active:scale-95 transition-transform"
+                            >
+                                <XCircle className="w-4 h-4 mr-1" /> ปฏิเสธ
+                            </button>
+                            <button 
+                                onClick={(e) => { e.stopPropagation(); promptAction('delete', '', team.teamId); }}
+                                className="flex items-center justify-center py-2 bg-gray-100 text-gray-600 rounded-lg text-xs font-bold border border-gray-200 active:scale-95 transition-transform"
+                            >
+                                <Trash2 className="w-4 h-4" />
+                            </button>
+                        </div>
+                    )}
                 </div>
             );
         })}
