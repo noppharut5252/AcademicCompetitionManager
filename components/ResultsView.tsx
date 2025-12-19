@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { AppData, Team, AreaStageInfo, School, User } from '../types';
-import { Award, Search, Medal, Star, Trophy, LayoutGrid, Crown, School as SchoolIcon, CheckCircle, BarChart3, Flag, MapPin, ChevronLeft, ChevronRight, Filter, TrendingUp, X, List, Clock, Zap, Info, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
+import { Award, Search, Medal, Star, Trophy, LayoutGrid, Crown, School as SchoolIcon, CheckCircle, BarChart3, Flag, MapPin, ChevronLeft, ChevronRight, Filter, TrendingUp, X, List, Clock, Zap, Info, ChevronDown, ChevronUp, Activity } from 'lucide-react';
 
 interface ResultsViewProps {
   data: AppData;
@@ -103,7 +103,6 @@ const SchoolDetailModal = ({ schoolName, teams, stage, onClose, data }: { school
                         <div className="space-y-3">
                             {teams.map((t, idx) => {
                                 const activity = data.activities.find(a => a.id === t.activityId);
-                                const medalText = getMedalTextThai(t.displayMedalRaw);
                                 const isRep = t.isRep;
                                 return (
                                     <div key={idx} className="bg-white p-3 rounded-xl border border-gray-200 shadow-sm flex items-center gap-3">
@@ -142,15 +141,141 @@ const SchoolDetailModal = ({ schoolName, teams, stage, onClose, data }: { school
     );
 };
 
+const ActivityRankingModal = ({ activityId, stage, data, onClose }: { activityId: string, stage: Stage, data: AppData, onClose: () => void }) => {
+    const activity = data.activities.find(a => a.id === activityId);
+    
+    const teams = useMemo(() => {
+        const relevantTeams = data.teams.filter(t => t.activityId === activityId);
+        
+        // Process teams for the current stage
+        const processed = relevantTeams.map(team => {
+            const areaInfo = team.stageInfo ? JSON.parse(team.stageInfo) : null;
+            let score = 0;
+            let rank = "";
+            let medal = "";
+            
+            if (stage === 'cluster') {
+                score = team.score;
+                rank = team.rank;
+                medal = team.medalOverride || calculateMedal(team.score);
+            } else {
+                // For Area view, only include if they have Area data or Flag TRUE
+                if (team.stageStatus !== 'Area' && String(team.flag).toUpperCase() !== 'TRUE') return null;
+                
+                score = areaInfo?.score || 0;
+                rank = areaInfo?.rank || "";
+                medal = areaInfo?.medal || calculateMedal(score);
+            }
+
+            // Rep Logic
+            const isRep = stage === 'area' 
+                ? (String(rank) === '1') 
+                : (String(team.rank) === '1' && String(team.flag).toUpperCase() === 'TRUE');
+
+            const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
+
+            return {
+                ...team,
+                displayScore: score,
+                displayRank: rank,
+                displayMedal: medal,
+                isRep,
+                schoolName: school?.SchoolName || team.schoolId,
+                clusterName: data.clusters.find(c => c.ClusterID === school?.SchoolCluster)?.ClusterName || '-'
+            };
+        }).filter(t => t !== null && (t.displayScore > 0 || t.displayScore === -1 || (stage === 'area' && t.stageStatus === 'Area')));
+
+        // Sort: Score Desc -> Rank Asc
+        return processed.sort((a, b) => {
+            if (b.displayScore !== a.displayScore) return b.displayScore - a.displayScore;
+            const rankA = parseInt(a.displayRank) || 999;
+            const rankB = parseInt(b.displayRank) || 999;
+            return rankA - rankB;
+        });
+    }, [activityId, stage, data]);
+
+    return (
+        <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-white rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+                <div className={`p-4 border-b border-gray-100 flex justify-between items-center ${stage === 'area' ? 'bg-purple-600 text-white' : 'bg-blue-600 text-white'}`}>
+                    <div>
+                        <h3 className="font-bold text-lg flex items-center">
+                            <Activity className="w-5 h-5 mr-2" />
+                            {activity?.name || activityId}
+                        </h3>
+                        <p className="text-white/80 text-xs mt-0.5">
+                            {stage === 'area' ? 'สรุปผลระดับเขตพื้นที่' : 'สรุปผลระดับกลุ่มเครือข่าย'}
+                        </p>
+                    </div>
+                    <button onClick={onClose} className="p-1.5 hover:bg-white/20 rounded-full transition-colors">
+                        <X className="w-6 h-6" />
+                    </button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-0">
+                    <table className="min-w-full text-sm">
+                        <thead className="bg-gray-50 sticky top-0 shadow-sm">
+                            <tr>
+                                <th className="px-4 py-3 text-center w-16">อันดับ</th>
+                                <th className="px-4 py-3 text-left">ทีม</th>
+                                <th className="px-4 py-3 text-left">โรงเรียน</th>
+                                <th className="px-4 py-3 text-center w-24">คะแนน</th>
+                                <th className="px-4 py-3 text-left">รางวัล</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                            {teams.map((t, idx) => (
+                                <tr key={t.teamId} className={`hover:bg-gray-50 ${t.isRep ? 'bg-yellow-50/30' : ''}`}>
+                                    <td className="px-4 py-3 text-center font-bold text-gray-500">
+                                        {t.displayRank ? `#${t.displayRank}` : '-'}
+                                    </td>
+                                    <td className="px-4 py-3 font-medium text-gray-900">{t.teamName}</td>
+                                    <td className="px-4 py-3 text-gray-600">
+                                        {t.schoolName}
+                                        <div className="text-[10px] text-gray-400">{t.clusterName}</div>
+                                    </td>
+                                    <td className="px-4 py-3 text-center font-bold text-blue-600">
+                                        {t.displayScore}
+                                    </td>
+                                    <td className="px-4 py-3">
+                                        <div className="flex items-center gap-2">
+                                            {getMedalIcon(t.displayMedal)}
+                                            <span className="text-gray-700">{getMedalTextThai(t.displayMedal)}</span>
+                                            {t.isRep && (
+                                                <span className="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded border border-indigo-200 font-bold ml-1">
+                                                    ตัวแทน
+                                                </span>
+                                            )}
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                            {teams.length === 0 && (
+                                <tr>
+                                    <td colSpan={5} className="py-12 text-center text-gray-400">ยังไม่มีข้อมูลการตัดสินในระดับนี้</td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+                <div className="p-3 bg-gray-50 border-t border-gray-200 text-right text-xs text-gray-500">
+                    รวมทั้งหมด {teams.length} ทีม
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const ResultsView: React.FC<ResultsViewProps> = ({ data, user }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [stage, setStage] = useState<Stage>('cluster');
+  // Set default stage to 'area'
+  const [stage, setStage] = useState<Stage>('area');
   const [quickFilter, setQuickFilter] = useState<QuickFilter>('all');
   const [isLoading, setIsLoading] = useState(true);
   const [showAllStats, setShowAllStats] = useState(false);
   
   // Modal State
   const [selectedSchoolDetail, setSelectedSchoolDetail] = useState<{ name: string, cluster?: string } | null>(null);
+  const [viewingActivityId, setViewingActivityId] = useState<string | null>(null);
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -182,6 +307,63 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data, user }) => {
           return null;
       }
   };
+
+  // --- My School Summary Logic ---
+  const mySchoolSummary = useMemo(() => {
+      if (!user || !user.SchoolID) return null;
+      
+      const userSchool = data.schools.find(s => s.SchoolID === user.SchoolID);
+      const schoolName = userSchool?.SchoolName || user.SchoolID;
+      
+      let gold = 0, silver = 0, bronze = 0, total = 0, scoreSum = 0;
+      let winnerCount = 0;
+
+      data.teams.forEach(t => {
+          // Filter by School
+          const teamSchool = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
+          if (teamSchool?.SchoolID !== user.SchoolID) return;
+
+          let score = 0;
+          let medal = "";
+          let rank = "";
+          let isRep = false;
+
+          if (stage === 'cluster') {
+              score = t.score;
+              medal = t.medalOverride || calculateMedal(t.score);
+              rank = t.rank;
+              // Cluster Rep: Rank 1 & Flag TRUE
+              isRep = String(rank) === '1' && String(t.flag).toUpperCase() === 'TRUE';
+          } else {
+              const info = getAreaInfo(t);
+              score = info?.score || 0;
+              medal = info?.medal || (score > 0 ? calculateMedal(score) : "");
+              rank = info?.rank || "";
+              // Area Winner: Rank 1
+              isRep = String(rank) === '1';
+              
+              // If viewing Area, only include teams that reached Area
+              if (t.stageStatus !== 'Area' && String(t.flag).toUpperCase() !== 'TRUE') return;
+          }
+
+          if (score > 0 || score === -1) {
+              total++;
+              scoreSum += (score === -1 ? 0 : score);
+              if (medal.includes('Gold')) gold++;
+              else if (medal.includes('Silver')) silver++;
+              else if (medal.includes('Bronze')) bronze++;
+          }
+
+          if (isRep) winnerCount++;
+      });
+
+      return {
+          schoolName,
+          gold, silver, bronze, total,
+          winnerCount,
+          avgScore: total > 0 ? (scoreSum / total).toFixed(1) : '0.0'
+      };
+  }, [user, data.teams, data.schools, stage]);
 
   // --- Main Data Processing ---
   const processedData = useMemo(() => {
@@ -257,7 +439,7 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data, user }) => {
 
   }, [data.teams, data.schools, data.clusters, stage, searchTerm, quickFilter, data.activities]);
 
-  // --- Recent Results (Top 6 latest updated) ---
+  // --- Recent Updates (Top 6 latest updated) ---
   const recentUpdates = useMemo(() => {
       // Filter teams that have scores and sort by lastEditedAt
       const withScore = processedData.filter(t => t.displayScore > 0);
@@ -404,7 +586,7 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data, user }) => {
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20">
       
-      {/* Modal */}
+      {/* Modals */}
       {selectedSchoolDetail && (
           <SchoolDetailModal 
               schoolName={selectedSchoolDetail.name}
@@ -412,6 +594,15 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data, user }) => {
               stage={stage}
               onClose={() => setSelectedSchoolDetail(null)}
               data={data}
+          />
+      )}
+      
+      {viewingActivityId && (
+          <ActivityRankingModal 
+              activityId={viewingActivityId}
+              stage={stage}
+              data={data}
+              onClose={() => setViewingActivityId(null)}
           />
       )}
 
@@ -440,6 +631,46 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data, user }) => {
             </button>
         </div>
       </div>
+
+      {/* My School Summary Block (Only if Logged In) */}
+      {mySchoolSummary && (
+          <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl p-6 text-white shadow-xl relative overflow-hidden animate-in slide-in-from-top-4">
+              <div className="absolute top-0 right-0 p-4 opacity-10">
+                  <SchoolIcon className="w-40 h-40" />
+              </div>
+              <div className="relative z-10 flex flex-col md:flex-row items-center md:items-start gap-6">
+                  <div className="w-20 h-20 bg-white/10 rounded-full flex items-center justify-center backdrop-blur-md border border-white/20 shrink-0">
+                      <SchoolIcon className="w-10 h-10 text-white" />
+                  </div>
+                  <div className="flex-1 text-center md:text-left">
+                      <div className="inline-flex items-center gap-2 bg-white/20 px-3 py-1 rounded-full text-xs font-bold mb-2 backdrop-blur-sm">
+                          <CheckCircle className="w-3 h-3" /> สรุปผลงานของท่าน ({stage === 'area' ? 'ระดับเขต' : 'ระดับกลุ่ม'})
+                      </div>
+                      <h3 className="text-2xl font-bold mb-1">{mySchoolSummary.schoolName}</h3>
+                      <p className="text-blue-100 text-sm mb-4">ส่งแข่งขันทั้งหมด {mySchoolSummary.total} รายการ</p>
+                      
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                          <div className="bg-white/10 rounded-lg p-2 text-center border border-white/10">
+                              <div className="text-2xl font-black text-yellow-300">{mySchoolSummary.gold}</div>
+                              <div className="text-[10px] uppercase font-bold opacity-80">Gold</div>
+                          </div>
+                          <div className="bg-white/10 rounded-lg p-2 text-center border border-white/10">
+                              <div className="text-2xl font-black text-gray-300">{mySchoolSummary.silver}</div>
+                              <div className="text-[10px] uppercase font-bold opacity-80">Silver</div>
+                          </div>
+                          <div className="bg-white/10 rounded-lg p-2 text-center border border-white/10">
+                              <div className="text-2xl font-black text-orange-300">{mySchoolSummary.bronze}</div>
+                              <div className="text-[10px] uppercase font-bold opacity-80">Bronze</div>
+                          </div>
+                          <div className="bg-white/20 rounded-lg p-2 text-center border border-white/30 backdrop-blur-sm">
+                              <div className="text-2xl font-black text-white">{mySchoolSummary.winnerCount}</div>
+                              <div className="text-[10px] uppercase font-bold opacity-80">{stage === 'area' ? 'Winner' : 'Rep.'}</div>
+                          </div>
+                      </div>
+                  </div>
+              </div>
+          </div>
+      )}
 
       {/* Recent Updates Block */}
       {recentUpdates.length > 0 && (
@@ -760,7 +991,11 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data, user }) => {
                               {team.clusterName}
                           </div>
                           
-                          <div className="text-xs text-gray-400 mt-2 pt-2 border-t border-dashed border-gray-100">
+                          <div 
+                            onClick={() => setViewingActivityId(team.activityId)}
+                            className="text-xs text-blue-500 mt-2 pt-2 border-t border-dashed border-gray-100 cursor-pointer hover:underline flex items-center"
+                          >
+                              <Activity className="w-3 h-3 mr-1" />
                               {activity?.name || team.activityId}
                           </div>
 
@@ -828,8 +1063,14 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data, user }) => {
                                         </div>
                                     </div>
                                 </td>
-                                <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600 max-w-[200px] truncate" title={activity?.name}>
-                                    {activity?.name || team.activityId}
+                                <td className="px-4 py-3 whitespace-nowrap text-xs">
+                                    <button 
+                                        onClick={() => setViewingActivityId(team.activityId)}
+                                        className="text-blue-600 hover:underline hover:text-blue-800 font-medium max-w-[250px] truncate text-left"
+                                        title={`ดูอันดับ ${activity?.name}`}
+                                    >
+                                        {activity?.name || team.activityId}
+                                    </button>
                                 </td>
                                 <td className="px-4 py-3 whitespace-nowrap text-center">
                                     <span className="text-lg font-black text-gray-800">{team.displayScore}</span>
