@@ -28,15 +28,8 @@ const DEFAULT_PRINT_CONFIG: PrintConfig = {
     scoreColsCount: 3,
     includeJudges: true,
     includeVenueDate: true,
-    headerTitle: 'งานศิลปหัตถกรรมนักเรียน ครั้งที่ 72'
-};
-
-interface LocalPrintSettings {
-    margins: { top: number; bottom: number; left: number; right: number };
-    font: 'Sarabun' | 'Noto Serif Thai';
-}
-
-const DEFAULT_LOCAL_SETTINGS: LocalPrintSettings = {
+    headerTitle: 'งานศิลปหัตถกรรมนักเรียน ครั้งที่ 72',
+    criteriaCount: 10,
     margins: { top: 10, bottom: 10, left: 10, right: 10 },
     font: 'Sarabun'
 };
@@ -55,10 +48,6 @@ const PrintConfigModal = ({ isOpen, onClose, onSave, data, currentUser, currentC
 
     const [selectedContext, setSelectedContext] = useState<string>(isAdminOrArea ? 'area' : (userClusterID || 'area'));
     const [config, setConfig] = useState<PrintConfig>({ ...DEFAULT_PRINT_CONFIG });
-    
-    // Local Settings State
-    const [localSettings, setLocalSettings] = useState<LocalPrintSettings>(DEFAULT_LOCAL_SETTINGS);
-    
     const [isSaving, setIsSaving] = useState(false);
 
     useEffect(() => {
@@ -69,26 +58,13 @@ const PrintConfigModal = ({ isOpen, onClose, onSave, data, currentUser, currentC
         } else {
             setConfig({ ...DEFAULT_PRINT_CONFIG, id: selectedContext });
         }
-
-        // Load Local Settings
-        const savedLocal = localStorage.getItem('comp_print_settings');
-        if (savedLocal) {
-            try {
-                setLocalSettings(JSON.parse(savedLocal));
-            } catch {
-                setLocalSettings(DEFAULT_LOCAL_SETTINGS);
-            }
-        }
     }, [selectedContext, currentConfigs]);
 
     const handleSave = async () => {
         setIsSaving(true);
-        // Save Server Config
+        // Save Server Config (includes margins and font now)
         const success = await savePrintConfig(selectedContext, config);
         
-        // Save Local Config
-        localStorage.setItem('comp_print_settings', JSON.stringify(localSettings));
-
         setIsSaving(false);
         if (success) {
             onSave(selectedContext, config);
@@ -96,11 +72,11 @@ const PrintConfigModal = ({ isOpen, onClose, onSave, data, currentUser, currentC
         }
     };
 
-    const updateMargin = (key: keyof LocalPrintSettings['margins'], value: string) => {
+    const updateMargin = (key: keyof NonNullable<PrintConfig['margins']>, value: string) => {
         const num = parseInt(value) || 0;
-        setLocalSettings(prev => ({
+        setConfig(prev => ({
             ...prev,
-            margins: { ...prev.margins, [key]: num }
+            margins: { ...(prev.margins || DEFAULT_PRINT_CONFIG.margins!), [key]: num }
         }));
     };
 
@@ -151,6 +127,27 @@ const PrintConfigModal = ({ isOpen, onClose, onSave, data, currentUser, currentC
                             />
                         </div>
 
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-1">จำนวนกรรมการ (รวม)</label>
+                                <input 
+                                    type="number"
+                                    className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                    value={config.scoreColsCount}
+                                    onChange={e => setConfig({...config, scoreColsCount: parseInt(e.target.value) || 3})}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-1">จำนวนข้อเกณฑ์</label>
+                                <input 
+                                    type="number"
+                                    className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                    value={config.criteriaCount || 10}
+                                    onChange={e => setConfig({...config, criteriaCount: parseInt(e.target.value) || 10})}
+                                />
+                            </div>
+                        </div>
+
                         <div className="space-y-3">
                             <label className="flex items-center gap-3 cursor-pointer group">
                                 <input 
@@ -171,31 +168,37 @@ const PrintConfigModal = ({ isOpen, onClose, onSave, data, currentUser, currentC
                         </div>
                     </div>
 
-                    {/* Local Settings */}
+                    {/* Printer Settings (Now Saved to DB) */}
                     <div className="space-y-4">
                         <div className="flex items-center justify-between">
                             <h4 className="text-sm font-bold text-gray-800 flex items-center uppercase tracking-wide">
-                                <Printer className="w-4 h-4 mr-2" /> ตั้งค่าเครื่องพิมพ์ (เฉพาะเครื่องนี้)
+                                <Printer className="w-4 h-4 mr-2" /> ตั้งค่าหน้ากระดาษและฟอนต์
                             </h4>
-                            <span className="text-[10px] bg-orange-100 text-orange-700 px-2 py-0.5 rounded border border-orange-200">Local Storage</span>
                         </div>
                         
                         <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 space-y-4">
                             <div>
                                 <label className="block text-xs font-bold text-gray-600 mb-2 flex items-center"><Type className="w-3.5 h-3.5 mr-1"/> รูปแบบอักษร (Font)</label>
-                                <div className="grid grid-cols-2 gap-2">
+                                <div className="grid grid-cols-3 gap-2">
                                     <button 
-                                        onClick={() => setLocalSettings({...localSettings, font: 'Sarabun'})}
-                                        className={`px-3 py-2 rounded border text-sm font-kanit transition-all ${localSettings.font === 'Sarabun' ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-white text-gray-700 hover:bg-gray-100'}`}
+                                        onClick={() => setConfig({...config, font: 'Sarabun'})}
+                                        className={`px-3 py-2 rounded border text-sm font-kanit transition-all ${config.font === 'Sarabun' ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-white text-gray-700 hover:bg-gray-100'}`}
                                     >
-                                        Sarabun (ไม่มีหัว)
+                                        Sarabun
                                     </button>
                                     <button 
-                                        onClick={() => setLocalSettings({...localSettings, font: 'Noto Serif Thai'})}
-                                        className={`px-3 py-2 rounded border text-sm font-serif transition-all ${localSettings.font === 'Noto Serif Thai' ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-white text-gray-700 hover:bg-gray-100'}`}
+                                        onClick={() => setConfig({...config, font: 'Noto Serif Thai'})}
+                                        className={`px-3 py-2 rounded border text-sm font-serif transition-all ${config.font === 'Noto Serif Thai' ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-white text-gray-700 hover:bg-gray-100'}`}
                                         style={{ fontFamily: 'Noto Serif Thai, serif' }}
                                     >
-                                        Noto Serif (มีหัว)
+                                        Noto Serif
+                                    </button>
+                                    <button 
+                                        onClick={() => setConfig({...config, font: 'Kanit'})}
+                                        className={`px-3 py-2 rounded border text-sm transition-all ${config.font === 'Kanit' ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-white text-gray-700 hover:bg-gray-100'}`}
+                                        style={{ fontFamily: 'Kanit, sans-serif' }}
+                                    >
+                                        Kanit
                                     </button>
                                 </div>
                             </div>
@@ -205,28 +208,21 @@ const PrintConfigModal = ({ isOpen, onClose, onSave, data, currentUser, currentC
                                 <div className="grid grid-cols-2 gap-3">
                                     <div>
                                         <label className="text-[10px] text-gray-500 mb-1 block flex items-center"><ArrowDownToLine className="w-3 h-3 mr-1"/> บน (Top)</label>
-                                        <input type="number" className="w-full border rounded px-2 py-1.5 text-sm" value={localSettings.margins.top} onChange={(e) => updateMargin('top', e.target.value)} />
+                                        <input type="number" className="w-full border rounded px-2 py-1.5 text-sm" value={config.margins?.top ?? 10} onChange={(e) => updateMargin('top', e.target.value)} />
                                     </div>
                                     <div>
                                         <label className="text-[10px] text-gray-500 mb-1 block flex items-center"><ArrowUpFromLine className="w-3 h-3 mr-1"/> ล่าง (Bottom)</label>
-                                        <input type="number" className="w-full border rounded px-2 py-1.5 text-sm" value={localSettings.margins.bottom} onChange={(e) => updateMargin('bottom', e.target.value)} />
+                                        <input type="number" className="w-full border rounded px-2 py-1.5 text-sm" value={config.margins?.bottom ?? 10} onChange={(e) => updateMargin('bottom', e.target.value)} />
                                     </div>
                                     <div>
                                         <label className="text-[10px] text-gray-500 mb-1 block flex items-center"><ArrowRightFromLine className="w-3 h-3 mr-1"/> ซ้าย (Left)</label>
-                                        <input type="number" className="w-full border rounded px-2 py-1.5 text-sm" value={localSettings.margins.left} onChange={(e) => updateMargin('left', e.target.value)} />
+                                        <input type="number" className="w-full border rounded px-2 py-1.5 text-sm" value={config.margins?.left ?? 10} onChange={(e) => updateMargin('left', e.target.value)} />
                                     </div>
                                     <div>
                                         <label className="text-[10px] text-gray-500 mb-1 block flex items-center"><ArrowLeftFromLine className="w-3 h-3 mr-1"/> ขวา (Right)</label>
-                                        <input type="number" className="w-full border rounded px-2 py-1.5 text-sm" value={localSettings.margins.right} onChange={(e) => updateMargin('right', e.target.value)} />
+                                        <input type="number" className="w-full border rounded px-2 py-1.5 text-sm" value={config.margins?.right ?? 10} onChange={(e) => updateMargin('right', e.target.value)} />
                                     </div>
                                 </div>
-                            </div>
-                            
-                            <div className="flex items-start gap-2 bg-yellow-50 p-2 rounded border border-yellow-100">
-                                <AlertTriangle className="w-4 h-4 text-yellow-600 mt-0.5 shrink-0" />
-                                <p className="text-[10px] text-yellow-700 leading-snug">
-                                    การตั้งค่าฟอนต์และระยะขอบจะถูกบันทึกไว้ในเครื่องนี้เท่านั้น หากเปลี่ยนเครื่องหรือล้างข้อมูลเบราว์เซอร์ ค่าจะกลับเป็นค่าเริ่มต้น
-                                </p>
                             </div>
                         </div>
                     </div>
@@ -399,18 +395,17 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
     const configKey = viewScope === 'area' ? 'area' : clusterFilter;
     const config = printConfigs[configKey] || DEFAULT_PRINT_CONFIG;
     const headerTitle = config.headerTitle || DEFAULT_PRINT_CONFIG.headerTitle;
+    const criteriaCount = config.criteriaCount || 10;
 
-    // Load Local Settings
-    let localSettings: LocalPrintSettings = DEFAULT_LOCAL_SETTINGS;
-    const savedLocal = localStorage.getItem('comp_print_settings');
-    if (savedLocal) {
-        try {
-            localSettings = JSON.parse(savedLocal);
-        } catch { }
-    }
+    // Use margins/font from config (Server Config)
+    const margins = config.margins || DEFAULT_PRINT_CONFIG.margins || { top: 10, bottom: 10, left: 10, right: 10 };
+    const font = config.font || 'Sarabun';
 
-    const { margins, font } = localSettings;
-    const fontFamily = font === 'Noto Serif Thai' ? "'Noto Serif Thai', serif" : "'Sarabun', sans-serif";
+    const fontFamily = font === 'Noto Serif Thai' 
+        ? "'Noto Serif Thai', serif" 
+        : font === 'Kanit' 
+            ? "'Kanit', sans-serif" 
+            : "'Sarabun', sans-serif";
 
     // Determine Orientation
     const isLandscape = type === 'full-set' || type === 'judge-signin' || type === 'score-sheet-individual' || type === 'competitor-signin' || type === 'score-sheet';
@@ -419,7 +414,7 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
         <html>
         <head>
             <title>พิมพ์เอกสาร - ${DOC_NAMES[type]}</title>
-            <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Thai:wght@400;700&family=Sarabun:wght@400;700&display=swap" rel="stylesheet">
+            <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;700&family=Noto+Serif+Thai:wght@400;700&family=Sarabun:wght@400;700&display=swap" rel="stylesheet">
             <style>
                 @page { margin: ${margins.top}mm ${margins.right}mm ${margins.bottom}mm ${margins.left}mm; size: A4 ${isLandscape ? 'landscape' : 'portrait'}; }
                 body { font-family: ${fontFamily}; font-size: 13px; line-height: 1.3; color: #000; margin: 0; padding: 0; }
@@ -500,7 +495,7 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
     `;
 
     // Helper functions to generate content strings
-    const renderCoverPage = (act: any, teamsCount: number, judgesCount: number, clusterLabel: string) => `
+    const renderCoverPage = (act: any, teamsCount: number, judgesCount: number, clusterLabel: string, venueInfo: any, schedule: any) => `
         <div class="page">
             <div class="cover-landscape">
                 <div class="cover-left">
@@ -511,6 +506,14 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                     <h1 class="cover-title">${act.name}</h1>
                     <div style="font-size: 18px; margin-bottom: 10px;">หมวดหมู่: ${act.category}</div>
                     
+                    <div style="margin-bottom: 15px; border: 1px dashed #666; padding: 10px; border-radius: 8px; background: #f9f9f9; text-align: left; display: inline-block; width: 90%;">
+                        <div style="font-weight: bold; margin-bottom: 4px;">📅 กำหนดการแข่งขัน:</div>
+                        ${schedule ? `
+                            <div style="font-size: 14px;">วันที่: ${schedule.date} ${schedule.timeRange ? `(${schedule.timeRange})` : ''}</div>
+                            <div style="font-size: 14px;">สถานที่: ${venueInfo?.name || '-'} ${schedule.building || ''} ${schedule.room ? 'ห้อง ' + schedule.room : ''}</div>
+                        ` : '<div style="color: #888; font-style: italic;">ยังไม่ระบุวันและสถานที่</div>'}
+                    </div>
+
                     <div class="cover-stats-grid">
                         <div class="stat-card">
                             <span class="stat-num">${teamsCount}</span>
@@ -734,8 +737,8 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
         // --- Logic Selection ---
         
         if (type === 'full-set') {
-            // 1. Cover Page (Landscape)
-            htmlContent += renderCoverPage(act, teams.length, judges.length, clusterLabel);
+            // 1. Cover Page (Landscape) - Updated to pass venueInfo & schedule
+            htmlContent += renderCoverPage(act, teams.length, judges.length, clusterLabel, venueInfo, schedule);
             
             // 2. Judge Sign-in (Landscape)
             htmlContent += renderJudgeSignin(act, judges, venueInfo, schedule);
@@ -746,6 +749,10 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
             
             // 4. Individual Score Sheets (Landscape)
             judges.forEach(judge => {
+                const phoneLine = judge.phone 
+                    ? `<span style="font-size: 12px;">เบอร์โทรศัพท์ ${judge.phone}</span>` 
+                    : 'เบอร์โทรศัพท์ ..........................................................';
+
                 htmlContent += `
                     <div class="page">
                         <div class="header">
@@ -765,11 +772,11 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                                     <tr>
                                         <th rowSpan="2" style="width: 40px;">ที่</th>
                                         <th rowSpan="2">ชื่อทีม / โรงเรียน</th>
-                                        <th colSpan="10">เกณฑ์คะแนน</th>
+                                        <th colSpan="${criteriaCount}">เกณฑ์คะแนน</th>
                                         <th rowSpan="2" style="width: 80px;">รวม (100)</th>
                                     </tr>
                                     <tr>
-                                        ${Array.from({length: 10}).map((_, i) => `<th style="width: 35px; font-size: 9px;">ข้อ ${i+1}</th>`).join('')}
+                                        ${Array.from({length: criteriaCount}).map((_, i) => `<th style="width: 35px; font-size: 9px;">ข้อ ${i+1}</th>`).join('')}
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -782,7 +789,7 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                                                     <strong>${t.teamName}</strong><br/>
                                                     <small style="font-size: 9px;">${schoolName}</small>
                                                 </td>
-                                                ${Array.from({length: 10}).map(() => `<td></td>`).join('')}
+                                                ${Array.from({length: criteriaCount}).map(() => `<td></td>`).join('')}
                                                 <td></td>
                                             </tr>
                                         `;
@@ -797,7 +804,8 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                             <div class="signature-section">
                                 <div class="signature-box">
                                     ลงชื่อ..........................................................${judge.role || 'กรรมการ'}<br/>
-                                    (${judge.judgeName})
+                                    (${judge.judgeName})<br/>
+                                    ${phoneLine}
                                 </div>
                             </div>
                         </div>
@@ -810,6 +818,10 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
 
         } else if (type === 'score-sheet-individual') {
             judges.forEach(judge => {
+                const phoneLine = judge.phone 
+                    ? `<span style="font-size: 12px;">เบอร์โทรศัพท์ ${judge.phone}</span>` 
+                    : 'เบอร์โทรศัพท์ ..........................................................';
+
                 htmlContent += `
                     <div class="page">
                         <div class="header">
@@ -829,11 +841,11 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                                     <tr>
                                         <th rowSpan="2" style="width: 40px;">ที่</th>
                                         <th rowSpan="2">ชื่อทีม / โรงเรียน</th>
-                                        <th colSpan="10">เกณฑ์คะแนน</th>
+                                        <th colSpan="${criteriaCount}">เกณฑ์คะแนน</th>
                                         <th rowSpan="2" style="width: 80px;">รวม (100)</th>
                                     </tr>
                                     <tr>
-                                        ${Array.from({length: 10}).map((_, i) => `<th style="width: 35px; font-size: 9px;">ข้อ ${i+1}</th>`).join('')}
+                                        ${Array.from({length: criteriaCount}).map((_, i) => `<th style="width: 35px; font-size: 9px;">ข้อ ${i+1}</th>`).join('')}
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -846,7 +858,7 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                                                     <strong>${t.teamName}</strong><br/>
                                                     <small style="font-size: 9px;">${schoolName}</small>
                                                 </td>
-                                                ${Array.from({length: 10}).map(() => `<td></td>`).join('')}
+                                                ${Array.from({length: criteriaCount}).map(() => `<td></td>`).join('')}
                                                 <td></td>
                                             </tr>
                                         `;
@@ -861,7 +873,8 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                             <div class="signature-section">
                                 <div class="signature-box">
                                     ลงชื่อ..........................................................${judge.role || 'กรรมการ'}<br/>
-                                    (${judge.judgeName})
+                                    (${judge.judgeName})<br/>
+                                    ${phoneLine}
                                 </div>
                             </div>
                         </div>
