@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { LayoutDashboard, Users, Trophy, School, Settings, LogOut, Award, FileBadge, IdCard, LogIn, UserCircle, Edit3, ScanLine, X, Camera, Search, ChevronRight, LayoutGrid, RotateCcw, Loader2, Zap, MapPin, Gavel, Megaphone, Printer, Hash, MonitorPlay, Menu } from 'lucide-react';
+import { LayoutDashboard, Users, Trophy, School, Settings, LogOut, Award, FileBadge, IdCard, LogIn, UserCircle, Edit3, ScanLine, X, Camera, Search, ChevronRight, LayoutGrid, RotateCcw, Loader2, Zap, MapPin, Gavel, Megaphone, Printer, Hash, MonitorPlay, Menu, PanelLeftClose, PanelLeft } from 'lucide-react';
 import { logoutLiff } from '../services/liff';
 import { User, AppData } from '../types';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
@@ -305,6 +305,7 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
   const location = useLocation();
   const [showScanner, setShowScanner] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true); // Default open on desktop
 
   const currentPath = location.pathname.substring(1) || 'dashboard';
   const activeTab = currentPath.split('/')[0] || 'dashboard';
@@ -390,13 +391,18 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
         }}
       />
 
-      {/* Desktop Sidebar */}
-      <aside className="hidden md:flex md:w-64 bg-white border-r border-gray-200 flex-col fixed inset-y-0">
-        <div className="h-16 flex items-center px-6 border-b border-gray-100 cursor-pointer" onClick={() => handleNav('dashboard')}>
-          <Trophy className="w-8 h-8 text-blue-600 mr-2" />
-          <div>
+      {/* Desktop Sidebar with Transitions */}
+      <aside 
+        className={`fixed inset-y-0 left-0 z-40 w-64 bg-white border-r border-gray-200 flex-col transition-transform duration-300 ease-in-out hidden md:flex ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
+      >
+        <div className="h-16 flex items-center justify-between px-6 border-b border-gray-100">
+          <div className="flex items-center cursor-pointer" onClick={() => handleNav('dashboard')}>
+            <Trophy className="w-8 h-8 text-blue-600 mr-2" />
             <span className="text-lg font-bold text-gray-900 tracking-tight block">CompManager</span>
           </div>
+          <button onClick={() => setIsSidebarOpen(false)} className="text-gray-400 hover:text-gray-600 p-1 rounded-md hover:bg-gray-100 transition-colors">
+            <PanelLeftClose className="w-5 h-5" />
+          </button>
         </div>
 
         <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
@@ -447,7 +453,9 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
       </aside>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col md:ml-64 mb-20 md:mb-0 h-screen overflow-hidden bg-gray-50">
+      <div 
+        className={`flex-1 flex flex-col mb-20 md:mb-0 h-screen overflow-hidden bg-gray-50 transition-all duration-300 ease-in-out ${isSidebarOpen ? 'md:ml-64' : 'md:ml-0'}`}
+      >
         <header className="md:hidden h-14 bg-white border-b border-gray-200 flex items-center justify-between px-4 sticky top-0 z-20">
             <div className="flex items-center" onClick={() => handleNav('dashboard')}>
                 <Trophy className="w-6 h-6 text-blue-600 mr-2" />
@@ -468,7 +476,18 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
             </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-4 md:p-8 pb-24 md:pb-8">
+        <main className="flex-1 overflow-y-auto p-4 md:p-8 pb-24 md:pb-8 relative">
+            {/* Desktop Sidebar Toggle (Visible when closed) */}
+            {!isSidebarOpen && (
+                <button 
+                    onClick={() => setIsSidebarOpen(true)}
+                    className="hidden md:flex fixed top-4 left-4 z-30 p-2 bg-white border border-gray-200 rounded-lg shadow-sm text-gray-600 hover:text-blue-600 hover:border-blue-300 transition-all"
+                    title="แสดงเมนู"
+                >
+                    <PanelLeft className="w-5 h-5" />
+                </button>
+            )}
+
             <div className="max-w-7xl mx-auto">
                 {isGuest && (
                     <div className="mb-4 bg-blue-50 border border-blue-100 text-blue-700 px-4 py-3 rounded-lg text-sm flex items-center">
