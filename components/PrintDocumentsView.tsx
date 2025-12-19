@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { AppData, User, Team, Judge, PrintConfig } from '../types';
-import { Printer, FileText, ClipboardList, Users, Mail, Trophy, LayoutGrid, Filter, Search, ChevronRight, School, UserCheck, CheckSquare, Square, Layers, Download, Settings, X, Save, CheckCircle, Loader2, Hash, Tag, UserRound, AlertTriangle, PrinterCheck, Lock, Check, FolderOpen, Type, MoveHorizontal, ArrowUpFromLine, ArrowDownToLine, ArrowLeftFromLine, ArrowRightFromLine } from 'lucide-react';
+import { Printer, FileText, ClipboardList, Users, Mail, Trophy, LayoutGrid, Filter, Search, ChevronRight, School, UserCheck, CheckSquare, Square, Layers, Download, Settings, X, Save, CheckCircle, Loader2, Hash, Tag, UserRound, AlertTriangle, PrinterCheck, Lock, Check, FolderOpen, Type, MoveHorizontal, ArrowUpFromLine, ArrowDownToLine, ArrowLeftFromLine, ArrowRightFromLine, QrCode as QrIcon } from 'lucide-react';
 import SearchableSelect from './SearchableSelect';
 import { getPrintConfig, savePrintConfig } from '../services/api';
 import QRCode from 'qrcode';
@@ -32,6 +32,20 @@ const DEFAULT_PRINT_CONFIG: PrintConfig = {
     criteriaCount: 10,
     margins: { top: 10, bottom: 10, left: 10, right: 10 },
     font: 'Sarabun'
+};
+
+// Helper component to render QR Code
+const QRCodeImage = ({ text, size = 200 }: { text: string, size?: number }) => {
+    const [src, setSrc] = useState('');
+    useEffect(() => {
+        if (!text) return;
+        QRCode.toDataURL(text, { width: size, margin: 1 })
+            .then(setSrc)
+            .catch(console.error);
+    }, [text, size]);
+    
+    if (!src) return <div className="w-full h-full bg-gray-100 animate-pulse rounded-lg flex items-center justify-center text-gray-300"><QrIcon className="w-8 h-8 opacity-20"/></div>;
+    return <img src={src} className="w-full h-full object-contain mix-blend-multiply" alt="QR Code" />;
 };
 
 const PrintConfigModal = ({ isOpen, onClose, onSave, data, currentUser, currentConfigs }: { 
@@ -255,6 +269,9 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
   const [printConfigs, setPrintConfigs] = useState<Record<string, PrintConfig>>({});
   const [selectedActivityIds, setSelectedActivityIds] = useState<Set<string>>(new Set());
   const [bulkConfirm, setBulkConfirm] = useState<{ isOpen: boolean, type: DocType, ids: string[] }>({ isOpen: false, type: 'judge-signin', ids: [] });
+  
+  // State for QR Code Modal
+  const [qrModalActivity, setQrModalActivity] = useState<any | null>(null);
 
   useEffect(() => {
       const loadConfigs = async () => {
@@ -860,6 +877,38 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20 relative">
+      
+      {/* Modal for QR Code Display */}
+      {qrModalActivity && (
+          <div className="fixed inset-0 bg-black/80 z-[300] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+              <div className="bg-white p-8 rounded-3xl shadow-2xl flex flex-col items-center max-w-sm w-full relative">
+                  <button 
+                      onClick={() => setQrModalActivity(null)}
+                      className="absolute top-4 right-4 p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
+                  >
+                      <X className="w-6 h-6 text-gray-600" />
+                  </button>
+                  
+                  <h3 className="text-lg font-bold text-gray-800 mb-2 text-center">QR Code สำหรับกรรมการ</h3>
+                  <p className="text-sm text-gray-500 mb-6 text-center px-4 leading-tight">{qrModalActivity.name}</p>
+                  
+                  <div className="bg-white p-2 rounded-xl border-2 border-dashed border-purple-200 mb-6 w-64 h-64 flex items-center justify-center">
+                       <QRCodeImage 
+                          text={`${window.location.origin}${window.location.pathname}#/score-input?activityId=${qrModalActivity.id}`} 
+                          size={256} 
+                       />
+                  </div>
+                  
+                  <div className="text-center space-y-2">
+                      <span className="text-xs text-purple-600 font-bold bg-purple-50 px-3 py-1 rounded-full border border-purple-100 block w-fit mx-auto">
+                          สแกนเพื่อเข้าสู่หน้ากรอกคะแนน
+                      </span>
+                      <p className="text-[10px] text-gray-400">ID: {qrModalActivity.id}</p>
+                  </div>
+              </div>
+          </div>
+      )}
+
       {isGuest && (
         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center gap-3 text-amber-800 shadow-sm animate-pulse">
             <Lock className="w-5 h-5 shrink-0" />
@@ -1077,7 +1126,13 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                               {judgesCount} กรรมการ
                           </span>
                       </div>
+                      
+                      {/* Grid for mobile actions + QR button */}
                       <div className="grid grid-cols-2 gap-2 ml-9">
+                          <button onClick={() => setQrModalActivity(act)} className="text-xs bg-white border border-gray-200 text-purple-600 py-1.5 rounded hover:bg-purple-50 flex items-center justify-center font-bold col-span-2">
+                              <QrIcon className="w-4 h-4 mr-1" /> QR Score
+                          </button>
+                          
                           <button onClick={() => handlePrintAction('full-set', [act.id])} className="text-xs bg-emerald-100 border border-emerald-200 text-emerald-700 py-1.5 rounded hover:bg-emerald-200 font-bold col-span-2">พิมพ์แบบจัดชุด (Full Set)</button>
                           <button onClick={() => handlePrintAction('judge-signin', [act.id])} className="text-xs bg-white border border-gray-200 text-gray-600 py-1.5 rounded hover:bg-gray-50">ใบเซ็นกรรมการ</button>
                           <button onClick={() => handlePrintAction('competitor-signin', [act.id])} className="text-xs bg-white border border-gray-200 text-gray-600 py-1.5 rounded hover:bg-gray-50">ใบเซ็นผู้แข่ง</button>
@@ -1144,6 +1199,10 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                                   </td>
                                   <td className="px-6 py-4">
                                       <div className="flex justify-center gap-1">
+                                          <button onClick={() => setQrModalActivity(act)} className="p-2 text-purple-600 hover:bg-purple-100 rounded-lg transition-colors border border-transparent hover:border-purple-200" title="QR Code กรอกคะแนน">
+                                              <QrIcon className="w-5 h-5" />
+                                          </button>
+                                          
                                           <button onClick={() => handlePrintAction('full-set', [act.id])} disabled={isGuest} className="p-2 text-emerald-600 hover:enabled:bg-emerald-100 rounded-lg transition-colors border border-transparent hover:enabled:border-emerald-200 disabled:opacity-30" title="พิมพ์แบบจัดชุด (Full Set)"><FolderOpen className="w-5 h-5" /></button>
                                           <button onClick={() => handlePrintAction('judge-signin', [act.id])} disabled={isGuest} className="p-2 text-blue-600 hover:enabled:bg-blue-100 rounded-lg transition-colors border border-transparent hover:enabled:border-blue-200 disabled:opacity-30" title="พิมพ์ใบเซ็นชื่อกรรมการ"><UserCheck className="w-5 h-5" /></button>
                                           <button onClick={() => handlePrintAction('competitor-signin', [act.id])} disabled={isGuest} className="p-2 text-indigo-600 hover:enabled:bg-indigo-100 rounded-lg transition-colors border border-transparent hover:enabled:border-indigo-200 disabled:opacity-30" title="พิมพ์ใบเซ็นชื่อผู้แข่ง"><Users className="w-5 h-5" /></button>
