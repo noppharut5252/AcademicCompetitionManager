@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { AppData, Team, School } from '../types';
 import { fetchData } from '../services/api';
-import { Trophy, Medal, Activity, Clock, Crown, TrendingUp, Sparkles, MonitorPlay, Maximize2, Minimize2, Wifi, WifiOff, RefreshCw, LayoutGrid, Users, Star, Heart, Zap, Award, School as SchoolIcon, Calendar, Image as ImageIcon, ChevronLeft, ChevronRight, MapPin, Camera, Aperture, Share2, X, Grid, ShieldCheck, Flame, Split, ArrowRightLeft } from 'lucide-react';
+import { Trophy, Medal, Activity, Clock, Crown, TrendingUp, Sparkles, MonitorPlay, Maximize2, Minimize2, Wifi, WifiOff, RefreshCw, LayoutGrid, Users, Star, Heart, Zap, Award, School as SchoolIcon, Calendar, Image as ImageIcon, ChevronLeft, ChevronRight, MapPin, Camera, Aperture, Share2, X, Grid, ShieldCheck, Flame, LocateFixed, CalendarClock, Split } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 // @ts-ignore
 import confetti from 'canvas-confetti';
@@ -113,328 +113,52 @@ const WelcomeSlide = ({ viewLevel }: { viewLevel: string }) => (
     </div>
 );
 
-// NEW: Dual Track Slide (Movement of 2 Competitions)
-const DualTrackSlide = ({ recentTeams }: { recentTeams: any[] }) => {
-    // Split recent results into two streams (simulating 2 venues/tracks)
-    const { trackA, trackB } = useMemo(() => {
-        const a: any[] = [];
-        const b: any[] = [];
-        recentTeams.slice(0, 8).forEach((t, i) => {
-            if (i % 2 === 0) a.push(t);
-            else b.push(t);
-        });
-        return { trackA: a, trackB: b };
-    }, [recentTeams]);
-
-    if (recentTeams.length < 2) return null;
-
-    const RenderCard = ({ item, colorTheme }: { item: any, colorTheme: 'blue' | 'orange' }) => (
-        <div className={`flex items-center p-4 bg-white/5 border ${colorTheme === 'blue' ? 'border-blue-500/30' : 'border-orange-500/30'} rounded-xl backdrop-blur-sm mb-3 shadow-lg transform transition-all hover:scale-[1.02]`}>
-            <div className="w-12 h-12 rounded-full border-2 border-white/20 overflow-hidden bg-black/30 mr-3 shrink-0">
-                <img src={getTeamImage(item)} className="w-full h-full object-cover" alt="" />
-            </div>
-            <div className="flex-1 min-w-0">
-                <div className={`text-[10px] uppercase font-bold tracking-wider mb-0.5 ${colorTheme === 'blue' ? 'text-blue-400' : 'text-orange-400'}`}>
-                    {item.timestamp ? new Date(item.timestamp).toLocaleTimeString('th-TH', {hour:'2-digit', minute:'2-digit'}) : 'Live'}
-                </div>
-                <h4 className="text-white font-bold text-sm truncate leading-tight">{item.teamName}</h4>
-                <p className="text-white/50 text-xs truncate">{item.activityName}</p>
-            </div>
-            <div className="text-right pl-2">
-                <div className="text-2xl font-black text-white leading-none">{item.score}</div>
-                {item.medal && (
-                    <div className={`text-[9px] px-1.5 py-0.5 rounded font-bold mt-1 ${item.medal.includes('Gold') ? 'bg-yellow-500 text-black' : 'bg-white/20 text-white'}`}>
-                        {item.medal.toUpperCase()}
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-
-    return (
-        <div className="flex flex-col h-full px-4 md:px-12 py-8 animate-in fade-in duration-700">
-            <div className="text-center mb-6">
-                <h2 className="text-3xl md:text-5xl font-black text-white uppercase tracking-wider flex items-center justify-center">
-                    <ArrowRightLeft className="w-10 h-10 md:w-14 md:h-14 mr-4 text-white/80" />
-                    Competition Pulse
-                </h2>
-                <p className="text-white/60 text-sm md:text-lg">Real-time updates across tracks</p>
-            </div>
-            
-            <div className="flex flex-col md:flex-row gap-6 md:gap-12 h-full overflow-hidden">
-                {/* Track A */}
-                <div className="flex-1 flex flex-col">
-                    <div className="flex items-center justify-between mb-4 border-b border-blue-500/30 pb-2">
-                        <span className="text-blue-400 font-bold uppercase tracking-widest text-sm flex items-center">
-                            <Activity className="w-4 h-4 mr-2" /> Track A
-                        </span>
-                        <div className="flex space-x-1">
-                            <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
-                            <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse delay-75"></span>
-                            <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse delay-150"></span>
-                        </div>
-                    </div>
-                    <div className="space-y-2">
-                        {trackA.map((t, i) => (
-                            <div key={i} className="animate-in slide-in-from-left duration-500" style={{ animationDelay: `${i * 100}ms` }}>
-                                <RenderCard item={t} colorTheme="blue" />
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
-                {/* Track B */}
-                <div className="flex-1 flex flex-col mt-4 md:mt-0">
-                    <div className="flex items-center justify-between mb-4 border-b border-orange-500/30 pb-2">
-                        <span className="text-orange-400 font-bold uppercase tracking-widest text-sm flex items-center">
-                            <Zap className="w-4 h-4 mr-2" /> Track B
-                        </span>
-                        <div className="flex space-x-1">
-                            <span className="w-2 h-2 bg-orange-500 rounded-full animate-pulse"></span>
-                            <span className="w-2 h-2 bg-orange-500 rounded-full animate-pulse delay-75"></span>
-                            <span className="w-2 h-2 bg-orange-500 rounded-full animate-pulse delay-150"></span>
-                        </div>
-                    </div>
-                    <div className="space-y-2">
-                        {trackB.map((t, i) => (
-                            <div key={i} className="animate-in slide-in-from-right duration-500" style={{ animationDelay: `${i * 100}ms` }}>
-                                <RenderCard item={t} colorTheme="orange" />
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-const SchoolRollCallSlide = ({ schools }: { schools: School[] }) => {
-    const displaySchools = useMemo(() => schools.sort(() => 0.5 - Math.random()).slice(0, 20), [schools]);
-    
-    return (
-        <div className="flex flex-col h-full justify-center px-4 animate-in fade-in duration-1000">
-            <h2 className="text-3xl md:text-5xl font-black text-white mb-10 text-center uppercase tracking-wider flex items-center justify-center">
-                <SchoolIcon className="w-12 h-12 md:w-16 md:h-16 mr-4 text-blue-400" />
-                Participating Schools
-            </h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
-                {displaySchools.map((s, idx) => (
-                    <div key={idx} className="bg-white/10 backdrop-blur-sm border border-white/10 rounded-xl p-4 flex items-center justify-center text-center shadow-lg transform hover:scale-105 transition-all">
-                        <span className="text-white font-bold text-sm md:text-lg">{s.SchoolName}</span>
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
-};
-
-const ScheduleSlide = ({ venues }: { venues: any[] }) => {
-    const schedules = useMemo(() => {
-        const list: any[] = [];
-        venues.forEach(v => {
-            v.scheduledActivities?.forEach((s: any) => {
-                list.push({ venue: v.name, ...s });
-            });
-        });
-        return list.slice(0, 5); // Show first 5 upcoming
-    }, [venues]);
-
-    return (
-        <div className="flex flex-col h-full justify-center px-4 md:px-20 animate-in slide-in-from-bottom duration-700">
-            <h2 className="text-3xl md:text-5xl font-black text-white mb-10 text-center uppercase tracking-wider flex items-center justify-center">
-                <Calendar className="w-12 h-12 md:w-16 md:h-16 mr-4 text-orange-400" />
-                Schedule
-            </h2>
-            <div className="space-y-4">
-                {schedules.map((s, idx) => (
-                    <div key={idx} className="flex items-center bg-white/5 border border-white/10 rounded-xl p-4">
-                        <div className="text-orange-400 font-bold text-xl mr-4 w-24">{s.timeRange || 'Today'}</div>
-                        <div className="flex-1">
-                            <div className="text-white font-bold text-lg">{s.activityName}</div>
-                            <div className="text-white/50 text-sm flex items-center">
-                                <MapPin className="w-3 h-3 mr-1" /> {s.venue} {s.room}
-                            </div>
-                        </div>
-                    </div>
-                ))}
-                {schedules.length === 0 && <div className="text-white/50 text-center">No upcoming schedules</div>}
-            </div>
-        </div>
-    );
-};
-
-// Helper for QR Icon
-const QrCodeIcon = ({className}:{className?:string}) => (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4h2v-4zm-6 0H6.414a1 1 0 00-.707.293L4.293 16.707A1 1 0 004 17.414V20h4.586a1 1 0 00.707-.293l1.414-1.414a1 1 0 00.293-.707V16zM6 6h6v6H6V6zm1.5 1.5v3h3v-3h-3zm6.5.5h1v1h-1V8zm1.5 1.5h1v1h-1V9.5zm-1.5 1.5h1v1h-1v-1zm1.5 1.5h1v1h-1v-1z" />
-    </svg>
-);
-
-const EngagementSlide = () => (
-    <div className="flex flex-col h-full justify-center items-center px-4 animate-in zoom-in duration-1000">
-        <div className="bg-white p-4 rounded-3xl shadow-2xl mb-8 transform rotate-3 hover:rotate-0 transition-transform duration-500">
-             <div className="w-48 h-48 bg-gray-900 rounded-xl flex items-center justify-center">
-                 <QrCodeIcon className="w-32 h-32 text-white" />
-             </div>
-        </div>
-        <h2 className="text-4xl md:text-6xl font-black text-white mb-4 text-center">Scan for Live Results</h2>
-        <p className="text-white/70 text-xl text-center max-w-lg">
-            Follow the competition in real-time on your mobile device.
-        </p>
-    </div>
-);
-
-const LeaderboardSlide = ({ schools, viewLevel }: { schools: any[], viewLevel: string }) => {
-    const topSchools = schools.slice(0, 5);
-    return (
-        <div className="flex flex-col h-full justify-center px-4 md:px-20 animate-in slide-in-from-left duration-700">
-            <h2 className="text-3xl md:text-5xl font-black text-white mb-10 text-center uppercase tracking-wider flex items-center justify-center">
-                <Crown className="w-12 h-12 md:w-16 md:h-16 mr-4 text-yellow-400" />
-                Leaderboard ({viewLevel === 'area' ? 'District' : 'Cluster'})
-            </h2>
-            <div className="space-y-3">
-                {topSchools.map((s, idx) => (
-                    <div key={idx} className="flex items-center bg-white/10 border border-white/10 rounded-xl p-4">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-xl mr-4 ${idx === 0 ? 'bg-yellow-500 text-black' : idx === 1 ? 'bg-gray-300 text-black' : idx === 2 ? 'bg-orange-500 text-black' : 'bg-white/20 text-white'}`}>
-                            {idx + 1}
-                        </div>
-                        <div className="flex-1 text-white font-bold text-lg md:text-xl truncate">{s.name}</div>
-                        <div className="flex gap-4 text-sm md:text-base">
-                            <div className="flex items-center text-yellow-400"><Medal className="w-4 h-4 mr-1" /> {s.gold}</div>
-                            <div className="flex items-center text-gray-300"><Medal className="w-4 h-4 mr-1" /> {s.silver}</div>
-                            <div className="font-mono font-bold text-white bg-white/20 px-2 py-0.5 rounded">{s.totalScore} pts</div>
-                        </div>
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
-};
-
-const PodiumSlide = ({ schools }: { schools: any[] }) => {
-    const top3 = schools.slice(0, 3);
-    if (top3.length < 3) return null; // Need at least 3 to show podium
-
-    return (
-        <div className="flex flex-col h-full justify-end pb-20 px-4 items-center animate-in zoom-in duration-700 relative">
-            <h2 className="absolute top-20 text-4xl md:text-6xl font-black text-white text-center uppercase tracking-widest drop-shadow-lg">
-                Top Schools
-            </h2>
-            <div className="flex items-end justify-center gap-4 md:gap-8 w-full max-w-4xl">
-                {/* 2nd Place */}
-                <div className="flex flex-col items-center w-1/3">
-                    <div className="text-white font-bold text-lg md:text-2xl text-center mb-2 drop-shadow-md">{top3[1].name}</div>
-                    <div className="w-full h-40 md:h-64 bg-gradient-to-t from-gray-400 to-gray-300 rounded-t-lg flex flex-col justify-end items-center p-4 shadow-xl border-t-4 border-gray-200">
-                        <span className="text-4xl md:text-6xl font-black text-gray-600 opacity-50">2</span>
-                        <div className="mt-2 bg-black/20 px-3 py-1 rounded text-white font-bold">{top3[1].gold} Gold</div>
-                    </div>
-                </div>
-                {/* 1st Place */}
-                <div className="flex flex-col items-center w-1/3 -mt-10 z-10">
-                    <Crown className="w-12 h-12 text-yellow-400 mb-2 animate-bounce" />
-                    <div className="text-white font-bold text-xl md:text-3xl text-center mb-2 drop-shadow-md">{top3[0].name}</div>
-                    <div className="w-full h-56 md:h-80 bg-gradient-to-t from-yellow-500 to-yellow-300 rounded-t-lg flex flex-col justify-end items-center p-4 shadow-2xl border-t-4 border-yellow-100">
-                        <span className="text-6xl md:text-8xl font-black text-yellow-700 opacity-50">1</span>
-                        <div className="mt-2 bg-black/20 px-4 py-2 rounded text-white font-bold text-lg">{top3[0].gold} Gold</div>
-                    </div>
-                </div>
-                {/* 3rd Place */}
-                <div className="flex flex-col items-center w-1/3">
-                    <div className="text-white font-bold text-lg md:text-2xl text-center mb-2 drop-shadow-md">{top3[2].name}</div>
-                    <div className="w-full h-32 md:h-48 bg-gradient-to-t from-orange-500 to-orange-400 rounded-t-lg flex flex-col justify-end items-center p-4 shadow-xl border-t-4 border-orange-300">
-                        <span className="text-4xl md:text-6xl font-black text-orange-800 opacity-50">3</span>
-                        <div className="mt-2 bg-black/20 px-3 py-1 rounded text-white font-bold">{top3[2].gold} Gold</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-const GallerySlide = ({ teams }: { teams: Team[] }) => {
-    const displayTeams = useMemo(() => teams.filter(t => t.score > 0).sort(() => 0.5 - Math.random()).slice(0, 8), [teams]);
-    
-    return (
-        <div className="flex flex-col h-full justify-center px-4 animate-in fade-in duration-1000">
-            <h2 className="text-3xl md:text-5xl font-black text-white mb-10 text-center uppercase tracking-wider">
-                Gallery of Champions
-            </h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {displayTeams.map((t, idx) => (
-                    <div key={idx} className="aspect-square bg-white/10 rounded-xl overflow-hidden relative group">
-                        <img src={getTeamImage(t)} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" alt="" />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex flex-col justify-end p-3">
-                            <div className="text-white font-bold text-sm truncate">{t.teamName}</div>
-                            <div className="text-white/70 text-xs truncate">{t.score} Points</div>
-                        </div>
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
-};
-
+// New Slide 1: The Gold Club (Hall of Fame)
 const GoldClubSlide = ({ teams }: { teams: any[] }) => {
-    const goldTeams = useMemo(() => teams.filter(t => (t.medal||'').includes('Gold')).slice(0, 10), [teams]);
-    
+    // Randomly select 8-10 gold winners to show each rotation to keep it fresh
+    const displayTeams = useMemo(() => {
+        const goldTeams = teams.filter(t => (t.medal || '').includes('Gold'));
+        return goldTeams.sort(() => 0.5 - Math.random()).slice(0, 10);
+    }, [teams]);
+
+    if (displayTeams.length === 0) return null;
+
     return (
-        <div className="flex flex-col h-full justify-center px-4 animate-in slide-in-from-bottom duration-700">
-            <div className="flex items-center justify-center mb-10">
-                <Star className="w-12 h-12 text-yellow-400 mr-3 fill-current animate-spin-slow" />
-                <h2 className="text-4xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-200 via-yellow-400 to-yellow-200 uppercase tracking-widest">
+        <div className="flex flex-col h-full justify-center px-4 md:px-16 animate-in fade-in duration-1000 relative overflow-hidden">
+            {/* Golden Particles Background */}
+            <div className="absolute inset-0 z-0">
+                <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-yellow-900/20 via-black to-black"></div>
+                {[...Array(20)].map((_, i) => (
+                    <div key={i} className="absolute bg-yellow-400 rounded-full opacity-40 animate-pulse" 
+                         style={{
+                             top: `${Math.random() * 100}%`, left: `${Math.random() * 100}%`,
+                             width: `${Math.random() * 4 + 2}px`, height: `${Math.random() * 4 + 2}px`,
+                             animationDelay: `${Math.random() * 2}s`
+                         }}>
+                    </div>
+                ))}
+            </div>
+
+            <div className="relative z-10 text-center mb-8">
+                <div className="inline-flex items-center gap-3 bg-gradient-to-r from-yellow-600 to-amber-700 px-6 py-2 rounded-full shadow-[0_0_20px_rgba(234,179,8,0.4)] border border-yellow-400/50 mb-4">
+                    <Star className="w-5 h-5 text-yellow-200 fill-current animate-[spin_3s_linear_infinite]" />
+                    <span className="text-lg font-bold text-white uppercase tracking-widest">Hall of Fame</span>
+                    <Star className="w-5 h-5 text-yellow-200 fill-current animate-[spin_3s_linear_infinite]" />
+                </div>
+                <h2 className="text-4xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-b from-yellow-300 via-yellow-100 to-amber-500 drop-shadow-sm uppercase">
                     The Gold Club
                 </h2>
-                <Star className="w-12 h-12 text-yellow-400 ml-3 fill-current animate-spin-slow" />
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-6xl mx-auto w-full">
-                {goldTeams.map((t, idx) => (
-                    <div key={idx} className="flex items-center bg-gradient-to-r from-yellow-900/40 to-black/40 border border-yellow-500/30 rounded-xl p-3">
-                        <div className="w-12 h-12 rounded-full border-2 border-yellow-400 overflow-hidden mr-3 shrink-0">
-                            <img src={getTeamImage(t)} className="w-full h-full object-cover" alt="" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                            <div className="text-yellow-100 font-bold text-lg truncate">{t.teamName}</div>
-                            <div className="text-yellow-500/70 text-xs truncate">{t.activityName}</div>
-                        </div>
-                        <div className="text-2xl font-black text-yellow-400">{t.score}</div>
-                    </div>
-                ))}
-                {goldTeams.length === 0 && <div className="col-span-full text-center text-yellow-100/50 text-xl">Waiting for the first Gold...</div>}
-            </div>
-        </div>
-    );
-};
 
-const SchoolExcellenceSlide = ({ schools }: { schools: any[] }) => {
-    const topPerforming = schools.sort((a, b) => b.gold - a.gold).slice(0, 4);
-    
-    return (
-        <div className="flex flex-col h-full justify-center px-4 animate-in zoom-in-95 duration-700">
-            <h2 className="text-3xl md:text-5xl font-black text-white mb-12 text-center uppercase tracking-wider flex items-center justify-center">
-                <Award className="w-12 h-12 md:w-16 md:h-16 mr-4 text-purple-400" />
-                School Excellence
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl mx-auto w-full">
-                {topPerforming.map((s, idx) => (
-                    <div key={idx} className="bg-white/5 border border-white/10 rounded-2xl p-6 flex flex-col items-center text-center hover:bg-white/10 transition-colors">
-                        <div className="w-20 h-20 bg-purple-600 rounded-full flex items-center justify-center text-3xl font-bold mb-4 shadow-lg border-4 border-purple-400">
-                            {s.name.charAt(0)}
+            <div className="relative z-10 grid grid-cols-2 md:grid-cols-5 gap-4">
+                {displayTeams.map((t, idx) => (
+                    <div key={idx} className="bg-white/5 border border-yellow-500/30 rounded-xl p-4 flex flex-col items-center text-center hover:bg-yellow-500/10 transition-all duration-500 group">
+                        <div className="w-16 h-16 rounded-full border-2 border-yellow-400 p-1 mb-3 bg-black/40 group-hover:scale-110 transition-transform">
+                            <img src={getTeamImage(t)} className="w-full h-full rounded-full object-cover" alt={t.teamName} />
                         </div>
-                        <h3 className="text-2xl font-bold text-white mb-2 line-clamp-1">{s.name}</h3>
-                        <div className="flex gap-4 mt-2">
-                            <div className="text-center">
-                                <div className="text-3xl font-black text-yellow-400">{s.gold}</div>
-                                <div className="text-xs text-white/50 uppercase">Gold</div>
-                            </div>
-                            <div className="text-center">
-                                <div className="text-3xl font-black text-gray-300">{s.silver}</div>
-                                <div className="text-xs text-white/50 uppercase">Silver</div>
-                            </div>
-                            <div className="text-center">
-                                <div className="text-3xl font-black text-white">{s.totalScore}</div>
-                                <div className="text-xs text-white/50 uppercase">Points</div>
-                            </div>
-                        </div>
+                        <h3 className="text-white font-bold text-sm line-clamp-1 w-full">{t.teamName}</h3>
+                        <p className="text-yellow-200/60 text-xs mt-1 line-clamp-1">{t.schoolName}</p>
+                        <div className="mt-2 text-xl font-black text-yellow-400">{t.score}</div>
                     </div>
                 ))}
             </div>
@@ -442,114 +166,62 @@ const SchoolExcellenceSlide = ({ schools }: { schools: any[] }) => {
     );
 };
 
-const BestInClassSlide = ({ teams, categories }: { teams: any[], categories: string[] }) => {
-    const bestTeams = useMemo(() => {
-        return categories.map(cat => {
-            const inCat = teams.filter(t => t.category === cat).sort((a, b) => b.score - a.score);
-            return { cat, team: inCat[0] };
-        }).filter(item => item.team).slice(0, 4);
-    }, [teams, categories]);
+// New Slide 2: School Podium (Top 3)
+const PodiumSlide = ({ schools }: { schools: any[] }) => {
+    // Take top 3 schools
+    const top3 = schools.slice(0, 3);
+    if (top3.length < 3) return null;
+
+    // Reorder for podium: 2nd (Left), 1st (Center), 3rd (Right)
+    const podiumOrder = [top3[1], top3[0], top3[2]]; 
 
     return (
-        <div className="flex flex-col h-full justify-center px-4 animate-in slide-in-from-right duration-700">
-            <h2 className="text-3xl md:text-5xl font-black text-white mb-10 text-center uppercase tracking-wider">
-                Best In Class
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-6xl mx-auto w-full">
-                {bestTeams.map((item, idx) => (
-                    <div key={idx} className="relative bg-white/10 rounded-xl overflow-hidden group">
-                        <div className="absolute top-0 left-0 bg-blue-600 text-white text-xs font-bold px-3 py-1 rounded-br-xl z-10 uppercase tracking-widest">
-                            {item.cat}
-                        </div>
-                        <div className="p-6 flex items-center">
-                            <div className="w-24 h-24 rounded-full border-4 border-white/20 overflow-hidden mr-6 shrink-0 bg-black/40">
-                                <img src={getTeamImage(item.team)} className="w-full h-full object-cover" alt="" />
+        <div className="flex flex-col h-full justify-end px-4 md:px-20 pb-10 animate-in slide-in-from-bottom duration-1000 relative">
+            <div className="absolute top-10 left-0 right-0 text-center">
+                <h2 className="text-3xl md:text-5xl font-black text-white mb-2 uppercase tracking-wider flex items-center justify-center">
+                    <Trophy className="w-10 h-10 md:w-14 md:h-14 mr-4 text-yellow-400" />
+                    School Rankings
+                </h2>
+                <p className="text-white/60 text-lg">Top 3 Performing Schools</p>
+            </div>
+
+            <div className="flex items-end justify-center gap-4 md:gap-8 h-[60%]">
+                {podiumOrder.map((s, idx) => {
+                    // Logic to determine height and color based on rank (idx 0 is Rank 2, idx 1 is Rank 1, idx 2 is Rank 3)
+                    const isFirst = idx === 1;
+                    const isSecond = idx === 0;
+                    const isThird = idx === 2;
+                    
+                    const heightClass = isFirst ? 'h-full' : isSecond ? 'h-[75%]' : 'h-[60%]';
+                    const colorClass = isFirst 
+                        ? 'bg-gradient-to-t from-yellow-600 to-yellow-400 border-yellow-300' 
+                        : isSecond 
+                            ? 'bg-gradient-to-t from-gray-600 to-gray-400 border-gray-300' 
+                            : 'bg-gradient-to-t from-orange-700 to-orange-500 border-orange-400';
+                    
+                    const rankNum = isFirst ? 1 : isSecond ? 2 : 3;
+
+                    return (
+                        <div key={idx} className={`relative flex flex-col justify-end w-1/3 max-w-[250px] ${heightClass} transition-all duration-1000 ease-out`}>
+                            {/* School Info Bubble */}
+                            <div className="mb-4 bg-white/10 backdrop-blur-md border border-white/20 p-4 rounded-2xl text-center shadow-xl animate-bounce" style={{ animationDuration: '3s', animationDelay: `${idx * 0.5}s` }}>
+                                <div className="text-2xl md:text-4xl font-black text-white mb-1">{s.totalScore}</div>
+                                <div className="text-xs text-white/60 font-bold uppercase">Total Score</div>
+                                <div className="mt-2 text-sm md:text-lg font-bold text-white line-clamp-2 leading-tight">{s.name}</div>
                             </div>
-                            <div className="min-w-0">
-                                <h3 className="text-2xl font-bold text-white mb-1 truncate">{item.team.teamName}</h3>
-                                <p className="text-white/60 mb-2 truncate">{item.team.schoolName}</p>
-                                <div className="inline-block bg-green-500 text-white font-bold px-3 py-1 rounded-full text-sm">
-                                    {item.team.score} Points
-                                </div>
+
+                            {/* The Bar */}
+                            <div className={`w-full flex-1 rounded-t-lg border-t-4 border-x border-white/30 shadow-[0_0_30px_rgba(0,0,0,0.5)] flex flex-col items-center justify-start pt-4 relative ${colorClass}`}>
+                                <div className="text-4xl md:text-6xl font-black text-white/90 drop-shadow-md">{rankNum}</div>
+                                {isFirst && <Crown className="w-12 h-12 text-white absolute -top-16 animate-pulse filter drop-shadow-[0_0_10px_gold]" />}
                             </div>
                         </div>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
         </div>
     );
 };
-
-const HighlightSlide = ({ winner }: { winner: any }) => {
-    if (!winner) return null;
-    return (
-        <div className="flex flex-col h-full justify-center items-center px-4 animate-in zoom-in duration-1000 relative">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-yellow-500/20 via-transparent to-transparent animate-pulse"></div>
-            
-            <div className="text-yellow-400 font-bold tracking-[0.5em] uppercase mb-4 animate-bounce">Spotlight Winner</div>
-            
-            <div className="relative mb-8 group">
-                <div className="absolute inset-0 bg-yellow-500 blur-2xl opacity-50 group-hover:opacity-80 transition-opacity rounded-full"></div>
-                <div className="w-48 h-48 md:w-64 md:h-64 rounded-full border-8 border-yellow-400 overflow-hidden relative z-10 shadow-2xl">
-                    <img src={getTeamImage(winner)} className="w-full h-full object-cover" alt="" />
-                </div>
-                <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 bg-yellow-500 text-black font-black px-6 py-2 rounded-full whitespace-nowrap border-4 border-white z-20 shadow-lg text-xl md:text-2xl">
-                    {winner.score} PTS
-                </div>
-            </div>
-
-            <h2 className="text-4xl md:text-7xl font-black text-white text-center mb-2 drop-shadow-lg tracking-tight">
-                {winner.teamName}
-            </h2>
-            <p className="text-xl md:text-3xl text-white/80 font-light mb-4">{winner.schoolName}</p>
-            <div className="bg-white/10 px-6 py-2 rounded-full backdrop-blur-md border border-white/20 text-white/90">
-                {winner.activityName}
-            </div>
-        </div>
-    );
-};
-
-const StatsSlide = ({ totalTeams, totalGold, totalScored, viewLevel }: { totalTeams: number, totalGold: number, totalScored: number, viewLevel: string }) => {
-    const progress = totalTeams > 0 ? Math.round((totalScored / totalTeams) * 100) : 0;
-    
-    return (
-        <div className="flex flex-col h-full justify-center px-4 md:px-20 animate-in fade-in duration-700">
-            <h2 className="text-3xl md:text-5xl font-black text-white mb-16 text-center uppercase tracking-wider">
-                Competition Status
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                <div className="bg-white/5 border border-white/10 p-8 rounded-2xl text-center flex flex-col items-center">
-                    <Users className="w-12 h-12 text-blue-400 mb-4" />
-                    <div className="text-5xl font-black text-white mb-2"><NumberTicker value={totalTeams} /></div>
-                    <div className="text-white/50 uppercase tracking-widest text-sm">Total Teams</div>
-                </div>
-                <div className="bg-white/5 border border-white/10 p-8 rounded-2xl text-center flex flex-col items-center relative overflow-hidden">
-                    <div className="absolute inset-0 bg-green-500/10" style={{ height: `${progress}%`, top: 'auto', bottom: 0 }}></div>
-                    <Activity className="w-12 h-12 text-green-400 mb-4 z-10" />
-                    <div className="text-5xl font-black text-white mb-2 z-10">{progress}%</div>
-                    <div className="text-white/50 uppercase tracking-widest text-sm z-10">Completed</div>
-                </div>
-                <div className="bg-white/5 border border-white/10 p-8 rounded-2xl text-center flex flex-col items-center">
-                    <Trophy className="w-12 h-12 text-yellow-400 mb-4" />
-                    <div className="text-5xl font-black text-yellow-400 mb-2"><NumberTicker value={totalGold} /></div>
-                    <div className="text-white/50 uppercase tracking-widest text-sm">Gold Medals</div>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-const ChampionBackdropSlide = () => (
-    <div className="flex flex-col h-full justify-center items-center px-4 animate-in zoom-in duration-1000 bg-gradient-to-b from-yellow-600/20 to-black">
-        <Trophy className="w-48 h-48 text-yellow-500 opacity-20 absolute animate-pulse" />
-        <h1 className="text-6xl md:text-9xl font-black text-transparent bg-clip-text bg-gradient-to-b from-yellow-300 to-yellow-600 text-center drop-shadow-2xl z-10">
-            CHAMPIONS
-        </h1>
-        <p className="text-white/60 text-xl md:text-2xl mt-4 tracking-[0.5em] uppercase z-10">
-            Rise to the Challenge
-        </p>
-    </div>
-);
 
 // IMPROVED: Photo Moment Slide (Mosaic)
 const PhotoOpSlide = ({ teams }: { teams: any[] }) => {
@@ -619,7 +291,273 @@ const PhotoOpSlide = ({ teams }: { teams: any[] }) => {
     );
 };
 
-// RecentResultsSlide (Unchanged)
+// NEW: School of Excellence (Honor Roll)
+const SchoolExcellenceSlide = ({ schools }: { schools: any[] }) => {
+    // Show schools with at least 1 gold medal
+    const goldSchools = useMemo(() => {
+        return schools
+            .filter(s => s.gold > 0)
+            .sort((a, b) => b.gold - a.gold)
+            .slice(0, 12);
+    }, [schools]);
+
+    if (goldSchools.length === 0) return null;
+
+    return (
+        <div className="flex flex-col h-full justify-center px-4 md:px-20 animate-in slide-in-from-bottom duration-700 bg-gradient-to-br from-slate-900 via-slate-800 to-black">
+            <div className="text-center mb-10">
+                <div className="inline-flex items-center gap-2 bg-yellow-500/20 text-yellow-400 px-4 py-1 rounded-full text-sm font-bold uppercase tracking-widest border border-yellow-500/50 mb-3">
+                    <ShieldCheck className="w-4 h-4" /> Honor Roll
+                </div>
+                <h2 className="text-4xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-100 via-yellow-300 to-amber-500 uppercase tracking-wide drop-shadow-sm">
+                    School of Excellence
+                </h2>
+                <p className="text-white/50 text-lg mt-2 font-light">Schools achieving Gold Medal standard</p>
+            </div>
+            
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 max-w-7xl mx-auto w-full">
+                {goldSchools.map((s, idx) => (
+                    <div key={idx} className="relative bg-gradient-to-b from-white/10 to-white/5 border border-yellow-500/30 p-6 rounded-xl flex flex-col items-center justify-center text-center hover:bg-white/15 transition-all duration-300 group hover:-translate-y-1 shadow-lg">
+                        {/* Gold Badge Icon */}
+                        <div className="absolute -top-4 -right-4 w-10 h-10 bg-yellow-500 rounded-full flex items-center justify-center font-black text-black shadow-lg z-10 border-2 border-slate-900">
+                            {s.gold}
+                        </div>
+                        <div className="w-16 h-16 bg-gradient-to-br from-yellow-400 to-amber-600 rounded-full flex items-center justify-center mb-4 shadow-[0_0_20px_rgba(234,179,8,0.3)]">
+                            <Award className="w-8 h-8 text-white" />
+                        </div>
+                        <h3 className="text-lg font-bold text-white leading-tight line-clamp-2 group-hover:text-yellow-200 transition-colors">{s.name}</h3>
+                        <div className="mt-2 text-xs text-yellow-500 font-bold uppercase tracking-widest">Gold Medalist</div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+// NEW: Best in Class (Category Leaders)
+const BestInClassSlide = ({ teams, categories }: { teams: any[], categories: string[] }) => {
+    // Pick 3 random categories and find top scorer for each
+    const leaders = useMemo(() => {
+        const result: any[] = [];
+        const shuffledCats = [...categories].sort(() => 0.5 - Math.random()).slice(0, 3);
+        
+        shuffledCats.forEach(cat => {
+            const teamsInCat = teams.filter(t => t.activityName && teams.some(tm => tm.activityName === t.activityName && tm.category === cat));
+            // Note: Since 'teams' here is processedTeams from main component, it might not have 'category' directly on it if not enriched.
+            // Let's assume 'teams' passed here has category info. If not, we might need to look up.
+            // *Correction*: In main component, `processedTeams` has score/school/name but might lack category.
+            // Let's filter by checking if any activity in the category matches.
+            // Simplified approach: Group all teams by category first.
+            const categoryTeams = teams.filter(t => t.category === cat);
+            if (categoryTeams.length > 0) {
+                const top = categoryTeams.reduce((prev, current) => (prev.score > current.score) ? prev : current);
+                result.push({ ...top, category: cat });
+            }
+        });
+        return result;
+    }, [teams, categories]);
+
+    if (leaders.length === 0) return null;
+
+    return (
+        <div className="flex flex-col h-full justify-center px-4 md:px-16 animate-in zoom-in-95 duration-700">
+            <h2 className="text-3xl md:text-5xl font-black text-white mb-12 text-center uppercase tracking-wider flex items-center justify-center">
+                <Flame className="w-12 h-12 md:w-16 md:h-16 mr-4 text-orange-500" />
+                Best in Class
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto w-full">
+                {leaders.map((item, idx) => (
+                    <div key={idx} className="bg-white/5 border border-white/10 rounded-2xl p-6 relative overflow-hidden hover:bg-white/10 transition-all duration-500 group">
+                        <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                            <Zap className="w-32 h-32 text-white" />
+                        </div>
+                        <div className="relative z-10">
+                            <div className="text-sm font-bold text-blue-400 uppercase tracking-widest mb-2 border-b border-white/10 pb-2">
+                                {item.category}
+                            </div>
+                            <div className="text-4xl font-black text-white mb-1">{item.score}</div>
+                            <div className="text-xs text-green-400 font-bold uppercase mb-4">Highest Score</div>
+                            <h3 className="text-xl font-bold text-white leading-tight mb-1 truncate">{item.teamName}</h3>
+                            <p className="text-white/50 text-sm truncate">{item.schoolName}</p>
+                            <p className="text-white/30 text-xs mt-4 truncate">{item.activityName}</p>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+// NEW: Champion Backdrop (Photo Booth)
+const ChampionBackdropSlide = () => (
+    <div className="flex flex-col h-full justify-center items-center px-4 animate-in fade-in duration-1000 relative overflow-hidden bg-gradient-to-br from-indigo-900 via-purple-900 to-black">
+        {/* Bokeh Effects */}
+        <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-blue-500/20 rounded-full blur-[100px] animate-pulse"></div>
+        <div className="absolute bottom-1/3 right-1/4 w-80 h-80 bg-purple-500/20 rounded-full blur-[120px] animate-pulse" style={{ animationDelay: '1s' }}></div>
+        <div className="absolute top-10 right-10 w-32 h-32 bg-yellow-500/10 rounded-full blur-[60px]"></div>
+
+        <div className="relative z-10 text-center flex flex-col items-center">
+            {/* Giant Trophy */}
+            <div className="mb-6 relative">
+                <div className="absolute inset-0 bg-yellow-500/30 blur-[60px] rounded-full"></div>
+                <Trophy className="w-48 h-48 md:w-64 md:h-64 text-yellow-400 drop-shadow-[0_10px_20px_rgba(0,0,0,0.5)]" />
+                <Sparkles className="absolute -top-4 -right-4 w-16 h-16 text-white animate-spin-slow" />
+                <Sparkles className="absolute bottom-4 -left-8 w-10 h-10 text-yellow-200 animate-pulse" />
+            </div>
+
+            <h1 className="text-6xl md:text-9xl font-black text-transparent bg-clip-text bg-gradient-to-b from-yellow-300 via-yellow-100 to-amber-600 drop-shadow-2xl tracking-tighter mb-4">
+                CHAMPION
+            </h1>
+            
+            <div className="bg-white/10 backdrop-blur-md border border-white/20 px-8 py-3 rounded-full">
+                <span className="text-xl md:text-2xl text-white font-medium tracking-[0.5em] uppercase">
+                    ACADEMIC COMPETITION
+                </span>
+            </div>
+        </div>
+    </div>
+);
+
+// NEW SLIDE: District Venues Dual View
+const DistrictVenuesSlide = ({ venues }: { venues: any[] }) => {
+    // Logic: Find top 2 venues with the most "Area" level activities
+    const topVenues = useMemo(() => {
+        return venues
+            .map(v => {
+                const areaActs = (v.scheduledActivities || []).filter((s: any) => s.level === 'area');
+                return { ...v, areaActs };
+            })
+            .filter(v => v.areaActs.length > 0)
+            .sort((a, b) => b.areaActs.length - a.areaActs.length)
+            .slice(0, 2);
+    }, [venues]);
+
+    if (topVenues.length === 0) return null;
+
+    return (
+        <div className="flex flex-col h-full justify-center px-4 md:px-16 animate-in fade-in duration-1000">
+             <div className="text-center mb-8 md:mb-12">
+                 <div className="inline-flex items-center gap-2 bg-purple-600/30 text-purple-300 px-4 py-1 rounded-full text-sm font-bold uppercase tracking-widest border border-purple-500/50 mb-3 animate-pulse">
+                    <LocateFixed className="w-4 h-4" /> Live District Updates
+                 </div>
+                 <h2 className="text-3xl md:text-5xl font-black text-white uppercase tracking-wider flex items-center justify-center drop-shadow-md">
+                    <MapPin className="w-10 h-10 md:w-14 md:h-14 mr-3 text-purple-400" />
+                    District Venues
+                 </h2>
+                 <p className="text-white/60 text-lg mt-2">Real-time schedule at key locations</p>
+             </div>
+
+             <div className={`grid gap-6 md:gap-10 h-[60%] w-full max-w-7xl mx-auto ${topVenues.length === 1 ? 'grid-cols-1 max-w-3xl' : 'grid-cols-1 md:grid-cols-2'}`}>
+                {topVenues.map((v, idx) => (
+                    <div key={idx} className="bg-slate-800/50 backdrop-blur-md border border-slate-700/50 rounded-3xl overflow-hidden flex flex-col shadow-2xl relative group">
+                        {/* Header Image */}
+                        <div className="h-32 md:h-40 relative shrink-0">
+                            <img 
+                                src={v.imageUrl || "https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=800&q=80"} 
+                                className="w-full h-full object-cover opacity-60 group-hover:opacity-80 transition-opacity duration-700" 
+                                alt={v.name}
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-transparent to-transparent"></div>
+                            <div className="absolute bottom-4 left-6">
+                                <h3 className="text-2xl font-bold text-white leading-tight drop-shadow-lg">{v.name}</h3>
+                                <p className="text-white/70 text-sm flex items-center mt-1"><Split className="w-3 h-3 mr-1"/> {v.areaActs.length} Activities</p>
+                            </div>
+                            <div className="absolute top-4 right-4 bg-red-600 text-white text-[10px] font-bold px-2 py-1 rounded flex items-center animate-pulse shadow-lg">
+                                <div className="w-2 h-2 bg-white rounded-full mr-1.5"></div> LIVE
+                            </div>
+                        </div>
+
+                        {/* Activities List */}
+                        <div className="flex-1 p-4 md:p-6 overflow-hidden flex flex-col">
+                            <h4 className="text-xs font-bold text-slate-400 uppercase mb-3 flex items-center tracking-wider">
+                                <CalendarClock className="w-4 h-4 mr-2" /> Current & Upcoming
+                            </h4>
+                            <div className="space-y-3 overflow-y-auto pr-2 custom-scrollbar">
+                                {v.areaActs.slice(0, 4).map((act: any, i: number) => (
+                                    <div key={i} className="flex items-start bg-white/5 p-3 rounded-xl border border-white/5 hover:bg-white/10 transition-colors">
+                                        <div className="text-center w-14 shrink-0 mr-3">
+                                            <div className="text-orange-400 font-bold text-sm">{act.timeRange ? act.timeRange.split('-')[0] : 'Now'}</div>
+                                            <div className="text-[10px] text-white/40 uppercase">Time</div>
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="text-white font-bold text-sm truncate">{act.activityName}</div>
+                                            <div className="text-white/50 text-xs mt-0.5 flex items-center">
+                                                <span className="w-1.5 h-1.5 bg-blue-500 rounded-full mr-1.5"></span>
+                                                {act.building} {act.room}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                ))}
+             </div>
+        </div>
+    )
+}
+
+const SchoolRollCallSlide = ({ schools }: { schools: any[] }) => {
+    const displaySchools = useMemo(() => {
+        const shuffled = [...schools].sort(() => 0.5 - Math.random());
+        return shuffled.slice(0, 12);
+    }, [schools]);
+
+    return (
+        <div className="flex flex-col h-full justify-center px-4 md:px-20 animate-in fade-in slide-in-from-bottom-8 duration-700">
+            <h2 className="text-3xl md:text-5xl font-black text-white mb-12 text-center uppercase tracking-wider flex items-center justify-center">
+                <SchoolIcon className="w-12 h-12 md:w-16 md:h-16 mr-4 text-blue-400" />
+                Participating Schools
+            </h2>
+            
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                {displaySchools.map((s, idx) => (
+                    <div key={idx} className="bg-white/5 border border-white/10 p-6 rounded-xl flex flex-col items-center justify-center text-center hover:bg-white/10 transition-all duration-300 group hover:scale-105 cursor-default shadow-lg">
+                        <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mb-3 group-hover:bg-blue-500/20 transition-colors">
+                            <SchoolIcon className="w-8 h-8 text-white/70 group-hover:text-white" />
+                        </div>
+                        <h3 className="text-lg font-bold text-white leading-tight line-clamp-2">{s.SchoolName}</h3>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+const LeaderboardSlide = ({ schools, viewLevel }: { schools: any[], viewLevel: string }) => (
+    <div className="flex flex-col h-full justify-center px-4 md:px-20 animate-in fade-in slide-in-from-bottom-4 duration-700">
+        <h2 className="text-3xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-amber-200 to-yellow-500 mb-2 text-center uppercase tracking-wider drop-shadow-sm flex items-center justify-center">
+            <Crown className="w-12 h-12 md:w-16 md:h-16 mr-4 text-yellow-400" />
+            Top Performance
+        </h2>
+        <p className="text-center text-white/60 mb-8 text-sm md:text-lg font-mono uppercase tracking-widest">
+            {viewLevel === 'area' ? 'District Level' : 'Cluster Level'} • Ranked by Average Score
+        </p>
+        <div className="space-y-4">
+            {schools.slice(0, 5).map((s, idx) => (
+                <div key={idx} className="flex items-center bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-4 md:p-5 shadow-xl transform transition-all duration-500 hover:scale-[1.02] hover:bg-white/20">
+                    <div className={`w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center text-xl md:text-2xl font-black mr-6 shrink-0 ${idx === 0 ? 'bg-yellow-400 text-yellow-900 shadow-[0_0_15px_rgba(250,204,21,0.6)]' : idx === 1 ? 'bg-gray-300 text-gray-800' : idx === 2 ? 'bg-orange-400 text-orange-900' : 'bg-white/10 text-white'}`}>
+                        {idx + 1}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                        <h3 className="text-xl md:text-2xl font-bold text-white truncate mb-1">{s.name}</h3>
+                        <div className="flex gap-4 text-sm text-white/60">
+                            <span className="flex items-center"><Users className="w-3 h-3 mr-1 text-blue-400"/> {s.entries} Teams</span>
+                            <span className="flex items-center"><Medal className="w-3 h-3 mr-1 text-yellow-400"/> {s.gold} Gold</span>
+                        </div>
+                    </div>
+                    <div className="text-right shrink-0 pl-4 border-l border-white/10">
+                        <div className="text-3xl md:text-5xl font-black text-green-400 leading-none">
+                            <NumberTicker value={s.avgScore} decimals={2} />
+                        </div>
+                        <div className="text-[10px] md:text-xs text-white/50 uppercase font-bold tracking-widest mt-1">Average Score</div>
+                    </div>
+                </div>
+            ))}
+        </div>
+    </div>
+);
+
 const RecentResultsSlide = ({ teams }: { teams: any[] }) => (
     <div className="flex flex-col h-full justify-center px-4 md:px-20 animate-in zoom-in-95 duration-700">
         <h2 className="text-3xl md:text-5xl font-black text-white mb-8 md:mb-12 text-center uppercase tracking-wider flex items-center justify-center">
@@ -650,6 +588,126 @@ const RecentResultsSlide = ({ teams }: { teams: any[] }) => (
         </div>
     </div>
 );
+
+const GallerySlide = ({ teams }: { teams: any[] }) => {
+    // Filter teams with photos or logos
+    const teamsWithPhotos = useMemo(() => {
+        const withPhotos = teams.filter(t => t.teamPhotoId || (t.logoUrl && t.logoUrl.startsWith('http')));
+        return withPhotos.sort(() => 0.5 - Math.random()).slice(0, 6);
+    }, [teams]);
+
+    if (teamsWithPhotos.length < 3) return null;
+
+    return (
+        <div className="flex flex-col h-full justify-center px-4 md:px-20 animate-in fade-in duration-1000">
+            <h2 className="text-3xl md:text-5xl font-black text-white mb-8 text-center uppercase tracking-wider flex items-center justify-center">
+                <ImageIcon className="w-12 h-12 md:w-16 md:h-16 mr-4 text-pink-400" />
+                Moments of Glory
+            </h2>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 auto-rows-[200px]">
+                {teamsWithPhotos.map((t, idx) => (
+                    <div key={idx} className={`relative rounded-2xl overflow-hidden shadow-lg group ${idx === 0 ? 'col-span-2 row-span-2' : ''}`}>
+                        <img 
+                            src={getTeamImage(t)} 
+                            className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110" 
+                            alt={t.teamName}
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-80"></div>
+                        <div className="absolute bottom-0 left-0 p-4">
+                            <div className="text-white font-bold text-lg leading-tight line-clamp-1">{t.teamName}</div>
+                            <div className="text-white/70 text-xs line-clamp-1">{t.schoolName}</div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+const ScheduleSlide = ({ venues }: { venues: any[] }) => {
+    const upcomingEvents = useMemo(() => {
+        const events: any[] = [];
+        venues.forEach(v => {
+            if (v.scheduledActivities) {
+                v.scheduledActivities.forEach((s: any) => {
+                    events.push({ ...s, venueName: v.name });
+                });
+            }
+        });
+        // Sort by date/time (mock logic for demo, assume future or random subset)
+        return events.slice(0, 5); 
+    }, [venues]);
+
+    if (upcomingEvents.length === 0) return null;
+
+    return (
+        <div className="flex flex-col h-full justify-center px-4 md:px-20 animate-in slide-in-from-right duration-700">
+            <h2 className="text-3xl md:text-5xl font-black text-white mb-10 text-center uppercase tracking-wider flex items-center justify-center">
+                <Calendar className="w-12 h-12 md:w-16 md:h-16 mr-4 text-orange-400" />
+                Competition Schedule
+            </h2>
+            <div className="space-y-4 max-w-4xl mx-auto w-full">
+                {upcomingEvents.map((evt, idx) => (
+                    <div key={idx} className="bg-white/10 backdrop-blur-md border border-white/10 rounded-xl p-4 flex items-center gap-6 hover:bg-white/15 transition-colors">
+                        <div className="text-center w-20 shrink-0">
+                            <div className="text-xs text-orange-300 font-bold uppercase">{evt.timeRange || 'TBA'}</div>
+                            <div className="text-2xl font-black text-white">{evt.date ? evt.date.split(' ')[0] : 'Today'}</div>
+                        </div>
+                        <div className="w-px h-12 bg-white/20"></div>
+                        <div className="flex-1 min-w-0">
+                            <div className="text-xl font-bold text-white truncate">{evt.activityName}</div>
+                            <div className="text-white/60 flex items-center gap-2 text-sm">
+                                <MapPin className="w-3 h-3" /> {evt.venueName} - {evt.room}
+                            </div>
+                        </div>
+                        {evt.level && (
+                            <div className="px-3 py-1 rounded-full bg-black/20 text-xs font-bold text-white/80 border border-white/10">
+                                {evt.level === 'area' ? 'Area' : 'Cluster'}
+                            </div>
+                        )}
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+const HighlightSlide = ({ winner }: { winner: any }) => {
+    if (!winner) return null;
+    const imgUrl = getTeamImage(winner);
+    return (
+        <div className="flex flex-col h-full justify-center items-center px-4 animate-in zoom-in duration-1000 relative">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-yellow-500/20 via-transparent to-transparent animate-pulse"></div>
+            <div className="relative z-10 text-center space-y-6">
+                <div className="inline-flex items-center gap-2 bg-yellow-500/20 text-yellow-300 px-4 py-1 rounded-full text-sm font-bold uppercase tracking-widest border border-yellow-500/50 mb-4 animate-bounce">
+                    <Sparkles className="w-4 h-4" /> Spotlight Winner
+                </div>
+                <div className="w-32 h-32 md:w-48 md:h-48 rounded-full border-4 border-yellow-400 p-1 mx-auto shadow-[0_0_50px_rgba(250,204,21,0.5)] bg-black/40 relative">
+                    <div className="absolute -top-6 left-1/2 -translate-x-1/2">
+                        <Crown className="w-12 h-12 text-yellow-400 drop-shadow-lg animate-pulse" />
+                    </div>
+                    <img src={imgUrl} className="w-full h-full rounded-full object-cover" alt={winner.teamName} />
+                </div>
+                <div>
+                    <h2 className="text-3xl md:text-6xl font-black text-white mb-2 drop-shadow-lg">{winner.teamName}</h2>
+                    <p className="text-xl md:text-3xl text-white/80 font-medium">{winner.schoolName}</p>
+                </div>
+                <div className="flex justify-center gap-8 mt-8">
+                    <div className="text-center">
+                        <div className="text-sm text-gray-400 uppercase tracking-wider font-bold">Score</div>
+                        <div className="text-4xl md:text-6xl font-black text-yellow-400">{winner.score}</div>
+                    </div>
+                    <div className="w-px bg-white/20"></div>
+                    <div className="text-center">
+                        <div className="text-sm text-gray-400 uppercase tracking-wider font-bold">Award</div>
+                        <div className="text-4xl md:text-6xl font-black text-yellow-400 uppercase">{winner.medal}</div>
+                    </div>
+                </div>
+                <div className="mt-8 text-sm text-white/40">{winner.activityName}</div>
+            </div>
+        </div>
+    );
+};
 
 const TeamsToWatchSlide = ({ teams }: { teams: any[] }) => {
     // Top 5 teams to watch
@@ -687,6 +745,57 @@ const TeamsToWatchSlide = ({ teams }: { teams: any[] }) => {
     );
 };
 
+const StatsSlide = ({ totalTeams, totalGold, totalScored, viewLevel }: { totalTeams: number, totalGold: number, totalScored: number, viewLevel: string }) => (
+    <div className="flex flex-col h-full justify-center px-4 animate-in fade-in duration-1000">
+        <h2 className="text-3xl md:text-5xl font-black text-white mb-16 text-center uppercase tracking-wider">
+            Competition Statistics
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto w-full">
+            <div className="bg-gradient-to-br from-blue-600/20 to-blue-900/20 border border-blue-500/30 p-8 rounded-3xl text-center backdrop-blur-sm">
+                <div className="text-6xl md:text-8xl font-black text-blue-400 mb-4">
+                    <NumberTicker value={totalTeams} />
+                </div>
+                <div className="text-xl text-white font-bold uppercase tracking-widest">Total Teams</div>
+                <div className="text-white/40 text-sm mt-2">{viewLevel === 'area' ? 'District Level' : 'Cluster Level'}</div>
+            </div>
+            <div className="bg-gradient-to-br from-green-600/20 to-green-900/20 border border-green-500/30 p-8 rounded-3xl text-center backdrop-blur-sm">
+                <div className="text-6xl md:text-8xl font-black text-green-400 mb-4">
+                    <NumberTicker value={totalScored} />
+                </div>
+                <div className="text-xl text-white font-bold uppercase tracking-widest">Scored</div>
+                <div className="text-white/40 text-sm mt-2">Teams Evaluated</div>
+            </div>
+            <div className="bg-gradient-to-br from-yellow-600/20 to-yellow-900/20 border border-yellow-500/30 p-8 rounded-3xl text-center backdrop-blur-sm relative overflow-hidden">
+                <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-20"></div>
+                <div className="text-6xl md:text-8xl font-black text-yellow-400 mb-4 relative z-10">
+                    <NumberTicker value={totalGold} />
+                </div>
+                <div className="text-xl text-white font-bold uppercase tracking-widest relative z-10">Gold Medals</div>
+                <div className="text-white/40 text-sm mt-2 relative z-10">Excellence Achieved</div>
+            </div>
+        </div>
+    </div>
+);
+
+const EngagementSlide = () => (
+    <div className="flex flex-col h-full justify-center items-center px-4 animate-in zoom-in duration-1000 bg-gradient-to-b from-slate-900 to-indigo-950">
+        <div className="bg-white p-4 rounded-3xl shadow-[0_0_50px_rgba(255,255,255,0.2)] mb-8 transform rotate-3 hover:rotate-0 transition-transform duration-500">
+            {/* Generate current URL QR code */}
+            <img 
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(window.location.href)}`} 
+                alt="Scan QR" 
+                className="w-48 h-48 md:w-64 md:h-64 rounded-xl"
+            />
+        </div>
+        <h2 className="text-4xl md:text-6xl font-black text-white mb-4 text-center">JOIN THE ACTION</h2>
+        <p className="text-xl text-indigo-300 mb-8 text-center max-w-md">Scan to view live results on your mobile device</p>
+        <div className="flex items-center gap-2 text-white/40 text-sm font-mono">
+            <MonitorPlay className="w-4 h-4" />
+            <span>real-time updates</span>
+        </div>
+    </div>
+);
+
 // --- Main View ---
 
 const LiveScoreView: React.FC<LiveScoreViewProps> = ({ initialData }) => {
@@ -707,7 +816,6 @@ const LiveScoreView: React.FC<LiveScoreViewProps> = ({ initialData }) => {
 
     // Derived Data Calculation
     const { leaderboard, recentResults, spotlightWinner, stats, teamsToWatch, allTeams, categories } = useMemo(() => {
-        // ... (Same Logic as before) ...
         const teams = data.teams || [];
         const activities = data.activities || [];
         
@@ -836,6 +944,84 @@ const LiveScoreView: React.FC<LiveScoreViewProps> = ({ initialData }) => {
         }
     };
 
+    // New: District Venues Slide
+    const DistrictVenuesSlide = ({ venues }: { venues: any[] }) => {
+        const topVenues = useMemo(() => {
+            return venues
+                .map(v => {
+                    const areaActs = (v.scheduledActivities || []).filter((s: any) => s.level === 'area');
+                    return { ...v, areaActs };
+                })
+                .filter(v => v.areaActs.length > 0)
+                .sort((a, b) => b.areaActs.length - a.areaActs.length)
+                .slice(0, 2);
+        }, [venues]);
+
+        if (topVenues.length === 0) return null;
+
+        return (
+            <div className="flex flex-col h-full justify-center px-4 md:px-16 animate-in fade-in duration-1000">
+                 <div className="text-center mb-8 md:mb-12">
+                     <div className="inline-flex items-center gap-2 bg-purple-600/30 text-purple-300 px-4 py-1 rounded-full text-sm font-bold uppercase tracking-widest border border-purple-500/50 mb-3 animate-pulse">
+                        <LocateFixed className="w-4 h-4" /> Live District Updates
+                     </div>
+                     <h2 className="text-3xl md:text-5xl font-black text-white uppercase tracking-wider flex items-center justify-center drop-shadow-md">
+                        <MapPin className="w-10 h-10 md:w-14 md:h-14 mr-3 text-purple-400" />
+                        District Venues
+                     </h2>
+                     <p className="text-white/60 text-lg mt-2">Real-time schedule at key locations</p>
+                 </div>
+
+                 <div className={`grid gap-6 md:gap-10 h-[60%] w-full max-w-7xl mx-auto ${topVenues.length === 1 ? 'grid-cols-1 max-w-3xl' : 'grid-cols-1 md:grid-cols-2'}`}>
+                    {topVenues.map((v, idx) => (
+                        <div key={idx} className="bg-slate-800/50 backdrop-blur-md border border-slate-700/50 rounded-3xl overflow-hidden flex flex-col shadow-2xl relative group">
+                            {/* Header Image */}
+                            <div className="h-32 md:h-40 relative shrink-0">
+                                <img 
+                                    src={v.imageUrl || "https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=800&q=80"} 
+                                    className="w-full h-full object-cover opacity-60 group-hover:opacity-80 transition-opacity duration-700" 
+                                    alt={v.name}
+                                />
+                                <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-transparent to-transparent"></div>
+                                <div className="absolute bottom-4 left-6">
+                                    <h3 className="text-2xl font-bold text-white leading-tight drop-shadow-lg">{v.name}</h3>
+                                    <p className="text-white/70 text-sm flex items-center mt-1"><Split className="w-3 h-3 mr-1"/> {v.areaActs.length} Activities</p>
+                                </div>
+                                <div className="absolute top-4 right-4 bg-red-600 text-white text-[10px] font-bold px-2 py-1 rounded flex items-center animate-pulse shadow-lg">
+                                    <div className="w-2 h-2 bg-white rounded-full mr-1.5"></div> LIVE
+                                </div>
+                            </div>
+
+                            {/* Activities List */}
+                            <div className="flex-1 p-4 md:p-6 overflow-hidden flex flex-col">
+                                <h4 className="text-xs font-bold text-slate-400 uppercase mb-3 flex items-center tracking-wider">
+                                    <CalendarClock className="w-4 h-4 mr-2" /> Current & Upcoming
+                                </h4>
+                                <div className="space-y-3 overflow-y-auto pr-2 custom-scrollbar">
+                                    {v.areaActs.slice(0, 4).map((act: any, i: number) => (
+                                        <div key={i} className="flex items-start bg-white/5 p-3 rounded-xl border border-white/5 hover:bg-white/10 transition-colors">
+                                            <div className="text-center w-14 shrink-0 mr-3">
+                                                <div className="text-orange-400 font-bold text-sm">{act.timeRange ? act.timeRange.split('-')[0] : 'Now'}</div>
+                                                <div className="text-[10px] text-white/40 uppercase">Time</div>
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="text-white font-bold text-sm truncate">{act.activityName}</div>
+                                                <div className="text-white/50 text-xs mt-0.5 flex items-center">
+                                                    <span className="w-1.5 h-1.5 bg-blue-500 rounded-full mr-1.5"></span>
+                                                    {act.building} {act.room}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                 </div>
+            </div>
+        )
+    }
+
     // Define Slides Order dynamically
     const slides = useMemo(() => {
         const list = [];
@@ -846,17 +1032,14 @@ const LiveScoreView: React.FC<LiveScoreViewProps> = ({ initialData }) => {
             list.push(<SchoolRollCallSlide key="rollcall" schools={data.schools} />);
             if (data.venues.length > 0) list.push(<ScheduleSlide key="schedule" venues={data.venues} />);
             if (viewLevel === 'area' && teamsToWatch.length > 0) list.push(<TeamsToWatchSlide key="watch" teams={teamsToWatch} />);
+            if (viewLevel === 'area' && data.venues.length > 0) list.push(<DistrictVenuesSlide key="venues" venues={data.venues} />);
             list.push(<EngagementSlide key="engagement" />);
         } else {
             // Active Mode
             list.push(<LeaderboardSlide key="leaderboard" schools={leaderboard} viewLevel={viewLevel} />);
             list.push(<PodiumSlide key="podium" schools={leaderboard} />);
             
-            if (recentResults.length > 0) {
-                list.push(<RecentResultsSlide key="recent" teams={recentResults} />);
-                // NEW: Dual Track Slide for showing 2 competitions movement
-                list.push(<DualTrackSlide key="dualtrack" recentTeams={recentResults} />); 
-            }
+            if (recentResults.length > 0) list.push(<RecentResultsSlide key="recent" teams={recentResults} />);
             if (data.teams.length > 0) list.push(<GallerySlide key="gallery" teams={data.teams} />); 
             
             list.push(<GoldClubSlide key="gold" teams={allTeams} />);
@@ -866,6 +1049,7 @@ const LiveScoreView: React.FC<LiveScoreViewProps> = ({ initialData }) => {
             if (spotlightWinner) list.push(<HighlightSlide key="highlight" winner={spotlightWinner} />);
             if (viewLevel === 'area' && teamsToWatch.length > 0) list.push(<TeamsToWatchSlide key="watch" teams={teamsToWatch} />);
             if (data.venues.length > 0) list.push(<ScheduleSlide key="schedule" venues={data.venues} />);
+            if (viewLevel === 'area' && data.venues.length > 0) list.push(<DistrictVenuesSlide key="venues" venues={data.venues} />);
             
             list.push(<StatsSlide key="stats" totalTeams={stats.totalTeams} totalGold={stats.totalGold} totalScored={stats.totalScored} viewLevel={viewLevel} />);
             list.push(<PhotoOpSlide key="photo" teams={allTeams} />); // Updated Mosaic
