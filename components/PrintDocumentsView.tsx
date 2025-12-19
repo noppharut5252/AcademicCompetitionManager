@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { AppData, User, Team, Judge, PrintConfig } from '../types';
-import { Printer, FileText, ClipboardList, Users, Mail, Trophy, LayoutGrid, Filter, Search, ChevronRight, School, UserCheck, CheckSquare, Square, Layers, Download, Settings, X, Save, CheckCircle, Loader2, Hash, Tag, UserRound, AlertTriangle, PrinterCheck, Lock, Check, FolderOpen } from 'lucide-react';
+import { Printer, FileText, ClipboardList, Users, Mail, Trophy, LayoutGrid, Filter, Search, ChevronRight, School, UserCheck, CheckSquare, Square, Layers, Download, Settings, X, Save, CheckCircle, Loader2, Hash, Tag, UserRound, AlertTriangle, PrinterCheck, Lock, Check, FolderOpen, Type, MoveHorizontal, ArrowUpFromLine, ArrowDownToLine, ArrowLeftFromLine, ArrowRightFromLine } from 'lucide-react';
 import SearchableSelect from './SearchableSelect';
 import { getPrintConfig, savePrintConfig } from '../services/api';
 import QRCode from 'qrcode';
@@ -31,6 +31,16 @@ const DEFAULT_PRINT_CONFIG: PrintConfig = {
     headerTitle: 'งานศิลปหัตถกรรมนักเรียน ครั้งที่ 72'
 };
 
+interface LocalPrintSettings {
+    margins: { top: number; bottom: number; left: number; right: number };
+    font: 'Sarabun' | 'Noto Serif Thai';
+}
+
+const DEFAULT_LOCAL_SETTINGS: LocalPrintSettings = {
+    margins: { top: 10, bottom: 10, left: 10, right: 10 },
+    font: 'Sarabun'
+};
+
 const PrintConfigModal = ({ isOpen, onClose, onSave, data, currentUser, currentConfigs }: { 
     isOpen: boolean, 
     onClose: () => void, 
@@ -45,25 +55,53 @@ const PrintConfigModal = ({ isOpen, onClose, onSave, data, currentUser, currentC
 
     const [selectedContext, setSelectedContext] = useState<string>(isAdminOrArea ? 'area' : (userClusterID || 'area'));
     const [config, setConfig] = useState<PrintConfig>({ ...DEFAULT_PRINT_CONFIG });
+    
+    // Local Settings State
+    const [localSettings, setLocalSettings] = useState<LocalPrintSettings>(DEFAULT_LOCAL_SETTINGS);
+    
     const [isSaving, setIsSaving] = useState(false);
 
     useEffect(() => {
+        // Load Server Config
         const existing = currentConfigs[selectedContext];
         if (existing) {
             setConfig({ ...DEFAULT_PRINT_CONFIG, ...existing });
         } else {
             setConfig({ ...DEFAULT_PRINT_CONFIG, id: selectedContext });
         }
+
+        // Load Local Settings
+        const savedLocal = localStorage.getItem('comp_print_settings');
+        if (savedLocal) {
+            try {
+                setLocalSettings(JSON.parse(savedLocal));
+            } catch {
+                setLocalSettings(DEFAULT_LOCAL_SETTINGS);
+            }
+        }
     }, [selectedContext, currentConfigs]);
 
     const handleSave = async () => {
         setIsSaving(true);
+        // Save Server Config
         const success = await savePrintConfig(selectedContext, config);
+        
+        // Save Local Config
+        localStorage.setItem('comp_print_settings', JSON.stringify(localSettings));
+
         setIsSaving(false);
         if (success) {
             onSave(selectedContext, config);
             onClose();
         }
+    };
+
+    const updateMargin = (key: keyof LocalPrintSettings['margins'], value: string) => {
+        const num = parseInt(value) || 0;
+        setLocalSettings(prev => ({
+            ...prev,
+            margins: { ...prev.margins, [key]: num }
+        }));
     };
 
     if (!isOpen) return null;
@@ -72,72 +110,129 @@ const PrintConfigModal = ({ isOpen, onClose, onSave, data, currentUser, currentC
 
     return (
         <div className="fixed inset-0 bg-black/50 z-[250] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col">
-                <div className="bg-blue-600 px-6 py-4 flex justify-between items-center text-white">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+                <div className="bg-blue-600 px-6 py-4 flex justify-between items-center text-white shrink-0">
                     <h3 className="text-lg font-bold flex items-center">
                         <Settings className="w-5 h-5 mr-2" />
                         ตั้งค่าการพิมพ์เอกสาร
                     </h3>
                     <button onClick={onClose} className="p-1 hover:bg-white/20 rounded-full transition-colors"><X className="w-6 h-6"/></button>
                 </div>
-                <div className="p-6 space-y-5 overflow-y-auto">
-                    <div>
-                        <label className="block text-sm font-bold text-gray-700 mb-1">เลือกระดับที่ต้องการตั้งค่า</label>
-                        <select 
-                            className="w-full border rounded-lg px-3 py-2 text-sm bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none"
-                            value={selectedContext}
-                            onChange={(e) => setSelectedContext(e.target.value)}
-                        >
-                            <option value="area">ระดับเขตพื้นที่การศึกษา (Area)</option>
-                            <optgroup label="ระดับกลุ่มเครือข่าย (Clusters)">
-                                {clusterOptions.map(c => (
-                                    <option key={c.ClusterID} value={c.ClusterID}>{c.ClusterName}</option>
-                                ))}
-                            </optgroup>
-                        </select>
-                    </div>
+                <div className="p-6 space-y-6 overflow-y-auto">
+                    
+                    {/* Server Side Configs */}
+                    <div className="space-y-4 border-b pb-6">
+                        <h4 className="text-sm font-bold text-gray-800 flex items-center uppercase tracking-wide">
+                            <Users className="w-4 h-4 mr-2" /> ตั้งค่าเนื้อหา (บันทึกลงระบบ)
+                        </h4>
+                        <div>
+                            <label className="block text-sm font-bold text-gray-700 mb-1">เลือกระดับที่ต้องการตั้งค่า</label>
+                            <select 
+                                className="w-full border rounded-lg px-3 py-2 text-sm bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none"
+                                value={selectedContext}
+                                onChange={(e) => setSelectedContext(e.target.value)}
+                            >
+                                <option value="area">ระดับเขตพื้นที่การศึกษา (Area)</option>
+                                <optgroup label="ระดับกลุ่มเครือข่าย (Clusters)">
+                                    {clusterOptions.map(c => (
+                                        <option key={c.ClusterID} value={c.ClusterID}>{c.ClusterName}</option>
+                                    ))}
+                                </optgroup>
+                            </select>
+                        </div>
 
-                    <div>
-                        <label className="block text-sm font-bold text-gray-700 mb-1">หัวเรื่องเอกสาร (Header Title)</label>
-                        <input 
-                            className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                            value={config.headerTitle}
-                            onChange={e => setConfig({...config, headerTitle: e.target.value})}
-                            placeholder="เช่น งานศิลปหัตถกรรมนักเรียน ครั้งที่ 72"
-                        />
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-bold text-gray-700 mb-1">จำนวนช่องคะแนนสำรอง (ในกรณีไม่พบรายชื่อกรรมการ)</label>
-                        <input 
-                            type="number" min="1" max="10"
-                            className="w-full border rounded-lg px-3 py-2 text-sm"
-                            value={config.scoreColsCount}
-                            onChange={e => setConfig({...config, scoreColsCount: parseInt(e.target.value) || 1})}
-                        />
-                        <p className="text-[10px] text-gray-400 mt-1">* ระบบจะปรับช่องคะแนนตามจำนวนกรรมการที่ตัดสินจริงโดยอัตโนมัติ</p>
-                    </div>
-
-                    <div className="space-y-3 pt-2">
-                        <label className="flex items-center gap-3 cursor-pointer group">
+                        <div>
+                            <label className="block text-sm font-bold text-gray-700 mb-1">หัวเรื่องเอกสาร (Header Title)</label>
                             <input 
-                                type="checkbox" className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
-                                checked={config.includeJudges}
-                                onChange={e => setConfig({...config, includeJudges: e.target.checked})}
+                                className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                value={config.headerTitle}
+                                onChange={e => setConfig({...config, headerTitle: e.target.value})}
+                                placeholder="เช่น งานศิลปหัตถกรรมนักเรียน ครั้งที่ 72"
                             />
-                            <span className="text-sm font-medium text-gray-700 group-hover:text-blue-600">ดึงรายชื่อกรรมการอัตโนมัติ</span>
-                        </label>
-                        <label className="flex items-center gap-3 cursor-pointer group">
-                            <input 
-                                type="checkbox" className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
-                                checked={config.includeVenueDate}
-                                onChange={e => setConfig({...config, includeVenueDate: e.target.checked})}
-                            />
-                            <span className="text-sm font-medium text-gray-700 group-hover:text-blue-600">ดึงสนามและวันที่แข่งขันอัตโนมัติ</span>
-                        </label>
+                        </div>
+
+                        <div className="space-y-3">
+                            <label className="flex items-center gap-3 cursor-pointer group">
+                                <input 
+                                    type="checkbox" className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
+                                    checked={config.includeJudges}
+                                    onChange={e => setConfig({...config, includeJudges: e.target.checked})}
+                                />
+                                <span className="text-sm font-medium text-gray-700 group-hover:text-blue-600">ดึงรายชื่อกรรมการอัตโนมัติ</span>
+                            </label>
+                            <label className="flex items-center gap-3 cursor-pointer group">
+                                <input 
+                                    type="checkbox" className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
+                                    checked={config.includeVenueDate}
+                                    onChange={e => setConfig({...config, includeVenueDate: e.target.checked})}
+                                />
+                                <span className="text-sm font-medium text-gray-700 group-hover:text-blue-600">ดึงสนามและวันที่แข่งขันอัตโนมัติ</span>
+                            </label>
+                        </div>
                     </div>
+
+                    {/* Local Settings */}
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                            <h4 className="text-sm font-bold text-gray-800 flex items-center uppercase tracking-wide">
+                                <Printer className="w-4 h-4 mr-2" /> ตั้งค่าเครื่องพิมพ์ (เฉพาะเครื่องนี้)
+                            </h4>
+                            <span className="text-[10px] bg-orange-100 text-orange-700 px-2 py-0.5 rounded border border-orange-200">Local Storage</span>
+                        </div>
+                        
+                        <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold text-gray-600 mb-2 flex items-center"><Type className="w-3.5 h-3.5 mr-1"/> รูปแบบอักษร (Font)</label>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <button 
+                                        onClick={() => setLocalSettings({...localSettings, font: 'Sarabun'})}
+                                        className={`px-3 py-2 rounded border text-sm font-kanit transition-all ${localSettings.font === 'Sarabun' ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-white text-gray-700 hover:bg-gray-100'}`}
+                                    >
+                                        Sarabun (ไม่มีหัว)
+                                    </button>
+                                    <button 
+                                        onClick={() => setLocalSettings({...localSettings, font: 'Noto Serif Thai'})}
+                                        className={`px-3 py-2 rounded border text-sm font-serif transition-all ${localSettings.font === 'Noto Serif Thai' ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-white text-gray-700 hover:bg-gray-100'}`}
+                                        style={{ fontFamily: 'Noto Serif Thai, serif' }}
+                                    >
+                                        Noto Serif (มีหัว)
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-gray-600 mb-2 flex items-center"><MoveHorizontal className="w-3.5 h-3.5 mr-1"/> ระยะขอบกระดาษ (Margins) - มิลลิเมตร</label>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="text-[10px] text-gray-500 mb-1 block flex items-center"><ArrowDownToLine className="w-3 h-3 mr-1"/> บน (Top)</label>
+                                        <input type="number" className="w-full border rounded px-2 py-1.5 text-sm" value={localSettings.margins.top} onChange={(e) => updateMargin('top', e.target.value)} />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] text-gray-500 mb-1 block flex items-center"><ArrowUpFromLine className="w-3 h-3 mr-1"/> ล่าง (Bottom)</label>
+                                        <input type="number" className="w-full border rounded px-2 py-1.5 text-sm" value={localSettings.margins.bottom} onChange={(e) => updateMargin('bottom', e.target.value)} />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] text-gray-500 mb-1 block flex items-center"><ArrowRightFromLine className="w-3 h-3 mr-1"/> ซ้าย (Left)</label>
+                                        <input type="number" className="w-full border rounded px-2 py-1.5 text-sm" value={localSettings.margins.left} onChange={(e) => updateMargin('left', e.target.value)} />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] text-gray-500 mb-1 block flex items-center"><ArrowLeftFromLine className="w-3 h-3 mr-1"/> ขวา (Right)</label>
+                                        <input type="number" className="w-full border rounded px-2 py-1.5 text-sm" value={localSettings.margins.right} onChange={(e) => updateMargin('right', e.target.value)} />
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div className="flex items-start gap-2 bg-yellow-50 p-2 rounded border border-yellow-100">
+                                <AlertTriangle className="w-4 h-4 text-yellow-600 mt-0.5 shrink-0" />
+                                <p className="text-[10px] text-yellow-700 leading-snug">
+                                    การตั้งค่าฟอนต์และระยะขอบจะถูกบันทึกไว้ในเครื่องนี้เท่านั้น หากเปลี่ยนเครื่องหรือล้างข้อมูลเบราว์เซอร์ ค่าจะกลับเป็นค่าเริ่มต้น
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
-                <div className="p-4 bg-gray-50 border-t flex justify-end gap-2">
+                <div className="p-4 bg-gray-50 border-t flex justify-end gap-2 shrink-0">
                     <button onClick={onClose} className="px-4 py-2 text-gray-600 text-sm hover:bg-gray-100 rounded-lg">ยกเลิก</button>
                     <button 
                         onClick={handleSave}
@@ -305,18 +400,29 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
     const config = printConfigs[configKey] || DEFAULT_PRINT_CONFIG;
     const headerTitle = config.headerTitle || DEFAULT_PRINT_CONFIG.headerTitle;
 
+    // Load Local Settings
+    let localSettings: LocalPrintSettings = DEFAULT_LOCAL_SETTINGS;
+    const savedLocal = localStorage.getItem('comp_print_settings');
+    if (savedLocal) {
+        try {
+            localSettings = JSON.parse(savedLocal);
+        } catch { }
+    }
+
+    const { margins, font } = localSettings;
+    const fontFamily = font === 'Noto Serif Thai' ? "'Noto Serif Thai', serif" : "'Sarabun', sans-serif";
+
     // Determine Orientation
-    // If 'full-set' OR 'judge-signin' OR 'score-sheet' -> Landscape
     const isLandscape = type === 'full-set' || type === 'judge-signin' || type === 'score-sheet-individual' || type === 'competitor-signin' || type === 'score-sheet';
 
     let htmlContent = `
         <html>
         <head>
             <title>พิมพ์เอกสาร - ${DOC_NAMES[type]}</title>
-            <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap" rel="stylesheet">
+            <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Thai:wght@400;700&family=Sarabun:wght@400;700&display=swap" rel="stylesheet">
             <style>
-                @page { margin: 10mm; size: A4 ${isLandscape ? 'landscape' : 'portrait'}; }
-                body { font-family: 'Sarabun', sans-serif; font-size: 13px; line-height: 1.3; color: #000; margin: 0; padding: 0; }
+                @page { margin: ${margins.top}mm ${margins.right}mm ${margins.bottom}mm ${margins.left}mm; size: A4 ${isLandscape ? 'landscape' : 'portrait'}; }
+                body { font-family: ${fontFamily}; font-size: 13px; line-height: 1.3; color: #000; margin: 0; padding: 0; }
                 .page { page-break-after: always; position: relative; width: 100%; box-sizing: border-box; }
                 .header { text-align: center; margin-bottom: 10px; }
                 .header h1 { font-size: 18px; margin: 0 0 2px 0; }
@@ -350,7 +456,7 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                     display: flex;
                     flex-direction: row;
                     border: 3px double #000;
-                    height: 190mm; /* A4 Landscape height minus margins approx */
+                    height: 180mm; /* Adjusted slightly */
                     padding: 20px;
                     box-sizing: border-box;
                 }
@@ -383,7 +489,7 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                 .box-check { width: 16px; height: 16px; border: 1px solid #000; display: inline-block; margin-right: 10px; }
 
                 .no-print { position: fixed; top: 20px; right: 20px; z-index: 1000; }
-                .btn-print { background: #2563eb; color: white; padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-family: 'Sarabun'; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+                .btn-print { background: #2563eb; color: white; padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-family: ${fontFamily}; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
                 @media print { .no-print { display: none; } }
             </style>
         </head>
@@ -690,7 +796,7 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
 
                             <div class="signature-section">
                                 <div class="signature-box">
-                                    ลงชื่อ..........................................................กรรมการ<br/>
+                                    ลงชื่อ..........................................................${judge.role || 'กรรมการ'}<br/>
                                     (${judge.judgeName})
                                 </div>
                             </div>
@@ -754,7 +860,7 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
 
                             <div class="signature-section">
                                 <div class="signature-box">
-                                    ลงชื่อ..........................................................กรรมการ<br/>
+                                    ลงชื่อ..........................................................${judge.role || 'กรรมการ'}<br/>
                                     (${judge.judgeName})
                                 </div>
                             </div>
