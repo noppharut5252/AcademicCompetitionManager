@@ -198,6 +198,10 @@ export interface PrintConfig {
   includeJudges: boolean;
   includeVenueDate: boolean;
   headerTitle?: string;
+  criteriaCount?: number; // New: Number of criteria items
+  // New: Stored settings
+  margins?: { top: number; bottom: number; left: number; right: number };
+  font?: 'Sarabun' | 'Noto Serif Thai' | 'Kanit';
 }
 
 // New Interface for Judges matching requested schema (12 Columns)
@@ -249,4 +253,3 @@ export interface AppData {
   venues: Venue[];
   judges: Judge[];
 }
-
