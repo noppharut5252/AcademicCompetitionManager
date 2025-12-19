@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { AppData, User, Team, AreaStageInfo } from '../types';
 import { updateTeamResult, updateAreaResult } from '../services/api';
@@ -138,7 +139,11 @@ const ConfirmModal: React.FC<ConfirmModalProps> = (props) => {
                 
                 {props.type === 'single' ? (
                     <div className="overflow-y-auto">
-                        <p className="text-gray-600 text-sm">กรุณาตรวจสอบความถูกต้องของข้อมูลทีม <br/><span className="font-bold text-gray-800">{props.teamName}</span></p>
+                        <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 mb-4 text-center">
+                            <p className="text-xs text-blue-600 font-bold uppercase tracking-wider mb-1">TEAM</p>
+                            <h2 className="text-xl font-black text-gray-900 leading-tight">{props.teamName}</h2>
+                        </div>
+                        
                         <div className="bg-gray-50 p-4 rounded-lg border border-gray-100 space-y-2 text-sm mt-2">
                             <div className="flex justify-between">
                                 <span className="text-gray-500">คะแนน:</span>
@@ -478,7 +483,7 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
       }
 
       try {
-          const result = await shareScoreResult(team.teamName, schoolName, activityName, score, medal, rank);
+          const result = await shareScoreResult(team.teamName, schoolName, activityName, score, medal, rank, team.teamId);
           if (result.success && result.method === 'copy') {
               showToast('คัดลอกผลคะแนนแล้ว', 'success');
           }
