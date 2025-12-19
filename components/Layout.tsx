@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { LayoutDashboard, Users, Trophy, School, Settings, LogOut, Award, FileBadge, IdCard, LogIn, UserCircle, Edit3, ScanLine, X, Camera, Search, ChevronRight, LayoutGrid, RotateCcw, Loader2, Zap, MapPin, Gavel, Megaphone, Printer, Hash } from 'lucide-react';
+import { LayoutDashboard, Users, Trophy, School, Settings, LogOut, Award, FileBadge, IdCard, LogIn, UserCircle, Edit3, ScanLine, X, Camera, Search, ChevronRight, LayoutGrid, RotateCcw, Loader2, Zap, MapPin, Gavel, Megaphone, Printer, Hash, MonitorPlay } from 'lucide-react';
 import { logoutLiff } from '../services/liff';
 import { User, AppData } from '../types';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
@@ -333,11 +333,11 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
   const canScore = ['admin', 'area', 'group_admin', 'score'].includes(userRole);
   const canManageAnnouncements = ['admin', 'area', 'group_admin'].includes(userRole);
   
-  // Allow Guest and all roles to see Print Documents but restrict actions inside
   const canViewPrintDocs = true; 
   
   const menuItems = [
     { id: 'dashboard', label: 'หน้าหลัก', icon: LayoutDashboard },
+    { id: 'live', label: 'Live Score', icon: MonitorPlay },
     { id: 'teams', label: 'ทีม', icon: Users },
     { id: 'venues', label: 'สนาม/วันแข่ง', icon: MapPin },
     { id: 'activities', label: 'รายการ', icon: Trophy },
@@ -488,9 +488,9 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
                     <LayoutDashboard className="w-6 h-6" />
                     <span className="text-[10px] font-medium">หน้าหลัก</span>
                 </button>
-                <button onClick={() => handleNav('teams')} className={`flex flex-col items-center justify-center w-full space-y-1 ${activeTab === 'teams' ? 'text-blue-600' : 'text-gray-400'}`}>
-                    <Users className="w-6 h-6" />
-                    <span className="text-[10px] font-medium">ทีม</span>
+                <button onClick={() => handleNav('live')} className={`flex flex-col items-center justify-center w-full space-y-1 ${activeTab === 'live' ? 'text-blue-600' : 'text-gray-400'}`}>
+                    <MonitorPlay className="w-6 h-6" />
+                    <span className="text-[10px] font-medium">LIVE</span>
                 </button>
             </div>
             <div className="relative -top-6 w-16 flex justify-center">
@@ -504,9 +504,9 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
                     <Award className="w-6 h-6" />
                     <span className="text-[10px] font-medium">ผลรางวัล</span>
                 </button>
-                <button onClick={() => handleNav('venues')} className={`flex flex-col items-center justify-center w-full space-y-1 ${['venues', 'settings','certificates','idcards','profile','score', 'judges', 'announcements', 'documents'].includes(activeTab) ? 'text-blue-600' : 'text-gray-400'}`}>
+                <button onClick={() => handleNav('venues')} className={`flex flex-col items-center justify-center w-full space-y-1 ${['venues', 'teams', 'settings','certificates','idcards','profile','score', 'judges', 'announcements', 'documents'].includes(activeTab) ? 'text-blue-600' : 'text-gray-400'}`}>
                     <MapPin className="w-6 h-6" />
-                    <span className="text-[10px] font-medium">สนาม</span>
+                    <span className="text-[10px] font-medium">อื่นๆ</span>
                 </button>
             </div>
         </div>
@@ -516,4 +516,3 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
 };
 
 export default Layout;
-
