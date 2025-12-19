@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { AppData, Team, School } from '../types';
 import { fetchData } from '../services/api';
-import { Trophy, Medal, Activity, Clock, Crown, TrendingUp, Sparkles, MonitorPlay, Maximize2, Minimize2, Wifi, WifiOff, RefreshCw, LayoutGrid, Users, Star, Heart, Zap, Award, School as SchoolIcon, Calendar, Image as ImageIcon, ChevronLeft, ChevronRight, MapPin, Camera, Aperture, Share2, X, Grid, ShieldCheck, Flame, LocateFixed, CalendarClock, Split } from 'lucide-react';
+import { Trophy, Medal, Activity, Clock, Crown, TrendingUp, Sparkles, MonitorPlay, Maximize2, Minimize2, Wifi, WifiOff, RefreshCw, LayoutGrid, Users, Star, Heart, Zap, Award, School as SchoolIcon, Calendar, Image as ImageIcon, ChevronLeft, ChevronRight, MapPin, Camera, Aperture, Share2, X, Grid, ShieldCheck, Flame, LocateFixed, CalendarClock, Split, Hash } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 // @ts-ignore
 import confetti from 'canvas-confetti';
@@ -166,6 +166,72 @@ const GoldClubSlide = ({ teams }: { teams: any[] }) => {
     );
 };
 
+// NEW: Medal Tally Slide (Table Style)
+const MedalTallySlide = ({ schools, viewLevel }: { schools: any[], viewLevel: string }) => {
+    // Take top 8 schools sorted by Gold > Silver > Bronze > Total Score
+    const topSchools = useMemo(() => {
+        return [...schools]
+            .sort((a, b) => b.gold - a.gold || b.silver - a.silver || b.bronze - a.bronze || b.totalScore - a.totalScore)
+            .slice(0, 8);
+    }, [schools]);
+
+    return (
+        <div className="flex flex-col h-full justify-center px-4 md:px-20 animate-in zoom-in-95 duration-700">
+            <div className="text-center mb-8">
+                <div className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-900 to-indigo-900 px-4 py-1.5 rounded-full border border-blue-500/30 shadow-lg mb-4">
+                    <LayoutGrid className="w-4 h-4 text-blue-300" />
+                    <span className="text-sm font-bold text-blue-100 uppercase tracking-widest">
+                        {viewLevel === 'area' ? 'District' : 'Cluster'} Medal Standing
+                    </span>
+                </div>
+                <h2 className="text-4xl md:text-6xl font-black text-white uppercase tracking-wider drop-shadow-lg flex items-center justify-center">
+                    <Award className="w-12 h-12 md:w-16 md:h-16 mr-4 text-yellow-400" />
+                    Medal Tally
+                </h2>
+            </div>
+
+            <div className="w-full max-w-6xl mx-auto bg-slate-900/80 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden shadow-2xl">
+                {/* Header Row */}
+                <div className="grid grid-cols-12 gap-2 p-4 bg-white/10 border-b border-white/10 text-white/60 text-xs md:text-sm font-bold uppercase tracking-wider items-center">
+                    <div className="col-span-1 text-center">Rank</div>
+                    <div className="col-span-5 text-left pl-4">School</div>
+                    <div className="col-span-1 text-center flex justify-center"><div className="w-8 h-8 rounded-full bg-yellow-500/20 text-yellow-400 flex items-center justify-center border border-yellow-500/50">G</div></div>
+                    <div className="col-span-1 text-center flex justify-center"><div className="w-8 h-8 rounded-full bg-gray-400/20 text-gray-300 flex items-center justify-center border border-gray-400/50">S</div></div>
+                    <div className="col-span-1 text-center flex justify-center"><div className="w-8 h-8 rounded-full bg-orange-600/20 text-orange-400 flex items-center justify-center border border-orange-500/50">B</div></div>
+                    <div className="col-span-2 text-right pr-4">Total Score</div>
+                </div>
+
+                {/* Rows */}
+                <div className="divide-y divide-white/5">
+                    {topSchools.map((s, idx) => (
+                        <div key={s.name} className="grid grid-cols-12 gap-2 p-4 items-center hover:bg-white/5 transition-colors group">
+                            <div className="col-span-1 text-center font-black text-xl text-white/40 group-hover:text-white transition-colors">
+                                {idx + 1}
+                            </div>
+                            <div className="col-span-5 text-left pl-4">
+                                <div className="font-bold text-white text-lg md:text-xl truncate leading-tight group-hover:text-blue-300 transition-colors">{s.name}</div>
+                                <div className="text-[10px] text-white/40 uppercase tracking-widest">{s.entries} Entries</div>
+                            </div>
+                            <div className="col-span-1 text-center">
+                                <span className="font-black text-2xl text-yellow-400 drop-shadow-sm"><NumberTicker value={s.gold} /></span>
+                            </div>
+                            <div className="col-span-1 text-center">
+                                <span className="font-bold text-xl text-gray-400"><NumberTicker value={s.silver} /></span>
+                            </div>
+                            <div className="col-span-1 text-center">
+                                <span className="font-bold text-xl text-orange-500"><NumberTicker value={s.bronze} /></span>
+                            </div>
+                            <div className="col-span-2 text-right pr-4">
+                                <div className="font-black text-2xl text-white"><NumberTicker value={s.totalScore} /></div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+};
+
 // New Slide 2: School Podium (Top 3)
 const PodiumSlide = ({ schools }: { schools: any[] }) => {
     // Take top 3 schools
@@ -205,7 +271,7 @@ const PodiumSlide = ({ schools }: { schools: any[] }) => {
                         <div key={idx} className={`relative flex flex-col justify-end w-1/3 max-w-[250px] ${heightClass} transition-all duration-1000 ease-out`}>
                             {/* School Info Bubble */}
                             <div className="mb-4 bg-white/10 backdrop-blur-md border border-white/20 p-4 rounded-2xl text-center shadow-xl animate-bounce" style={{ animationDuration: '3s', animationDelay: `${idx * 0.5}s` }}>
-                                <div className="text-2xl md:text-4xl font-black text-white mb-1">{s.totalScore}</div>
+                                <div className="text-2xl md:text-4xl font-black text-white mb-1"><NumberTicker value={s.totalScore} /></div>
                                 <div className="text-xs text-white/60 font-bold uppercase">Total Score</div>
                                 <div className="mt-2 text-sm md:text-lg font-bold text-white line-clamp-2 leading-tight">{s.name}</div>
                             </div>
@@ -342,12 +408,6 @@ const BestInClassSlide = ({ teams, categories }: { teams: any[], categories: str
         const shuffledCats = [...categories].sort(() => 0.5 - Math.random()).slice(0, 3);
         
         shuffledCats.forEach(cat => {
-            const teamsInCat = teams.filter(t => t.activityName && teams.some(tm => tm.activityName === t.activityName && tm.category === cat));
-            // Note: Since 'teams' here is processedTeams from main component, it might not have 'category' directly on it if not enriched.
-            // Let's assume 'teams' passed here has category info. If not, we might need to look up.
-            // *Correction*: In main component, `processedTeams` has score/school/name but might lack category.
-            // Let's filter by checking if any activity in the category matches.
-            // Simplified approach: Group all teams by category first.
             const categoryTeams = teams.filter(t => t.category === cat);
             if (categoryTeams.length > 0) {
                 const top = categoryTeams.reduce((prev, current) => (prev.score > current.score) ? prev : current);
@@ -375,7 +435,7 @@ const BestInClassSlide = ({ teams, categories }: { teams: any[], categories: str
                             <div className="text-sm font-bold text-blue-400 uppercase tracking-widest mb-2 border-b border-white/10 pb-2">
                                 {item.category}
                             </div>
-                            <div className="text-4xl font-black text-white mb-1">{item.score}</div>
+                            <div className="text-4xl font-black text-white mb-1"><NumberTicker value={item.score} /></div>
                             <div className="text-xs text-green-400 font-bold uppercase mb-4">Highest Score</div>
                             <h3 className="text-xl font-bold text-white leading-tight mb-1 truncate">{item.teamName}</h3>
                             <p className="text-white/50 text-sm truncate">{item.schoolName}</p>
@@ -824,7 +884,7 @@ const LiveScoreView: React.FC<LiveScoreViewProps> = ({ initialData }) => {
             targetTeams = teams.filter(t => t.stageStatus === 'Area' || String(t.flag).toUpperCase() === 'TRUE');
         }
 
-        const schoolMap: Record<string, { name: string, gold: number, silver: number, totalScore: number, entries: number }> = {};
+        const schoolMap: Record<string, { name: string, gold: number, silver: number, bronze: number, totalScore: number, entries: number }> = {};
         let goldCount = 0;
         let scoredCount = 0;
         const recent: any[] = [];
@@ -868,7 +928,7 @@ const LiveScoreView: React.FC<LiveScoreViewProps> = ({ initialData }) => {
             if (score > 0) {
                 scoredCount++;
                 
-                if (!schoolMap[schoolName]) schoolMap[schoolName] = { name: schoolName, gold: 0, silver: 0, totalScore: 0, entries: 0 };
+                if (!schoolMap[schoolName]) schoolMap[schoolName] = { name: schoolName, gold: 0, silver: 0, bronze: 0, totalScore: 0, entries: 0 };
                 schoolMap[schoolName].totalScore += score;
                 schoolMap[schoolName].entries += 1;
                 
@@ -890,6 +950,8 @@ const LiveScoreView: React.FC<LiveScoreViewProps> = ({ initialData }) => {
                     goldWinners.push(winnerObj);
                 } else if ((medal || '').includes('Silver')) {
                     schoolMap[schoolName].silver++;
+                } else if ((medal || '').includes('Bronze')) {
+                    schoolMap[schoolName].bronze++;
                 }
 
                 recent.push({
@@ -1037,6 +1099,7 @@ const LiveScoreView: React.FC<LiveScoreViewProps> = ({ initialData }) => {
         } else {
             // Active Mode
             list.push(<LeaderboardSlide key="leaderboard" schools={leaderboard} viewLevel={viewLevel} />);
+            list.push(<MedalTallySlide key="tally" schools={leaderboard} viewLevel={viewLevel} />); // Added Medal Tally Slide
             list.push(<PodiumSlide key="podium" schools={leaderboard} />);
             
             if (recentResults.length > 0) list.push(<RecentResultsSlide key="recent" teams={recentResults} />);
