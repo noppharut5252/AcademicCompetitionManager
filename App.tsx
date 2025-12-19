@@ -8,6 +8,7 @@ import ResultsView from './components/ResultsView';
 import DocumentsView from './components/DocumentsView';
 import ProfileView from './components/ProfileView'; 
 import ScoreEntry from './components/ScoreEntry'; 
+import ScoreInputView from './components/ScoreInputView';
 import VerifyCertificate from './components/VerifyCertificate'; 
 import VenuesView from './components/VenuesView'; 
 import JudgesView from './components/JudgesView'; 
@@ -486,6 +487,9 @@ const App: React.FC = () => {
             } />
             <Route path="/live" element={
                 data ? <LiveScoreView initialData={data} /> : <LoadingScreen />
+            } />
+            <Route path="/score-input" element={
+                data ? <ScoreInputView data={data} user={currentUser} onDataUpdate={() => fetchAppData(true)} /> : <LoadingScreen />
             } />
             <Route path="*" element={
                 // Pass data to Layout for global access (e.g., Scanner Modal)
