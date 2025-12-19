@@ -93,11 +93,11 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
   useEffect(() => {
       if (!activity) {
           // Allow a brief moment for data load
-          if (data.activities.length > 0) {
+          if (data.activities.length > 0 && !activityId) {
              // navigate('/dashboard');
           }
       }
-  }, [activity, data.activities]);
+  }, [activity, data.activities, activityId]);
 
   const handleInputChange = (teamId: string, field: 'score' | 'rank' | 'medal' | 'flag', value: string) => {
       setEdits(prev => {
@@ -150,16 +150,15 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
       const finalRank = edit.rank;
       const finalMedal = edit.medal;
 
+      // Fix: API returns boolean directly, not { status: 'success' }
       if (viewScope === 'area') {
-          const res = await updateAreaResult(teamId, finalScore, finalRank, finalMedal);
-          success = res;
+          success = await updateAreaResult(teamId, finalScore, finalRank, finalMedal);
       } else {
           const finalFlag = edit.flag;
           // Auto Promote Logic
           const shouldPromote = String(finalRank) === '1' && String(finalFlag).toUpperCase() === 'TRUE';
           const stage = shouldPromote ? 'Area' : '';
-          const res = await updateTeamResult(teamId, finalScore, finalRank, finalMedal, finalFlag, stage);
-          success = res;
+          success = await updateTeamResult(teamId, finalScore, finalRank, finalMedal, finalFlag, stage);
       }
 
       if (success) {
@@ -172,7 +171,8 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
           setToast({ msg: 'บันทึกสำเร็จ', type: 'success', show: true });
           setTimeout(() => setToast(prev => ({ ...prev, show: false })), 2000);
       } else {
-          alert('บันทึกไม่สำเร็จ กรุณาลองใหม่');
+          setToast({ msg: 'บันทึกไม่สำเร็จ ลองใหม่', type: 'error', show: true });
+          setTimeout(() => setToast(prev => ({ ...prev, show: false })), 3000);
       }
       setSavingId(null);
   };
@@ -216,9 +216,13 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
                       isDirty: true
                   };
               }
+          } else if (t.sortScore === -1) {
+              // Handle Absent logic if needed
           }
       });
       setEdits(prev => ({ ...prev, ...newEdits }));
+      setToast({ msg: 'คำนวณลำดับแล้ว (กดบันทึกเพื่อยืนยัน)', type: 'success', show: true });
+      setTimeout(() => setToast(prev => ({ ...prev, show: false })), 2000);
   };
 
   if (!user) {
@@ -237,7 +241,7 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
         
         {/* Toast */}
         {toast.show && (
-            <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-[100] px-4 py-2 rounded-full shadow-lg text-white text-sm font-bold flex items-center ${toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}>
+            <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-[100] px-4 py-2 rounded-full shadow-lg text-white text-sm font-bold flex items-center transition-all ${toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}>
                 {toast.type === 'success' ? <CheckCircle className="w-4 h-4 mr-2"/> : <AlertCircle className="w-4 h-4 mr-2"/>}
                 {toast.msg}
             </div>
@@ -281,7 +285,7 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
                 <Info className="w-3 h-3 mr-1.5" /> 
                 <span>{teams.length} ทีมที่ต้องบันทึก</span>
             </div>
-            <button onClick={handleAutoRank} className="flex items-center bg-white border border-blue-200 px-2 py-1 rounded shadow-sm hover:bg-blue-50">
+            <button onClick={handleAutoRank} className="flex items-center bg-white border border-blue-200 px-2 py-1 rounded shadow-sm hover:bg-blue-50 text-blue-700">
                 <Wand2 className="w-3 h-3 mr-1" /> Auto Rank
             </button>
         </div>
