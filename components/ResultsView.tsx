@@ -1,10 +1,11 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { AppData, Team, AreaStageInfo, School } from '../types';
-import { Award, Search, Medal, Star, Trophy, LayoutGrid, Crown, School as SchoolIcon, CheckCircle, BarChart3, Flag, MapPin, ChevronLeft, ChevronRight, Filter, TrendingUp, X, List } from 'lucide-react';
+import { AppData, Team, AreaStageInfo, School, User } from '../types';
+import { Award, Search, Medal, Star, Trophy, LayoutGrid, Crown, School as SchoolIcon, CheckCircle, BarChart3, Flag, MapPin, ChevronLeft, ChevronRight, Filter, TrendingUp, X, List, Clock, Zap, Info, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
 
 interface ResultsViewProps {
   data: AppData;
+  user?: User | null;
 }
 
 type Stage = 'cluster' | 'area';
@@ -141,11 +142,12 @@ const SchoolDetailModal = ({ schoolName, teams, stage, onClose, data }: { school
     );
 };
 
-const ResultsView: React.FC<ResultsViewProps> = ({ data }) => {
+const ResultsView: React.FC<ResultsViewProps> = ({ data, user }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [stage, setStage] = useState<Stage>('cluster');
   const [quickFilter, setQuickFilter] = useState<QuickFilter>('all');
   const [isLoading, setIsLoading] = useState(true);
+  const [showAllStats, setShowAllStats] = useState(false);
   
   // Modal State
   const [selectedSchoolDetail, setSelectedSchoolDetail] = useState<{ name: string, cluster?: string } | null>(null);
@@ -153,6 +155,13 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data }) => {
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
+
+  // Identify User's Cluster
+  const userCluster = useMemo(() => {
+      if (!user || !user.SchoolID) return null;
+      const school = data.schools.find(s => s.SchoolID === user.SchoolID);
+      return school ? data.clusters.find(c => c.ClusterID === school.SchoolCluster)?.ClusterName : null;
+  }, [user, data.schools, data.clusters]);
 
   // Simulate loading for better UX
   useEffect(() => {
@@ -207,7 +216,8 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data }) => {
               displayMedalRaw,
               isRep,
               schoolName: data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId)?.SchoolName || team.schoolId,
-              clusterName: data.clusters.find(c => c.ClusterID === (data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId)?.SchoolCluster))?.ClusterName || '-'
+              clusterName: data.clusters.find(c => c.ClusterID === (data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId)?.SchoolCluster))?.ClusterName || '-',
+              activityName: data.activities.find(a => a.id === team.activityId)?.name || team.activityId
           };
       });
 
@@ -215,10 +225,12 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data }) => {
       const filtered = teams.filter(t => {
           const hasScore = t.displayScore > 0 || (stage === 'area' && t.stageStatus === 'Area'); // Basic visibility
           
-          // Search
-          const matchSearch = t.teamName.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                              t.schoolName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                              t.clusterName.toLowerCase().includes(searchTerm.toLowerCase());
+          // Search (Added Activity Name search)
+          const term = searchTerm.toLowerCase();
+          const matchSearch = t.teamName.toLowerCase().includes(term) || 
+                              t.schoolName.toLowerCase().includes(term) ||
+                              t.clusterName.toLowerCase().includes(term) ||
+                              t.activityName.toLowerCase().includes(term);
 
           // Quick Filters
           let matchFilter = true;
@@ -243,7 +255,45 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data }) => {
           return rankA - rankB;
       });
 
-  }, [data.teams, data.schools, data.clusters, stage, searchTerm, quickFilter]);
+  }, [data.teams, data.schools, data.clusters, stage, searchTerm, quickFilter, data.activities]);
+
+  // --- Recent Results (Top 6 latest updated) ---
+  const recentUpdates = useMemo(() => {
+      // Filter teams that have scores and sort by lastEditedAt
+      const withScore = processedData.filter(t => t.displayScore > 0);
+      return withScore.sort((a, b) => {
+          const dateA = a.lastEditedAt ? new Date(a.lastEditedAt).getTime() : 0;
+          const dateB = b.lastEditedAt ? new Date(b.lastEditedAt).getTime() : 0;
+          return dateB - dateA;
+      }).slice(0, 6);
+  }, [processedData]);
+
+  // --- Area Insights Stats ---
+  const areaStats = useMemo(() => {
+      if (stage !== 'area') return null;
+      let totalGold = 0;
+      const schoolGoldMap: Record<string, number> = {};
+      const activityCountMap: Record<string, number> = {};
+
+      processedData.forEach(t => {
+          if ((t.displayMedalRaw || '').includes('Gold')) {
+              totalGold++;
+              schoolGoldMap[t.schoolName] = (schoolGoldMap[t.schoolName] || 0) + 1;
+          }
+          activityCountMap[t.activityName] = (activityCountMap[t.activityName] || 0) + 1;
+      });
+
+      const goldSchoolsCount = Object.keys(schoolGoldMap).length;
+      
+      // Find most popular/active activity
+      let topActivity = '-';
+      let maxCount = 0;
+      Object.entries(activityCountMap).forEach(([name, count]) => {
+          if (count > maxCount) { maxCount = count; topActivity = name; }
+      });
+
+      return { totalGold, goldSchoolsCount, topActivity, maxCount };
+  }, [processedData, stage]);
 
   // --- Medal Summary Statistics ---
   const summaryStats = useMemo(() => {
@@ -261,15 +311,19 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data }) => {
               else if (medal.includes('Silver')) schoolMap[t.schoolName].silver++;
               else if (medal.includes('Bronze')) schoolMap[t.schoolName].bronze++;
               
-              // MODIFIED: Winner check in Area Stage strictly Rank 1
+              // Winner check in Area Stage strictly Rank 1
               if (String(rank) === '1') schoolMap[t.schoolName].winnerCount++;
 
               schoolMap[t.schoolName].total++;
               schoolMap[t.schoolName].score += t.displayScore;
           });
+          
+          const sortedList = Object.values(schoolMap).sort((a, b) => b.winnerCount - a.winnerCount || b.gold - a.gold || b.score - a.score);
+          // Return full list or slice based on showAllStats
           return {
               type: 'area',
-              data: Object.values(schoolMap).sort((a, b) => b.winnerCount - a.winnerCount || b.gold - a.gold || b.score - a.score).slice(0, 10) 
+              data: showAllStats ? sortedList : sortedList.slice(0, 10),
+              totalCount: sortedList.length
           };
       } else {
           const clusterMap: Record<string, Record<string, SchoolStat>> = {};
@@ -296,13 +350,24 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data }) => {
           });
 
           const sortedClusters: Record<string, SchoolStat[]> = {};
-          Object.keys(clusterMap).forEach(k => {
+          
+          // Sort keys to prioritize user's cluster if exists
+          let clusterKeys = Object.keys(clusterMap).sort();
+          if (userCluster) {
+              clusterKeys = clusterKeys.sort((a, b) => {
+                  if (a === userCluster) return -1;
+                  if (b === userCluster) return 1;
+                  return a.localeCompare(b);
+              });
+          }
+
+          clusterKeys.forEach(k => {
               sortedClusters[k] = Object.values(clusterMap[k]).sort((a, b) => b.winnerCount - a.winnerCount || b.gold - a.gold || b.score - a.score);
           });
           
           return { type: 'cluster', data: sortedClusters };
       }
-  }, [processedData, stage]);
+  }, [processedData, stage, showAllStats, userCluster]);
 
   // --- Modal Logic ---
   const modalTeams = useMemo(() => {
@@ -376,19 +441,85 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data }) => {
         </div>
       </div>
 
+      {/* Recent Updates Block */}
+      {recentUpdates.length > 0 && (
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-xl border border-blue-100 shadow-sm relative overflow-hidden">
+              <div className="flex items-center justify-between mb-3 relative z-10">
+                  <h3 className="text-sm font-bold text-blue-800 flex items-center">
+                      <Zap className="w-4 h-4 mr-2 text-yellow-500 fill-yellow-500" />
+                      รายการที่ประกาศล่าสุด (Recently Updated)
+                  </h3>
+              </div>
+              <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2 relative z-10">
+                  {recentUpdates.map((t, i) => (
+                      <div key={`${t.teamId}-${i}`} className="min-w-[200px] bg-white p-3 rounded-lg border border-blue-100 shadow-sm hover:shadow-md transition-shadow flex flex-col">
+                          <div className="text-[10px] text-gray-400 font-medium mb-1 flex items-center">
+                              <Clock className="w-3 h-3 mr-1" />
+                              {t.lastEditedAt ? new Date(t.lastEditedAt).toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'}) : 'Recently'}
+                          </div>
+                          <div className="font-bold text-gray-800 text-sm truncate" title={t.teamName}>{t.teamName}</div>
+                          <div className="text-xs text-gray-500 truncate mb-2">{t.schoolName}</div>
+                          <div className="mt-auto flex items-center justify-between pt-2 border-t border-gray-50">
+                              <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded truncate max-w-[100px]">{t.activityName}</span>
+                              <span className="font-bold text-blue-600 text-sm">{t.displayScore}</span>
+                          </div>
+                      </div>
+                  ))}
+              </div>
+          </div>
+      )}
+
+      {/* Area Interesting Stats Block */}
+      {stage === 'area' && areaStats && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-white p-4 rounded-xl border border-yellow-200 shadow-sm flex items-center gap-4 bg-gradient-to-br from-yellow-50 to-white">
+                  <div className="p-3 bg-yellow-100 text-yellow-600 rounded-full">
+                      <Medal className="w-6 h-6" />
+                  </div>
+                  <div>
+                      <div className="text-xs text-gray-500 uppercase font-bold">รวมเหรียญทอง</div>
+                      <div className="text-2xl font-black text-gray-800">{areaStats.totalGold}</div>
+                  </div>
+              </div>
+              <div className="bg-white p-4 rounded-xl border border-green-200 shadow-sm flex items-center gap-4 bg-gradient-to-br from-green-50 to-white">
+                  <div className="p-3 bg-green-100 text-green-600 rounded-full">
+                      <SchoolIcon className="w-6 h-6" />
+                  </div>
+                  <div>
+                      <div className="text-xs text-gray-500 uppercase font-bold">โรงเรียนที่ได้ทอง</div>
+                      <div className="text-2xl font-black text-gray-800">{areaStats.goldSchoolsCount}</div>
+                  </div>
+              </div>
+              <div className="bg-white p-4 rounded-xl border border-purple-200 shadow-sm flex items-center gap-4 bg-gradient-to-br from-purple-50 to-white">
+                  <div className="p-3 bg-purple-100 text-purple-600 rounded-full">
+                      <TrendingUp className="w-6 h-6" />
+                  </div>
+                  <div className="min-w-0">
+                      <div className="text-xs text-gray-500 uppercase font-bold">แข่งขันสูงสุด</div>
+                      <div className="text-lg font-bold text-gray-800 truncate" title={areaStats.topActivity}>{areaStats.topActivity}</div>
+                      <div className="text-xs text-purple-500 font-medium">{areaStats.maxCount} ทีม</div>
+                  </div>
+              </div>
+          </div>
+      )}
+
       {/* Summary Section */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
+          <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
               <h3 className="text-sm font-bold text-gray-800 flex items-center uppercase tracking-wide">
                   <BarChart3 className="w-4 h-4 mr-2 text-blue-500" /> 
                   สรุปเหรียญรางวัล ({stage === 'cluster' ? 'แยกกลุ่มเครือข่าย' : 'รวมระดับเขต'})
               </h3>
+              <div className="flex items-center text-[10px] text-gray-500 bg-white px-2 py-1 rounded border border-gray-200 shadow-sm">
+                  <Info className="w-3 h-3 mr-1 text-blue-500" />
+                  💡 คลิกที่ชื่อโรงเรียนเพื่อดูรายการที่ได้รับรางวัล
+              </div>
           </div>
           
           <div className="p-4 md:p-6 bg-gray-50">
               {summaryStats.type === 'area' ? (
                   // AREA: Single Table / List
-                  <>
+                  <div className="flex flex-col gap-4">
                     {/* Desktop Table */}
                     <div className="hidden md:block bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden min-w-[600px]">
                         <table className="w-full text-sm">
@@ -450,76 +581,94 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data }) => {
                             </div>
                         ))}
                     </div>
-                  </>
+                    
+                    {/* View All Button */}
+                    {(summaryStats.totalCount || 0) > 10 && (
+                        <button 
+                            onClick={() => setShowAllStats(!showAllStats)}
+                            className="w-full py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-colors flex items-center justify-center font-medium shadow-sm"
+                        >
+                            {showAllStats ? (
+                                <><ChevronUp className="w-4 h-4 mr-2" /> ย่อรายการ</>
+                            ) : (
+                                <><ChevronDown className="w-4 h-4 mr-2" /> ดูทั้งหมด ({summaryStats.totalCount})</>
+                            )}
+                        </button>
+                    )}
+                  </div>
               ) : (
                   // CLUSTER: Grid of Tables (Desktop) / Cards (Mobile)
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                      {Object.entries(summaryStats.data).map(([clusterName, schools]: [string, any]) => (
-                          <div key={clusterName} className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden flex flex-col h-full">
-                              <div className="bg-blue-50 px-4 py-2 border-b border-blue-100 text-xs font-bold text-blue-800 uppercase tracking-wider">
-                                  {clusterName}
-                              </div>
-                              
-                              {/* Desktop Table */}
-                              <table className="w-full text-xs hidden md:table">
-                                  <thead className="bg-gray-50 text-gray-500 font-semibold border-b border-gray-100">
-                                      <tr>
-                                          <th className="px-3 py-2 text-left">โรงเรียน</th>
-                                          <th className="px-2 py-2 text-center w-10 text-yellow-600">ทอง</th>
-                                          <th className="px-2 py-2 text-center w-10 text-gray-500">เงิน</th>
-                                          <th className="px-2 py-2 text-center w-10 text-orange-600">ท.ด.</th>
-                                          <th className="px-2 py-2 text-center w-10">รวม</th>
-                                          <th className="px-3 py-2 text-center w-16 bg-blue-50">ตัวแทน</th>
-                                      </tr>
-                                  </thead>
-                                  <tbody className="divide-y divide-gray-50">
-                                      {schools.map((s: any, idx: number) => (
-                                          <tr 
-                                            key={idx} 
-                                            className="hover:bg-blue-50/20 cursor-pointer"
-                                            onClick={() => setSelectedSchoolDetail({ name: s.name, cluster: clusterName })}
-                                          >
-                                              <td className="px-3 py-2 truncate max-w-[150px]" title={s.name}>{idx+1}. {s.name}</td>
-                                              <td className="px-2 py-2 text-center font-bold">{s.gold}</td>
-                                              <td className="px-2 py-2 text-center text-gray-500">{s.silver}</td>
-                                              <td className="px-2 py-2 text-center text-gray-500">{s.bronze}</td>
-                                              <td className="px-2 py-2 text-center font-bold text-blue-600">{s.total}</td>
-                                              <td className="px-3 py-2 text-center font-black text-blue-700 bg-blue-50/30">{s.winnerCount}</td>
-                                          </tr>
-                                      ))}
-                                      {schools.length === 0 && <tr><td colSpan={6} className="text-center py-4 text-gray-400">ยังไม่มีข้อมูล</td></tr>}
-                                  </tbody>
-                              </table>
+                      {Object.entries(summaryStats.data).map(([clusterName, schools]: [string, any]) => {
+                          const isUserCluster = userCluster && clusterName === userCluster;
+                          return (
+                            <div key={clusterName} className={`bg-white rounded-lg border shadow-sm overflow-hidden flex flex-col h-full ${isUserCluster ? 'border-blue-400 ring-2 ring-blue-100' : 'border-gray-200'}`}>
+                                <div className={`px-4 py-2 border-b text-xs font-bold uppercase tracking-wider flex justify-between items-center ${isUserCluster ? 'bg-blue-600 text-white' : 'bg-blue-50 border-blue-100 text-blue-800'}`}>
+                                    <span>{clusterName}</span>
+                                    {isUserCluster && <span className="bg-white/20 px-2 py-0.5 rounded text-[9px] text-white">Your Cluster</span>}
+                                </div>
+                                
+                                {/* Desktop Table */}
+                                <table className="w-full text-xs hidden md:table">
+                                    <thead className="bg-gray-50 text-gray-500 font-semibold border-b border-gray-100">
+                                        <tr>
+                                            <th className="px-3 py-2 text-left">โรงเรียน</th>
+                                            <th className="px-2 py-2 text-center w-10 text-yellow-600">ทอง</th>
+                                            <th className="px-2 py-2 text-center w-10 text-gray-500">เงิน</th>
+                                            <th className="px-2 py-2 text-center w-10 text-orange-600">ท.ด.</th>
+                                            <th className="px-2 py-2 text-center w-10">รวม</th>
+                                            <th className="px-3 py-2 text-center w-16 bg-blue-50">ตัวแทน</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-50">
+                                        {schools.map((s: any, idx: number) => (
+                                            <tr 
+                                              key={idx} 
+                                              className="hover:bg-blue-50/20 cursor-pointer"
+                                              onClick={() => setSelectedSchoolDetail({ name: s.name, cluster: clusterName })}
+                                            >
+                                                <td className="px-3 py-2 truncate max-w-[150px]" title={s.name}>{idx+1}. {s.name}</td>
+                                                <td className="px-2 py-2 text-center font-bold">{s.gold}</td>
+                                                <td className="px-2 py-2 text-center text-gray-500">{s.silver}</td>
+                                                <td className="px-2 py-2 text-center text-gray-500">{s.bronze}</td>
+                                                <td className="px-2 py-2 text-center font-bold text-blue-600">{s.total}</td>
+                                                <td className="px-3 py-2 text-center font-black text-blue-700 bg-blue-50/30">{s.winnerCount}</td>
+                                            </tr>
+                                        ))}
+                                        {schools.length === 0 && <tr><td colSpan={6} className="text-center py-4 text-gray-400">ยังไม่มีข้อมูล</td></tr>}
+                                    </tbody>
+                                </table>
 
-                              {/* Mobile List */}
-                              <div className="md:hidden divide-y divide-gray-100">
-                                  {schools.map((s: any, idx: number) => (
-                                      <div 
-                                        key={idx} 
-                                        className="p-3 flex items-center justify-between cursor-pointer active:bg-gray-50"
-                                        onClick={() => setSelectedSchoolDetail({ name: s.name, cluster: clusterName })}
-                                      >
-                                          <div className="flex items-center gap-2 overflow-hidden">
-                                              <div className="text-xs font-bold text-gray-400 w-4">{idx + 1}</div>
-                                              <div className="min-w-0">
-                                                  <div className="text-sm font-medium text-gray-800 truncate">{s.name}</div>
-                                                  <div className="flex gap-2 text-[10px] text-gray-500">
-                                                      <span className="text-yellow-600 font-bold">{s.gold} G</span>
-                                                      <span>•</span>
-                                                      <span className="text-blue-600 font-bold">รวม {s.total}</span>
-                                                  </div>
-                                              </div>
-                                          </div>
-                                          <div className="text-right pl-2 shrink-0">
-                                              <div className="text-[10px] text-gray-400">ตัวแทน</div>
-                                              <div className="text-sm font-black text-blue-700">{s.winnerCount}</div>
-                                          </div>
-                                      </div>
-                                  ))}
-                                  {schools.length === 0 && <div className="p-4 text-center text-xs text-gray-400 italic">ยังไม่มีข้อมูล</div>}
-                              </div>
-                          </div>
-                      ))}
+                                {/* Mobile List */}
+                                <div className="md:hidden divide-y divide-gray-100">
+                                    {schools.map((s: any, idx: number) => (
+                                        <div 
+                                          key={idx} 
+                                          className="p-3 flex items-center justify-between cursor-pointer active:bg-gray-50"
+                                          onClick={() => setSelectedSchoolDetail({ name: s.name, cluster: clusterName })}
+                                        >
+                                            <div className="flex items-center gap-2 overflow-hidden">
+                                                <div className="text-xs font-bold text-gray-400 w-4">{idx + 1}</div>
+                                                <div className="min-w-0">
+                                                    <div className="text-sm font-medium text-gray-800 truncate">{s.name}</div>
+                                                    <div className="flex gap-2 text-[10px] text-gray-500">
+                                                        <span className="text-yellow-600 font-bold">{s.gold} G</span>
+                                                        <span>•</span>
+                                                        <span className="text-blue-600 font-bold">รวม {s.total}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="text-right pl-2 shrink-0">
+                                                <div className="text-[10px] text-gray-400">ตัวแทน</div>
+                                                <div className="text-sm font-black text-blue-700">{s.winnerCount}</div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {schools.length === 0 && <div className="p-4 text-center text-xs text-gray-400 italic">ยังไม่มีข้อมูล</div>}
+                                </div>
+                            </div>
+                          );
+                      })}
                   </div>
               )}
           </div>
@@ -560,11 +709,19 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data }) => {
           </div>
           <input
             type="text"
-            className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm transition-all"
-            placeholder="ค้นหาชื่อทีม, โรงเรียน, หรือกลุ่มเครือข่าย..."
+            className="block w-full pl-10 pr-10 py-2.5 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm transition-all"
+            placeholder="ค้นหาชื่อทีม, โรงเรียน, กิจกรรม, หรือกลุ่มเครือข่าย..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
+          {searchTerm && (
+              <button 
+                onClick={() => setSearchTerm('')}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+              >
+                  <X className="h-4 w-4" />
+              </button>
+          )}
         </div>
       </div>
       
