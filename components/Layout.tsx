@@ -366,8 +366,11 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
             setShowScanner(false);
             
             // 1. Check for Score Input URL (contains 'score-input' and 'activityId')
-            if (scannedValue.includes('score-input') && scannedValue.includes('activityId=')) {
-                const match = scannedValue.match(/[?&]activityId=([^&]+)/);
+            // Using case insensitive check and more robust regex
+            const lowerVal = scannedValue.toLowerCase();
+            if (lowerVal.includes('score-input') && lowerVal.includes('activityid=')) {
+                // Try to extract ID using flexible regex
+                const match = scannedValue.match(/[?&][aA]ctivity[iI]d=([^&]+)/);
                 if (match && match[1]) {
                     setTimeout(() => navigate(`/score-input?activityId=${match[1]}`), 100);
                     return;
