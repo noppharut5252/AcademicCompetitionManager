@@ -51,7 +51,6 @@ const PrintConfigModal = ({ isOpen, onClose, onSave, data, currentUser, currentC
     const [config, setConfig] = useState<PrintConfig>({ ...DEFAULT_PRINT_CONFIG });
     const [isSaving, setIsSaving] = useState(false);
 
-    // Force Area selection when opening modal if user is Admin/Area
     useEffect(() => {
         if (isOpen && isAdminOrArea) {
             setSelectedContext('area');
@@ -59,7 +58,6 @@ const PrintConfigModal = ({ isOpen, onClose, onSave, data, currentUser, currentC
     }, [isOpen, isAdminOrArea]);
 
     useEffect(() => {
-        // Load Server Config
         const existing = currentConfigs[selectedContext];
         if (existing) {
             setConfig({ ...DEFAULT_PRINT_CONFIG, ...existing });
@@ -70,9 +68,7 @@ const PrintConfigModal = ({ isOpen, onClose, onSave, data, currentUser, currentC
 
     const handleSave = async () => {
         setIsSaving(true);
-        // Save Server Config (includes margins and font now)
         const success = await savePrintConfig(selectedContext, config);
-        
         setIsSaving(false);
         if (success) {
             onSave(selectedContext, config);
@@ -103,8 +99,6 @@ const PrintConfigModal = ({ isOpen, onClose, onSave, data, currentUser, currentC
                     <button onClick={onClose} className="p-1 hover:bg-white/20 rounded-full transition-colors"><X className="w-6 h-6"/></button>
                 </div>
                 <div className="p-6 space-y-6 overflow-y-auto">
-                    
-                    {/* Server Side Configs */}
                     <div className="space-y-4 border-b pb-6">
                         <h4 className="text-sm font-bold text-gray-800 flex items-center uppercase tracking-wide">
                             <Users className="w-4 h-4 mr-2" /> ตั้งค่าเนื้อหา (บันทึกลงระบบ)
@@ -124,7 +118,6 @@ const PrintConfigModal = ({ isOpen, onClose, onSave, data, currentUser, currentC
                                 </optgroup>
                             </select>
                         </div>
-
                         <div>
                             <label className="block text-sm font-bold text-gray-700 mb-1">หัวเรื่องเอกสาร (Header Title)</label>
                             <input 
@@ -134,7 +127,6 @@ const PrintConfigModal = ({ isOpen, onClose, onSave, data, currentUser, currentC
                                 placeholder="เช่น งานศิลปหัตถกรรมนักเรียน ครั้งที่ 72"
                             />
                         </div>
-
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-bold text-gray-700 mb-1">จำนวนกรรมการ (รวม)</label>
@@ -155,7 +147,6 @@ const PrintConfigModal = ({ isOpen, onClose, onSave, data, currentUser, currentC
                                 />
                             </div>
                         </div>
-
                         <div className="space-y-3">
                             <label className="flex items-center gap-3 cursor-pointer group">
                                 <input 
@@ -175,15 +166,12 @@ const PrintConfigModal = ({ isOpen, onClose, onSave, data, currentUser, currentC
                             </label>
                         </div>
                     </div>
-
-                    {/* Printer Settings (Now Saved to DB) */}
                     <div className="space-y-4">
                         <div className="flex items-center justify-between">
                             <h4 className="text-sm font-bold text-gray-800 flex items-center uppercase tracking-wide">
                                 <Printer className="w-4 h-4 mr-2" /> ตั้งค่าหน้ากระดาษและฟอนต์
                             </h4>
                         </div>
-                        
                         <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 space-y-4">
                             <div>
                                 <label className="block text-xs font-bold text-gray-600 mb-2 flex items-center"><Type className="w-3.5 h-3.5 mr-1"/> รูปแบบอักษร (Font)</label>
@@ -210,7 +198,6 @@ const PrintConfigModal = ({ isOpen, onClose, onSave, data, currentUser, currentC
                                     </button>
                                 </div>
                             </div>
-
                             <div>
                                 <label className="block text-xs font-bold text-gray-600 mb-2 flex items-center"><MoveHorizontal className="w-3.5 h-3.5 mr-1"/> ระยะขอบกระดาษ (Margins) - มิลลิเมตร</label>
                                 <div className="grid grid-cols-2 gap-3">
@@ -234,7 +221,6 @@ const PrintConfigModal = ({ isOpen, onClose, onSave, data, currentUser, currentC
                             </div>
                         </div>
                     </div>
-
                 </div>
                 <div className="p-4 bg-gray-50 border-t flex justify-end gap-2 shrink-0">
                     <button onClick={onClose} className="px-4 py-2 text-gray-600 text-sm hover:bg-gray-100 rounded-lg">ยกเลิก</button>
@@ -253,7 +239,6 @@ const PrintConfigModal = ({ isOpen, onClose, onSave, data, currentUser, currentC
 };
 
 const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) => {
-  // Role Detection
   const role = user?.level?.toLowerCase();
   const isAdminOrArea = role === 'admin' || role === 'area';
   const isGroupAdmin = role === 'group_admin';
@@ -261,7 +246,6 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
   const userSchool = data.schools.find(s => s.SchoolID === user?.SchoolID);
   const userClusterID = userSchool?.SchoolCluster;
 
-  // State
   const [viewScope, setViewScope] = useState<'cluster' | 'area'>(isAdminOrArea ? 'area' : 'cluster');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [clusterFilter, setClusterFilter] = useState<string>(isGroupAdmin ? (userClusterID || '') : '');
@@ -295,31 +279,22 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
       let teams = allTeams.filter(t => t.activityId === activityId);
       
       if (viewScope === 'area') {
-          // 1. Filter candidates: Rank 1 & Flag TRUE, or explicitly stageStatus='Area'
           const candidates = teams.filter(t => t.stageStatus === 'Area' || (String(t.rank) === '1' && String(t.flag).toUpperCase() === 'TRUE'));
-          
-          // 2. Deduplicate by Cluster (Requirement: 1 rep per cluster per activity)
           const seenClusters = new Set<string>();
           teams = [];
-          
-          // Sort candidates by score descending to prioritize the best one if duplicates exist
           candidates.sort((a, b) => b.score - a.score);
-
           for (const t of candidates) {
               const school = allSchools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
               const clusterId = school?.SchoolCluster;
-              
               if (clusterId) {
                   if (!seenClusters.has(clusterId)) {
                       seenClusters.add(clusterId);
                       teams.push(t);
                   }
               } else {
-                  // If no cluster (e.g. external?), just add it
                   teams.push(t);
               }
           }
-
       } else {
           if (clusterFilter) {
               teams = teams.filter(t => {
@@ -328,18 +303,14 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
               });
           }
       }
-      
       return teams.sort((a, b) => {
           const schoolA = allSchools.find(s => s.SchoolID === a.schoolId);
           const schoolB = allSchools.find(s => s.SchoolID === b.schoolId);
-          
-          // For Area view, sort by Cluster Name first for better organization
           if (viewScope === 'area') {
               const clusterA = data.clusters?.find(c => c.ClusterID === schoolA?.SchoolCluster)?.ClusterName || '';
               const clusterB = data.clusters?.find(c => c.ClusterID === schoolB?.SchoolCluster)?.ClusterName || '';
               if (clusterA !== clusterB) return clusterA.localeCompare(clusterB);
           }
-
           const nameA = schoolA?.SchoolName || a.schoolId;
           const nameB = schoolB?.SchoolName || b.schoolId;
           return nameA.localeCompare(nameB) || a.teamName.localeCompare(b.teamName);
@@ -349,7 +320,6 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
   const getJudgesForActivity = useCallback((activityId: string) => {
       const allJudges = data.judges || [];
       let judges = allJudges.filter(j => j.activityId === activityId);
-      
       if (viewScope === 'area') {
           judges = judges.filter(j => j.stageScope === 'area');
       } else {
@@ -361,7 +331,6 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
               );
           }
       }
-
       const priority = (roleStr: string) => {
         const r = roleStr || '';
         if (r.includes('ประธาน')) return 1;
@@ -369,7 +338,6 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
         if (r.includes('กรรมการ')) return 2;
         return 4;
       };
-
       return judges.sort((a, b) => priority(a.role) - priority(b.role));
   }, [data.judges, viewScope, clusterFilter]);
 
@@ -381,7 +349,9 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
   }, [data.activities, selectedCategory, searchTerm, getTeamsForActivity]);
 
   const categories = useMemo(() => {
-    return Array.from(new Set((data.activities || []).map(a => a.category))).sort();
+      const cats = new Set<string>();
+      (data.activities || []).forEach(a => cats.add(a.category));
+      return Array.from(cats).sort();
   }, [data.activities]);
 
   const toggleActivitySelection = (id: string) => {
@@ -399,23 +369,30 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
     }
   };
 
+  const selectionCount = selectedActivityIds.size;
+  const isAllSelected = filteredActivities.length > 0 && selectedActivityIds.size === filteredActivities.length;
+
+  const handleSmartPrint = (type: DocType) => {
+      if (selectedActivityIds.size === 0) {
+          const idsToPrint = filteredActivities.map(a => a.id);
+          if (idsToPrint.length === 0) {
+              alert('ไม่พบรายการที่จะพิมพ์');
+              return;
+          }
+          setBulkConfirm({ isOpen: true, type, ids: idsToPrint });
+      } else {
+          setBulkConfirm({ isOpen: true, type, ids: Array.from(selectedActivityIds) });
+      }
+  };
+
   const generateHTML = async (activityIds: string[], type: DocType) => {
     const configKey = viewScope === 'area' ? 'area' : clusterFilter;
     const config = printConfigs[configKey] || DEFAULT_PRINT_CONFIG;
     const headerTitle = config.headerTitle || DEFAULT_PRINT_CONFIG.headerTitle;
     const criteriaCount = config.criteriaCount || 10;
-
-    // Use margins/font from config (Server Config)
     const margins = config.margins || DEFAULT_PRINT_CONFIG.margins || { top: 10, bottom: 10, left: 10, right: 10 };
     const font = config.font || 'Sarabun';
-
-    const fontFamily = font === 'Noto Serif Thai' 
-        ? "'Noto Serif Thai', serif" 
-        : font === 'Kanit' 
-            ? "'Kanit', sans-serif" 
-            : "'Sarabun', sans-serif";
-
-    // Determine Orientation
+    const fontFamily = font === 'Noto Serif Thai' ? "'Noto Serif Thai', serif" : font === 'Kanit' ? "'Kanit', sans-serif" : "'Sarabun', sans-serif";
     const isLandscape = type === 'full-set' || type === 'judge-signin' || type === 'score-sheet-individual' || type === 'competitor-signin' || type === 'score-sheet';
 
     let htmlContent = `
@@ -432,65 +409,34 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                 .header h2 { font-size: 14px; margin: 0; font-weight: normal; }
                 .doc-title { font-weight: bold; text-decoration: underline; margin: 8px 0; font-size: 16px; text-align: center; }
                 .activity-info { margin-bottom: 10px; border: 1px solid #000; padding: 10px; border-radius: 4px; background: #fff; line-height: 1.4; }
-                
                 table { width: 100%; border-collapse: collapse; margin-bottom: 10px; table-layout: auto; page-break-inside: auto; }
                 tr { page-break-inside: avoid; page-break-after: auto; }
                 th, td { border: 1px solid #000; padding: 6px 4px; text-align: left; vertical-align: middle; }
                 th { background-color: #f2f2f2; font-weight: bold; text-align: center; font-size: 12px; }
                 .text-center { text-align: center; }
                 .text-right { text-align: right; }
-                
                 .signature-section { margin-top: 15px; display: flex; justify-content: flex-end; page-break-inside: avoid; }
                 .signature-box { text-align: center; min-width: 320px; font-weight: bold; border-top: 1px solid transparent; white-space: nowrap; }
-                
                 .printable-content { display: flex; flex-direction: column; }
-                
                 .table-individual td { padding: 4px 3px; height: 32px; }
                 .table-individual th { font-size: 10px; padding: 4px 2px; }
-
-                /* Envelope Style (Portrait) */
                 .envelope-container { border: 4px double #000; padding: 15mm; min-height: 250mm; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; box-sizing: border-box; }
                 .envelope-box { border: 2px solid #000; padding: 12px 25px; font-size: 22px; font-weight: bold; margin: 15px 0; }
                 .envelope-detail { font-size: 16px; margin-top: 8px; line-height: 1.6; }
                 .envelope-footer { margin-top: auto; width: 100%; display: flex; justify-content: space-between; font-weight: bold; font-size: 14px; padding-top: 20px; }
-
-                /* Landscape Cover Page Style (New) */
-                .cover-landscape {
-                    display: flex;
-                    flex-direction: row;
-                    border: 3px double #000;
-                    height: 180mm; /* Adjusted slightly */
-                    padding: 20px;
-                    box-sizing: border-box;
-                }
-                .cover-left {
-                    flex: 1.2;
-                    border-right: 1px dashed #999;
-                    padding-right: 30px;
-                    display: flex;
-                    flex-direction: column;
-                    justify-content: center;
-                    text-align: center;
-                }
-                .cover-right {
-                    flex: 0.8;
-                    padding-left: 30px;
-                    display: flex;
-                    flex-direction: column;
-                    justify-content: center;
-                }
+                .cover-landscape { display: flex; flex-direction: row; border: 3px double #000; height: 180mm; padding: 20px; box-sizing: border-box; }
+                .cover-left { flex: 1.2; border-right: 1px dashed #999; padding-right: 30px; display: flex; flex-direction: column; justify-content: center; text-align: center; }
+                .cover-right { flex: 0.8; padding-left: 30px; display: flex; flex-direction: column; justify-content: center; }
                 .cover-header { font-size: 20px; font-weight: bold; text-transform: uppercase; margin-bottom: 20px; }
                 .cover-title { font-size: 28px; font-weight: bold; margin: 15px 0; border-top: 2px solid #000; border-bottom: 2px solid #000; padding: 15px 0; }
                 .cover-stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; width: 100%; }
                 .stat-card { border: 1px solid #ddd; padding: 10px; border-radius: 8px; background: #f9f9f9; }
                 .stat-num { font-size: 24px; font-weight: bold; display: block; }
                 .stat-txt { font-size: 12px; color: #666; }
-                
                 .checklist-box { border: 1px solid #000; padding: 20px; background: #fff; box-shadow: 3px 3px 0px #eee; }
                 .checklist-title { font-size: 16px; font-weight: bold; text-align: center; border-bottom: 1px solid #ddd; padding-bottom: 10px; margin-bottom: 15px; }
                 .checklist-item { font-size: 14px; margin-bottom: 12px; display: flex; align-items: center; }
                 .box-check { width: 16px; height: 16px; border: 1px solid #000; display: inline-block; margin-right: 10px; }
-
                 .no-print { position: fixed; top: 20px; right: 20px; z-index: 1000; }
                 .btn-print { background: #2563eb; color: white; padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-family: ${fontFamily}; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
                 @media print { .no-print { display: none; } }
@@ -502,170 +448,155 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
             </div>
     `;
 
-    // Helper functions to generate content strings
-    const renderCoverPage = (act: any, teamsCount: number, judgesCount: number, clusterLabel: string, venueInfo: any, schedule: any) => `
-        <div class="page">
-            <div class="cover-landscape">
-                <div class="cover-left">
-                    <div class="cover-header">เอกสารการแข่งขัน (Activity Set)</div>
-                    <div style="font-size: 16px;">${headerTitle}</div>
-                    <div style="font-size: 14px; color: #555;">${viewScope === 'area' ? 'ระดับเขตพื้นที่การศึกษา' : `ระดับกลุ่มเครือข่าย (${clusterLabel})`}</div>
-                    
-                    <h1 class="cover-title">${act.name}</h1>
-                    <div style="font-size: 18px; margin-bottom: 10px;">หมวดหมู่: ${act.category}</div>
-                    
-                    <div style="margin-bottom: 15px; border: 1px dashed #666; padding: 10px; border-radius: 8px; background: #f9f9f9; text-align: left; display: inline-block; width: 90%;">
-                        <div style="font-weight: bold; margin-bottom: 4px;">📅 กำหนดการแข่งขัน:</div>
-                        ${schedule ? `
-                            <div style="font-size: 14px;">วันที่: ${schedule.date} ${schedule.timeRange ? `(${schedule.timeRange})` : ''}</div>
-                            <div style="font-size: 14px;">สถานที่: ${venueInfo?.name || '-'} ${schedule.building || ''} ${schedule.room ? 'ห้อง ' + schedule.room : ''}</div>
-                        ` : '<div style="color: #888; font-style: italic;">ยังไม่ระบุวันและสถานที่</div>'}
-                    </div>
+    const renderCoverPage = (act: any, teamCount: number, judgeCount: number, clusterLabel: string, venueInfo: any, schedule: any) => {
+        return `
+          <div class="page">
+              <div class="cover-landscape">
+                  <div class="cover-left">
+                      <div class="cover-header">Competition Documents</div>
+                      <div class="cover-title">
+                          ${headerTitle}<br/>
+                          <span style="font-size: 20px; font-weight: normal;">ระดับ${viewScope === 'area' ? 'เขตพื้นที่การศึกษา' : `กลุ่มเครือข่าย (${clusterLabel})`}</span>
+                      </div>
+                      <div style="font-size: 18px; margin-top: 20px;">
+                          <strong>กิจกรรม:</strong> ${act.name}<br/>
+                          <strong>หมวดหมู่:</strong> ${act.category}
+                      </div>
+                      <div class="cover-stats-grid">
+                          <div class="stat-card">
+                              <span class="stat-num">${teamCount}</span>
+                              <span class="stat-txt">ทีมเข้าแข่งขัน</span>
+                          </div>
+                          <div class="stat-card">
+                              <span class="stat-num">${judgeCount}</span>
+                              <span class="stat-txt">กรรมการตัดสิน</span>
+                          </div>
+                      </div>
+                  </div>
+                  <div class="cover-right">
+                      <div class="checklist-box">
+                          <div class="checklist-title">รายการเอกสารในชุด</div>
+                          <div class="checklist-item"><span class="box-check"></span> ใบลงชื่อกรรมการ</div>
+                          <div class="checklist-item"><span class="box-check"></span> ใบลงชื่อผู้เข้าแข่งขัน</div>
+                          <div class="checklist-item"><span class="box-check"></span> ใบลงชื่อครูผู้ฝึกสอน</div>
+                          <div class="checklist-item"><span class="box-check"></span> แบบบันทึกคะแนน (รายบุคคล)</div>
+                          <div class="checklist-item"><span class="box-check"></span> แบบบันทึกคะแนน (รวม)</div>
+                      </div>
+                      <div style="margin-top: 30px; text-align: center; font-size: 14px;">
+                          <strong>สถานที่:</strong> ${venueInfo?.name || '-'} ${schedule?.room || ''}<br/>
+                          <strong>วันที่:</strong> ${schedule?.date || '-'}
+                      </div>
+                  </div>
+              </div>
+          </div>
+        `;
+    };
 
-                    <div class="cover-stats-grid">
-                        <div class="stat-card">
-                            <span class="stat-num">${teamsCount}</span>
-                            <span class="stat-txt">ทีมเข้าแข่งขัน</span>
-                        </div>
-                        <div class="stat-card">
-                            <span class="stat-num">${judgesCount}</span>
-                            <span class="stat-txt">กรรมการตัดสิน</span>
-                        </div>
-                    </div>
-                </div>
-                <div class="cover-right">
-                    <div class="checklist-box">
-                        <div class="checklist-title">รายการเอกสารตรวจสอบ</div>
-                        <div class="checklist-item"><span class="box-check"></span> ใบลงชื่อกรรมการ (${judgesCount > 0 ? 'มี' : '-'})</div>
-                        <div class="checklist-item"><span class="box-check"></span> ใบลงชื่อผู้เข้าแข่งขัน (${teamsCount > 0 ? 'มี' : '-'})</div>
-                        <div class="checklist-item"><span class="box-check"></span> ใบให้คะแนนรายบุคคล (${judgesCount > 0 ? judgesCount + ' ท่าน' : 'สำรอง'})</div>
-                        <div class="checklist-item"><span class="box-check"></span> ใบสรุปคะแนนรวม (1 ชุด)</div>
-                        <div class="checklist-item" style="margin-top: 20px; font-weight: bold;"><span class="box-check"></span> ลงนามครบถ้วน</div>
-                    </div>
-                    <div style="margin-top: auto; text-align: center; font-size: 12px; color: #888;">
-                        ID: ${act.id} | Generated by CompManager
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
+    const renderJudgeSignin = (act: any, judges: Judge[], venueInfo: any, schedule: any) => {
+        return `
+          <div class="page">
+              <div class="header">
+                  <h1>${headerTitle}</h1>
+                  <h2>ระดับ${viewScope === 'area' ? 'เขตพื้นที่การศึกษา' : `กลุ่มเครือข่าย (${(data.clusters.find(c => c.ClusterID === clusterFilter)?.ClusterName || '')})`}</h2>
+              </div>
+              <div class="doc-title">ใบลงเวลาปฏิบัติหน้าที่กรรมการตัดสิน</div>
+              <div class="activity-info">
+                  <strong>กิจกรรม:</strong> ${act.name}<br/>
+                  ${config.includeVenueDate && schedule ? `<strong>สถานที่:</strong> ${venueInfo?.name} ${schedule.room || ''} | <strong>วันที่:</strong> ${schedule.date} (${schedule.timeRange})` : ''}
+              </div>
+              <table>
+                  <thead>
+                      <tr>
+                          <th style="width: 50px;">ที่</th>
+                          <th style="width: 250px;">ชื่อ - สกุล</th>
+                          <th>ตำแหน่ง / โรงเรียน</th>
+                          <th style="width: 150px;">ลายมือชื่อ</th>
+                          <th>หมายเหตุ</th>
+                      </tr>
+                  </thead>
+                  <tbody>
+                      ${judges.map((j, i) => `
+                          <tr>
+                              <td class="text-center">${i + 1}</td>
+                              <td>${j.judgeName}</td>
+                              <td>${j.role}<br/><small>${j.schoolName}</small></td>
+                              <td></td>
+                              <td></td>
+                          </tr>
+                      `).join('')}
+                      ${judges.length === 0 ? '<tr><td colspan="5" class="text-center">ไม่มีข้อมูลกรรมการ</td></tr>' : ''}
+                  </tbody>
+              </table>
+          </div>
+        `;
+    };
 
-    const renderJudgeSignin = (act: any, judges: Judge[], venueInfo: any, schedule: any) => `
-        <div class="page">
-            <div class="header">
-                <h1>${headerTitle}</h1>
-                <h2>ระดับ${viewScope === 'area' ? 'เขตพื้นที่การศึกษา' : `กลุ่มเครือข่าย (${(data.clusters.find(c => c.ClusterID === clusterFilter)?.ClusterName || '')})`}</h2>
-            </div>
-            <div class="doc-title">บัญชีรายชื่อกรรมการและใบลงเวลาปฏิบัติราชการ</div>
-            <div class="activity-info">
-                <strong>กิจกรรม:</strong> ${act.name}<br/>
-                ${config.includeVenueDate && schedule ? `<strong>สถานที่:</strong> ${venueInfo?.name} ${schedule.room || ''} | <strong>วันที่:</strong> ${schedule.date} (${schedule.timeRange})` : ''}
-            </div>
-            <table>
-                <thead>
-                    <tr>
-                        <th rowSpan="2" style="width: 40px;">ที่</th>
-                        <th rowSpan="2" style="width: 200px;">ชื่อ-นามสกุล</th>
-                        <th rowSpan="2" style="width: 150px;">ตำแหน่ง</th>
-                        <th rowSpan="2">สังกัด/โรงเรียน</th>
-                        <th colSpan="2" style="text-align: center;">ลงเวลามา</th>
-                        <th colSpan="2" style="text-align: center;">ลงเวลากลับ</th>
-                    </tr>
-                    <tr>
-                        <th style="width: 80px;">เวลา</th>
-                        <th style="width: 110px;">ลายมือชื่อ</th>
-                        <th style="width: 80px;">เวลา</th>
-                        <th style="width: 110px;">ลายมือชื่อ</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${judges.map((j, idx) => `
-                        <tr>
-                            <td class="text-center">${idx + 1}</td>
-                            <td>${j.judgeName}</td>
-                            <td>${j.role}</td>
-                            <td>${j.schoolName}</td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                        </tr>
-                    `).join('')}
-                    ${judges.length === 0 ? `<tr><td colspan="8" class="text-center text-red-500">ไม่พบข้อมูลกรรมการ</td></tr>` : ''}
-                </tbody>
-            </table>
-        </div>
-    `;
+    const renderCompetitorSignin = (act: any, teams: Team[], venueInfo: any, schedule: any, typeLabel: 'นักเรียน' | 'ครูผู้ฝึกสอน') => {
+        let rows = '';
+        let count = 1;
+        teams.forEach(t => {
+            let members: any[] = [];
+            try {
+                const raw = typeof t.members === 'string' ? JSON.parse(t.members) : t.members;
+                if (typeLabel === 'นักเรียน') {
+                    if (Array.isArray(raw)) members = raw; // legacy
+                    else if (raw && raw.students) members = raw.students;
+                } else {
+                    if (raw && raw.teachers) members = raw.teachers;
+                }
+            } catch(e) {}
 
-    const renderCompetitorSignin = (act: any, teams: Team[], venueInfo: any, schedule: any, memberType: string) => `
-        <div class="page">
-            <div class="header">
-                <h1>${headerTitle}</h1>
-                <h2>ระดับ${viewScope === 'area' ? 'เขตพื้นที่การศึกษา' : `กลุ่มเครือข่าย (${(data.clusters.find(c => c.ClusterID === clusterFilter)?.ClusterName || '')})`}</h2>
-            </div>
-            <div class="doc-title">บัญชีลงชื่อผู้เข้าแข่งขัน (ประเภท${memberType})</div>
-            <div class="activity-info">
-                <strong>กิจกรรม:</strong> ${act.name}<br/>
-                ${config.includeVenueDate && schedule ? `<strong>สถานที่:</strong> ${venueInfo?.name} ${schedule.room || ''} | <strong>วันที่:</strong> ${schedule.date} (${schedule.timeRange})` : ''}
-            </div>
-            <table>
-                <thead>
-                    <tr>
-                        <th rowSpan="2" style="width: 40px;">ที่</th>
-                        <th rowSpan="2" style="width: 220px;">ชื่อทีม / โรงเรียน</th>
-                        <th rowSpan="2">รายชื่อสมาชิก</th>
-                        <th colSpan="2" style="text-align: center;">ลงเวลามา</th>
-                        <th colSpan="2" style="text-align: center;">ลงเวลากลับ</th>
-                    </tr>
-                    <tr>
-                        <th style="width: 70px;">เวลา</th>
-                        <th style="width: 100px;">ลายมือชื่อ</th>
-                        <th style="width: 70px;">เวลา</th>
-                        <th style="width: 100px;">ลายมือชื่อ</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${teams.flatMap((t, tIdx) => {
-                        const schoolName = (data.schools || []).find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId)?.SchoolName || t.schoolId;
-                        let members: any[] = [];
-                        try {
-                            let memberSource = t.members;
-                            if (viewScope === 'area' && t.stageInfo) {
-                                const info = JSON.parse(t.stageInfo);
-                                if (info.members) memberSource = info.members;
-                            }
-                            const raw = typeof memberSource === 'string' ? JSON.parse(memberSource) : memberSource;
-                            if (memberType === 'นักเรียน') {
-                                if (Array.isArray(raw)) members = raw;
-                                else if (raw && raw.students) members = raw.students;
-                            } else {
-                                if (raw && raw.teachers) members = raw.teachers;
-                            }
-                        } catch(e) {}
-                        
-                        if (members.length === 0) return [];
+            members.forEach(m => {
+                const name = m.name || `${m.prefix || ''}${m.firstname || ''} ${m.lastname || ''}`;
+                const schoolName = (data.schools || []).find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId)?.SchoolName || t.schoolId;
+                rows += `
+                  <tr>
+                      <td class="text-center">${count++}</td>
+                      <td>${name}</td>
+                      <td>${schoolName}</td>
+                      <td>${t.teamName}</td>
+                      <td></td>
+                  </tr>
+                `;
+            });
+        });
 
-                        return members.map((m, mIdx) => `
-                            <tr>
-                                ${mIdx === 0 ? `<td class="text-center" rowSpan="${members.length}">${tIdx + 1}</td>` : ''}
-                                ${mIdx === 0 ? `<td rowSpan="${members.length}"><strong>${t.teamName}</strong><br/><small>${schoolName}</small></td>` : ''}
-                                <td>${m.prefix || ''}${m.name || (m.firstname + ' ' + m.lastname)}</td>
-                                <td></td>
-                                <td></td>
-                                <td></td>
-                                <td></td>
-                            </tr>
-                        `);
-                    }).join('')}
-                </tbody>
-            </table>
-        </div>
-    `;
+        return `
+          <div class="page">
+              <div class="header">
+                  <h1>${headerTitle}</h1>
+                  <h2>ระดับ${viewScope === 'area' ? 'เขตพื้นที่การศึกษา' : `กลุ่มเครือข่าย (${(data.clusters.find(c => c.ClusterID === clusterFilter)?.ClusterName || '')})`}</h2>
+              </div>
+              <div class="doc-title">ใบลงชื่อเข้าแข่งขัน (${typeLabel})</div>
+              <div class="activity-info">
+                  <strong>กิจกรรม:</strong> ${act.name}<br/>
+                  ${config.includeVenueDate && schedule ? `<strong>สถานที่:</strong> ${venueInfo?.name} ${schedule.room || ''} | <strong>วันที่:</strong> ${schedule.date} (${schedule.timeRange})` : ''}
+              </div>
+              <table>
+                  <thead>
+                      <tr>
+                          <th style="width: 40px;">ที่</th>
+                          <th style="width: 200px;">ชื่อ - สกุล</th>
+                          <th>โรงเรียน</th>
+                          <th>ทีม</th>
+                          <th style="width: 120px;">ลายมือชื่อ</th>
+                      </tr>
+                  </thead>
+                  <tbody>
+                      ${rows || '<tr><td colspan="5" class="text-center">ไม่มีข้อมูล</td></tr>'}
+                  </tbody>
+              </table>
+          </div>
+        `;
+    };
 
     const renderScoreSheet = async (act: any, teams: Team[], judges: Judge[], venueInfo: any, schedule: any, chairName: string) => {
         const judgesList = judges.length > 0 ? judges : Array.from({ length: config.scoreColsCount || 3 });
         const colsCount = judgesList.length;
-        const scoreUrl = `${window.location.origin}${window.location.pathname}#/score?activityId=${act.id}`;
+        
+        // --- QR Code Generation ---
+        const baseUrl = window.location.href.split('#')[0];
+        const scoreUrl = `${baseUrl}#/score-input?activityId=${act.id}`;
         let qrCodeImg = '';
         try {
             qrCodeImg = await QRCode.toDataURL(scoreUrl, { margin: 0, width: 100 });
@@ -728,7 +659,6 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
         `;
     };
 
-    // Use for...of to allow await inside loop
     for (const activityId of activityIds) {
         const act = (data.activities || []).find(a => a.id === activityId);
         if (!act) continue;
@@ -738,29 +668,17 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
         const venueInfo = config.includeVenueDate ? (data.venues || []).find(v => (v.scheduledActivities || []).some(s => s.activityId === activityId)) : null;
         const schedule = venueInfo?.scheduledActivities?.find(s => s.activityId === activityId);
         const clusterLabel = (data.clusters.find(c => c.ClusterID === clusterFilter)?.ClusterName || '');
-
         const chairperson = judges.find(j => j.role.includes('ประธาน'));
         const chairName = chairperson ? chairperson.judgeName : '..........................................................';
 
-        // --- Logic Selection ---
-        
         if (type === 'full-set') {
-            // 1. Cover Page (Landscape) - Updated to pass venueInfo & schedule
             htmlContent += renderCoverPage(act, teams.length, judges.length, clusterLabel, venueInfo, schedule);
-            
-            // 2. Judge Sign-in (Landscape)
             htmlContent += renderJudgeSignin(act, judges, venueInfo, schedule);
-            
-            // 3. Competitor Sign-in (Landscape) - Teachers & Students
             htmlContent += renderCompetitorSignin(act, teams, venueInfo, schedule, 'นักเรียน');
             htmlContent += renderCompetitorSignin(act, teams, venueInfo, schedule, 'ครูผู้ฝึกสอน');
             
-            // 4. Individual Score Sheets (Landscape)
             judges.forEach(judge => {
-                const phoneLine = judge.phone 
-                    ? `<span style="font-size: 12px;">เบอร์โทรศัพท์ ${judge.phone}</span>` 
-                    : 'เบอร์โทรศัพท์ ..........................................................';
-
+                const phoneLine = judge.phone ? `<span style="font-size: 12px;">เบอร์โทรศัพท์ ${judge.phone}</span>` : 'เบอร์โทรศัพท์ ..........................................................';
                 htmlContent += `
                     <div class="page">
                         <div class="header">
@@ -773,7 +691,6 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                             <strong>กรรมการ:</strong> ${judge.judgeName} (${judge.role}) สังกัด ${judge.schoolName}<br/>
                             ${config.includeVenueDate && schedule ? `<strong>สถานที่:</strong> ${venueInfo?.name} ${schedule.room || ''} | <strong>วันที่:</strong> ${schedule.date}` : ''}
                         </div>
-                        
                         <div class="printable-content">
                             <table class="table-individual">
                                 <thead>
@@ -804,11 +721,9 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                                     }).join('')}
                                 </tbody>
                             </table>
-                            
                             <div style="margin-top: 5px; border: 1px solid #000; padding: 6px; font-size: 11px; page-break-inside: avoid;">
                                 <strong>คำชี้แจง:</strong> 1. โปรดให้คะแนนตามเกณฑ์ที่กำหนด 2. ห้ามมีรอยขูด ลบ หรือแก้ไขโดยไม่มีการเซ็นกำกับ 3. สรุปคะแนนรวมให้ถูกต้อง
                             </div>
-
                             <div class="signature-section">
                                 <div class="signature-box">
                                     ลงชื่อ..........................................................${judge.role || 'กรรมการ'}<br/>
@@ -820,16 +735,10 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                     </div>
                 `;
             });
-
-            // 5. Total Score Sheet (Landscape)
             htmlContent += await renderScoreSheet(act, teams, judges, venueInfo, schedule, chairName);
-
         } else if (type === 'score-sheet-individual') {
             judges.forEach(judge => {
-                const phoneLine = judge.phone 
-                    ? `<span style="font-size: 12px;">เบอร์โทรศัพท์ ${judge.phone}</span>` 
-                    : 'เบอร์โทรศัพท์ ..........................................................';
-
+                const phoneLine = judge.phone ? `<span style="font-size: 12px;">เบอร์โทรศัพท์ ${judge.phone}</span>` : 'เบอร์โทรศัพท์ ..........................................................';
                 htmlContent += `
                     <div class="page">
                         <div class="header">
@@ -842,7 +751,6 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                             <strong>กรรมการ:</strong> ${judge.judgeName} (${judge.role}) สังกัด ${judge.schoolName}<br/>
                             ${config.includeVenueDate && schedule ? `<strong>สถานที่:</strong> ${venueInfo?.name} ${schedule.room || ''} | <strong>วันที่:</strong> ${schedule.date}` : ''}
                         </div>
-                        
                         <div class="printable-content">
                             <table class="table-individual">
                                 <thead>
@@ -873,11 +781,9 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                                     }).join('')}
                                 </tbody>
                             </table>
-                            
                             <div style="margin-top: 5px; border: 1px solid #000; padding: 6px; font-size: 11px; page-break-inside: avoid;">
                                 <strong>คำชี้แจง:</strong> 1. โปรดให้คะแนนตามเกณฑ์ที่กำหนด 2. ห้ามมีรอยขูด ลบ หรือแก้ไขโดยไม่มีการเซ็นกำกับ 3. สรุปคะแนนรวมให้ถูกต้อง
                             </div>
-
                             <div class="signature-section">
                                 <div class="signature-box">
                                     ลงชื่อ..........................................................${judge.role || 'กรรมการ'}<br/>
@@ -925,59 +831,35 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                 </div>
             `;
         }
-    } // End of loop
+    }
 
     htmlContent += `</body></html>`;
     return htmlContent;
   };
 
-  const handleSmartPrint = (type: DocType) => {
-      // Logic: 
-      // 1. If user ticked items -> Print ONLY those
-      // 2. If nothing ticked -> Confirm to Print ALL visible items
-      if (selectedActivityIds.size > 0) {
-          const ids = Array.from(selectedActivityIds);
-          setBulkConfirm({ isOpen: true, type, ids });
-      } else {
-          // Check if any items visible
-          const allIds = filteredActivities.map(a => a.id);
-          if (allIds.length === 0) {
-              alert('ไม่พบรายการกิจกรรมในตารางขณะนี้');
-              return;
-          }
-          setBulkConfirm({ isOpen: true, type, ids: allIds });
+  const handlePrintAction = async (type: DocType, ids: string[]) => {
+      setBulkConfirm(prev => ({ ...prev, isOpen: false }));
+      
+      if (ids.length === 0) return;
+
+      setIsGenerating(true);
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+          setIsGenerating(false);
+          alert('Pop-up ถูกบล็อก กรุณาอนุญาตให้เปิดหน้าต่างใหม่');
+          return;
       }
+
+      const content = await generateHTML(ids, type);
+      printWindow.document.write(content);
+      printWindow.document.close();
+      setIsGenerating(false);
   };
-
-  const handlePrintAction = async (type: DocType, specificIds: string[]) => {
-    if (isGuest) {
-        alert('กรุณาเข้าสู่ระบบด้วยสิทธิ์แอดมินหรือสถานศึกษาเพื่อพิมพ์เอกสาร');
-        return;
-    }
-    setIsGenerating(true);
-    await new Promise(resolve => setTimeout(resolve, 800));
-
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-        setIsGenerating(false);
-        alert('Pop-up ถูกบล็อก กรุณาอนุญาตให้เปิดหน้าต่างใหม่');
-        return;
-    }
-
-    const html = await generateHTML(specificIds, type);
-    printWindow.document.write(html);
-    printWindow.document.close();
-    setIsGenerating(false);
-    setBulkConfirm({ isOpen: false, type: 'judge-signin', ids: [] });
-  };
-
-  const isAllSelected = selectedActivityIds.size > 0 && selectedActivityIds.size === filteredActivities.length;
-  const selectionCount = selectedActivityIds.size;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20 relative">
-      
-      {/* Guest Lock Message */}
       {isGuest && (
         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center gap-3 text-amber-800 shadow-sm animate-pulse">
             <Lock className="w-5 h-5 shrink-0" />
@@ -987,8 +869,6 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
             </div>
         </div>
       )}
-
-      {/* Bulk Print Confirmation Modal */}
       {bulkConfirm.isOpen && (
           <div className="fixed inset-0 bg-black/60 z-[300] flex items-center justify-center p-4 backdrop-blur-sm animate-in zoom-in duration-300">
               <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col">
@@ -1024,8 +904,6 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
               </div>
           </div>
       )}
-
-      {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
         <div>
             <h2 className="text-xl font-bold text-gray-800 flex items-center font-kanit">
@@ -1034,7 +912,6 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
             </h2>
             <p className="text-gray-500 text-sm mt-1">พิมพ์ใบลงชื่อ แบบบันทึกคะแนนรายคน/รวม และใบปะหน้าซองกิจกรรม</p>
         </div>
-        
         <div className="flex gap-2 w-full md:w-auto">
             {!isGuest && (
                 <button 
@@ -1047,11 +924,8 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
             )}
         </div>
       </div>
-
-      {/* Level Selection & Filters */}
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-6">
         <div className="flex flex-col md:flex-row gap-6 items-center justify-between">
-            {/* Level Toggle - Integrated Selector */}
             <div className="flex bg-gray-100 p-1.5 rounded-xl shrink-0 w-full md:w-auto border border-gray-200 shadow-inner">
                 <button
                     onClick={() => { setViewScope('cluster'); if (!isGroupAdmin) setClusterFilter(''); }}
@@ -1066,7 +940,6 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                     <Trophy className="w-4 h-4 mr-2" /> ระดับเขตฯ
                 </button>
             </div>
-
             <div className="relative w-full md:flex-1">
                 <Search className="absolute inset-y-0 left-3 flex items-center pointer-events-none h-5 w-5 text-gray-400" />
                 <input
@@ -1077,7 +950,6 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                     onChange={(e) => setSearchTerm(e.target.value)}
                 />
             </div>
-
             <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
                 {viewScope === 'cluster' && isAdminOrArea && (
                     <div className="w-full sm:w-64">
@@ -1092,8 +964,6 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                 )}
             </div>
         </div>
-
-        {/* Quick Category Filters */}
         <div className="flex flex-wrap gap-2 items-center">
             <span className="text-[10px] font-black text-gray-400 flex items-center mr-2 uppercase tracking-widest bg-gray-50 px-2 py-1 rounded">
                 <Tag className="w-3 h-3 mr-1" /> หมวดหมู่:
@@ -1115,8 +985,6 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
             ))}
         </div>
       </div>
-
-      {/* Bulk Print Actions Bar */}
       <div className={`p-5 rounded-2xl border flex flex-col lg:flex-row items-center justify-between gap-4 transition-all sticky top-2 z-20 ${viewScope === 'area' ? 'bg-purple-50 border-purple-100 shadow-lg shadow-purple-100/50' : 'bg-blue-50 border-blue-100 shadow-lg shadow-blue-100/50'}`}>
           <div className="flex items-center gap-3 shrink-0">
               <div className={`text-white font-black px-4 py-1.5 rounded-full shadow-md text-sm transition-all ${selectionCount > 0 ? 'bg-green-600 animate-pulse' : (viewScope === 'area' ? 'bg-purple-600' : 'bg-blue-600')}`}>
@@ -1176,8 +1044,6 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
               </button>
           </div>
       </div>
-
-      {/* Activity Mobile Cards (Visible on Mobile) */}
       <div className="md:hidden space-y-4">
           <div className="flex items-center justify-between px-2">
                 <button onClick={toggleAllSelection} className="flex items-center text-sm font-bold text-gray-600">
@@ -1190,7 +1056,6 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
               const teamsCount = getTeamsForActivity(act.id).length;
               const judgesCount = getJudgesForActivity(act.id).length;
               const isSelected = selectedActivityIds.has(act.id);
-
               return (
                   <div key={act.id} className={`bg-white p-4 rounded-xl shadow-sm border transition-all ${isSelected ? 'border-blue-400 ring-1 ring-blue-400 bg-blue-50/20' : 'border-gray-200'}`}>
                       <div className="flex justify-between items-start mb-2">
@@ -1204,7 +1069,6 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                               </div>
                           </div>
                       </div>
-                      
                       <div className="flex gap-2 ml-9 mb-3">
                           <span className={`text-[10px] px-2 py-1 rounded-full font-bold ${teamsCount > 0 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-400'}`}>
                               {teamsCount} ทีม
@@ -1213,7 +1077,6 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                               {judgesCount} กรรมการ
                           </span>
                       </div>
-
                       <div className="grid grid-cols-2 gap-2 ml-9">
                           <button onClick={() => handlePrintAction('full-set', [act.id])} className="text-xs bg-emerald-100 border border-emerald-200 text-emerald-700 py-1.5 rounded hover:bg-emerald-200 font-bold col-span-2">พิมพ์แบบจัดชุด (Full Set)</button>
                           <button onClick={() => handlePrintAction('judge-signin', [act.id])} className="text-xs bg-white border border-gray-200 text-gray-600 py-1.5 rounded hover:bg-gray-50">ใบเซ็นกรรมการ</button>
@@ -1225,8 +1088,6 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
               )
           })}
       </div>
-
-      {/* Activity Table (Hidden on Mobile) */}
       <div className="hidden md:block bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
@@ -1249,7 +1110,6 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                           const teamsCount = getTeamsForActivity(act.id).length;
                           const judgesCount = getJudgesForActivity(act.id).length;
                           const isSelected = selectedActivityIds.has(act.id);
-
                           return (
                               <tr key={act.id} className={`hover:bg-gray-50/50 transition-colors ${isSelected ? 'bg-blue-50/30' : ''}`}>
                                   <td className="px-6 py-4 text-center">
@@ -1284,54 +1144,12 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                                   </td>
                                   <td className="px-6 py-4">
                                       <div className="flex justify-center gap-1">
-                                          <button 
-                                              onClick={() => handlePrintAction('full-set', [act.id])}
-                                              disabled={isGuest}
-                                              className="p-2 text-emerald-600 hover:enabled:bg-emerald-100 rounded-lg transition-colors border border-transparent hover:enabled:border-emerald-200 disabled:opacity-30"
-                                              title="พิมพ์แบบจัดชุด (Full Set)"
-                                          >
-                                              <FolderOpen className="w-5 h-5" />
-                                          </button>
-                                          <button 
-                                              onClick={() => handlePrintAction('judge-signin', [act.id])}
-                                              disabled={isGuest}
-                                              className="p-2 text-blue-600 hover:enabled:bg-blue-100 rounded-lg transition-colors border border-transparent hover:enabled:border-blue-200 disabled:opacity-30"
-                                              title="พิมพ์ใบเซ็นชื่อกรรมการ"
-                                          >
-                                              <UserCheck className="w-5 h-5" />
-                                          </button>
-                                          <button 
-                                              onClick={() => handlePrintAction('competitor-signin', [act.id])}
-                                              disabled={isGuest}
-                                              className="p-2 text-indigo-600 hover:enabled:bg-indigo-100 rounded-lg transition-colors border border-transparent hover:enabled:border-indigo-200 disabled:opacity-30"
-                                              title="พิมพ์ใบเซ็นชื่อผู้แข่ง"
-                                          >
-                                              <Users className="w-5 h-5" />
-                                          </button>
-                                          <button 
-                                              onClick={() => handlePrintAction('score-sheet-individual', [act.id])}
-                                              disabled={isGuest}
-                                              className="p-2 text-blue-800 hover:enabled:bg-blue-100 rounded-lg transition-colors border border-transparent hover:enabled:border-blue-200 disabled:opacity-30"
-                                              title="พิมพ์ใบให้คะแนนรายบุคคล"
-                                          >
-                                              <UserRound className="w-5 h-5" />
-                                          </button>
-                                          <button 
-                                              onClick={() => handlePrintAction('score-sheet', [act.id])}
-                                              disabled={isGuest}
-                                              className="p-2 text-emerald-600 hover:enabled:bg-emerald-100 rounded-lg transition-colors border border-transparent hover:enabled:border-emerald-200 disabled:opacity-30"
-                                              title="พิมพ์แบบบันทึกคะแนนรวม"
-                                          >
-                                              <ClipboardList className="w-5 h-5" />
-                                          </button>
-                                          <button 
-                                              onClick={() => handlePrintAction('envelope', [act.id])}
-                                              disabled={isGuest}
-                                              className="p-2 text-orange-600 hover:enabled:bg-orange-100 rounded-lg transition-colors border border-transparent hover:enabled:border-orange-200 disabled:opacity-30"
-                                              title="พิมพ์ใบปะหน้าซองกิจกรรม"
-                                          >
-                                              <Mail className="w-5 h-5" />
-                                          </button>
+                                          <button onClick={() => handlePrintAction('full-set', [act.id])} disabled={isGuest} className="p-2 text-emerald-600 hover:enabled:bg-emerald-100 rounded-lg transition-colors border border-transparent hover:enabled:border-emerald-200 disabled:opacity-30" title="พิมพ์แบบจัดชุด (Full Set)"><FolderOpen className="w-5 h-5" /></button>
+                                          <button onClick={() => handlePrintAction('judge-signin', [act.id])} disabled={isGuest} className="p-2 text-blue-600 hover:enabled:bg-blue-100 rounded-lg transition-colors border border-transparent hover:enabled:border-blue-200 disabled:opacity-30" title="พิมพ์ใบเซ็นชื่อกรรมการ"><UserCheck className="w-5 h-5" /></button>
+                                          <button onClick={() => handlePrintAction('competitor-signin', [act.id])} disabled={isGuest} className="p-2 text-indigo-600 hover:enabled:bg-indigo-100 rounded-lg transition-colors border border-transparent hover:enabled:border-indigo-200 disabled:opacity-30" title="พิมพ์ใบเซ็นชื่อผู้แข่ง"><Users className="w-5 h-5" /></button>
+                                          <button onClick={() => handlePrintAction('score-sheet-individual', [act.id])} disabled={isGuest} className="p-2 text-blue-800 hover:enabled:bg-blue-100 rounded-lg transition-colors border border-transparent hover:enabled:border-blue-200 disabled:opacity-30" title="พิมพ์ใบให้คะแนนรายบุคคล"><UserRound className="w-5 h-5" /></button>
+                                          <button onClick={() => handlePrintAction('score-sheet', [act.id])} disabled={isGuest} className="p-2 text-emerald-600 hover:enabled:bg-emerald-100 rounded-lg transition-colors border border-transparent hover:enabled:border-emerald-200 disabled:opacity-30" title="พิมพ์แบบบันทึกคะแนนรวม"><ClipboardList className="w-5 h-5" /></button>
+                                          <button onClick={() => handlePrintAction('envelope', [act.id])} disabled={isGuest} className="p-2 text-orange-600 hover:enabled:bg-orange-100 rounded-lg transition-colors border border-transparent hover:enabled:border-orange-200 disabled:opacity-30" title="พิมพ์ใบปะหน้าซองกิจกรรม"><Mail className="w-5 h-5" /></button>
                                       </div>
                                   </td>
                               </tr>
@@ -1351,7 +1169,6 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
               </table>
           </div>
       </div>
-
       {!isGuest && (
         <PrintConfigModal 
             isOpen={showConfigModal} 
@@ -1362,7 +1179,6 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
             currentConfigs={printConfigs}
         />
       )}
-
       {isGenerating && (
           <div className="fixed inset-0 bg-black/60 z-[500] flex flex-col items-center justify-center text-white backdrop-blur-md animate-in fade-in duration-300">
               <div className="bg-white/10 p-10 rounded-3xl backdrop-blur-xl flex flex-col items-center border border-white/20 shadow-2xl scale-110">
