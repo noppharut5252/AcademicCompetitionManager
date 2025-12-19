@@ -459,15 +459,15 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
     
     switch(status) {
       case TeamStatus.APPROVED:
-        return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200"><CheckCircle className="w-3 h-3 mr-1"/> อนุมัติ</span>;
+        return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200 whitespace-nowrap"><CheckCircle className="w-3 h-3 mr-1"/> อนุมัติ</span>;
       case TeamStatus.PENDING:
         return (
             <div className="flex flex-col items-start gap-1">
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-50 text-yellow-800 border border-yellow-200">
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-50 text-yellow-800 border border-yellow-200 whitespace-nowrap">
                     <Clock className="w-3 h-3 mr-1"/> รอตรวจ
                 </span>
                 {hasDeadline && (
-                    <span className="text-[10px] text-orange-600 flex items-center bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100 mt-0.5">
+                    <span className="text-[10px] text-orange-600 flex items-center bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100 mt-0.5 whitespace-nowrap">
                         <Clock className="w-3 h-3 mr-1" />
                         แก้ได้ถึง {formatDeadline(team.editDeadline!)}
                     </span>
@@ -475,9 +475,9 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
             </div>
         );
       case TeamStatus.REJECTED:
-        return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-800 border border-red-200"><XCircle className="w-3 h-3 mr-1"/> ปฏิเสธ</span>;
+        return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-800 border border-red-200 whitespace-nowrap"><XCircle className="w-3 h-3 mr-1"/> ปฏิเสธ</span>;
       default:
-        return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">{status}</span>;
+        return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 whitespace-nowrap">{status}</span>;
     }
   };
 
@@ -1159,7 +1159,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
             <thead className={viewRound === 'cluster' ? 'bg-gray-50' : 'bg-purple-50'}>
               <tr>
                 {isSuperUser && (
-                    <th className="px-3 py-3 w-10 text-center">
+                    <th className="px-3 py-3 w-10 text-center lg:px-6">
                         <button onClick={handleSelectAll} className="text-gray-500 hover:text-blue-600">
                             {isAllSelected ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
                         </button>
@@ -1167,7 +1167,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
                 )}
                 <th 
                     scope="col" 
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                    className="px-3 py-3 lg:px-6 lg:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
                     onClick={() => handleSort('teamName')}
                 >
                     <div className="flex items-center">
@@ -1175,20 +1175,20 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
                         {sortConfig?.key === 'teamName' ? (sortConfig.direction === 'asc' ? <ArrowUp className="w-4 h-4 ml-1"/> : <ArrowDown className="w-4 h-4 ml-1"/>) : <ArrowUpDown className="w-4 h-4 ml-1 opacity-50"/>}
                     </div>
                 </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">หมวดหมู่ & รายการ</th>
+                <th scope="col" className="px-3 py-3 lg:px-6 lg:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">หมวดหมู่ & รายการ</th>
                 <th 
                     scope="col" 
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                    className="px-3 py-3 lg:px-6 lg:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
                     onClick={() => handleSort('school')}
                 >
                     <div className="flex items-center">
-                        โรงเรียน / กลุ่มเครือข่าย
+                        โรงเรียน / กลุ่มฯ
                         {sortConfig?.key === 'school' ? (sortConfig.direction === 'asc' ? <ArrowUp className="w-4 h-4 ml-1"/> : <ArrowDown className="w-4 h-4 ml-1"/>) : <ArrowUpDown className="w-4 h-4 ml-1 opacity-50"/>}
                     </div>
                 </th>
                 <th 
                     scope="col" 
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                    className="px-3 py-3 lg:px-6 lg:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
                     onClick={() => handleSort('status')}
                 >
                     <div className="flex items-center">
@@ -1198,15 +1198,15 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
                 </th>
                 <th 
                     scope="col" 
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                    className="px-3 py-3 lg:px-6 lg:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
                     onClick={() => handleSort('score')}
                 >
                     <div className="flex items-center">
-                        {viewRound === 'cluster' ? 'คะแนน / ลำดับ (Score/Rank)' : 'คะแนนเขต / ผล'}
+                        {viewRound === 'cluster' ? 'คะแนน' : 'คะแนนเขต'}
                         {sortConfig?.key === 'score' ? (sortConfig.direction === 'asc' ? <ArrowUp className="w-4 h-4 ml-1"/> : <ArrowDown className="w-4 h-4 ml-1"/>) : <ArrowUpDown className="w-4 h-4 ml-1 opacity-50"/>}
                     </div>
                 </th>
-                <th scope="col" className="relative px-6 py-3"><span className="sr-only">Actions</span></th>
+                <th scope="col" className="relative px-3 py-3 lg:px-6 lg:py-3"><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -1232,13 +1232,13 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
                         onClick={() => setSelectedTeam(team)}
                     >
                       {isSuperUser && (
-                          <td className="px-3 py-4 text-center" onClick={(e) => { e.stopPropagation(); handleSelectTeam(team.teamId); }}>
+                          <td className="px-3 py-4 text-center lg:px-6" onClick={(e) => { e.stopPropagation(); handleSelectTeam(team.teamId); }}>
                               <div className={`cursor-pointer ${isSelected ? 'text-blue-600' : 'text-gray-300 hover:text-gray-400'}`}>
                                   {isSelected ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
                               </div>
                           </td>
                       )}
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-3 py-3 lg:px-6 lg:py-4 min-w-[200px] whitespace-normal">
                         <div className="flex items-center">
                           <div className="flex-shrink-0 h-10 w-10 relative">
                               <img className="h-10 w-10 rounded-full object-cover border border-gray-100 group-hover:border-blue-300 transition-colors" src={imageUrl} alt="" />
@@ -1255,7 +1255,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
                               )}
                           </div>
                           <div className="ml-4">
-                            <div className="text-sm font-medium text-gray-900 group-hover:text-blue-600 transition-colors flex items-center">
+                            <div className="text-sm font-medium text-gray-900 group-hover:text-blue-600 transition-colors flex items-center flex-wrap">
                                 {viewRound === 'area' && areaInfo?.name ? areaInfo.name : team.teamName}
                                 {canEdit && <span className="ml-2 text-[10px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded font-bold">EDIT</span>}
                                 {warnings.length > 0 && (
@@ -1264,7 +1264,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
                                     </span>
                                 )}
                             </div>
-                            <div className="text-xs text-gray-500">ID: {team.teamId}</div>
+                            <div className="text-xs text-gray-500 font-mono">ID: {team.teamId}</div>
                             {warnings.length > 0 && (
                                 <div className="flex flex-wrap gap-1 mt-1">
                                     {warnings.map((w, idx) => (
@@ -1277,28 +1277,28 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-3 py-3 lg:px-6 lg:py-4 min-w-[150px] whitespace-normal">
                          <div className="flex flex-col">
                             {activity?.category && (
                                 <span className="inline-flex self-start items-center px-2 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 mb-1 border border-blue-100">
                                     {activity.category}
                                 </span>
                             )}
-                            <div className="text-sm text-gray-900 max-w-[180px] truncate" title={activity?.name}>{activity?.name || team.activityId}</div>
-                            <div className="text-xs text-gray-500">{team.level}</div>
+                            <div className="text-sm text-gray-900 leading-snug" title={activity?.name}>{activity?.name || team.activityId}</div>
+                            <div className="text-xs text-gray-500 mt-0.5">{team.level}</div>
                             <div className="text-[10px] text-gray-400 mt-0.5">
-                                เกณฑ์: ครู {activity?.reqTeachers}, นร. {activity?.reqStudents}
+                                ครู {activity?.reqTeachers}, นร. {activity?.reqStudents}
                             </div>
                          </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900 max-w-[150px] truncate" title={school?.SchoolName}>{school?.SchoolName || team.schoolId}</div>
-                        <div className="text-xs text-gray-500 flex items-center">
+                      <td className="px-3 py-3 lg:px-6 lg:py-4 min-w-[150px] whitespace-normal">
+                        <div className="text-sm text-gray-900 leading-snug" title={school?.SchoolName}>{school?.SchoolName || team.schoolId}</div>
+                        <div className="text-xs text-gray-500 flex items-center mt-0.5">
                             <LayoutGrid className="w-3 h-3 mr-1 text-gray-400"/>
                             {cluster?.ClusterName || '-'}
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-3 py-3 lg:px-6 lg:py-4 whitespace-nowrap">
                         {getStatusBadge(team)}
                         {viewRound === 'area' && team.stageStatus === 'Area' && (
                              <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
@@ -1311,8 +1311,8 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
                             </div>
                         )}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <div className="flex flex-col">
+                      <td className="px-3 py-3 lg:px-6 lg:py-4 whitespace-nowrap text-center text-sm">
+                        <div className="flex flex-col items-center">
                             {showScore !== undefined && showScore !== null ? (
                                 <span className={`font-bold text-base ${viewRound === 'area' ? 'text-purple-700' : 'text-gray-900'}`}>
                                     {showScore > 0 ? showScore : '-'}
@@ -1321,13 +1321,13 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
                                 <span className="text-gray-400 text-xs">-</span>
                             )}
                             {showRank && showRank !== "null" && showRank !== "" && (
-                                <span className="text-xs text-gray-600 flex items-center mt-1 font-medium bg-gray-100 px-1.5 py-0.5 rounded self-start">
+                                <span className="text-xs text-gray-600 flex items-center mt-1 font-medium bg-gray-100 px-1.5 py-0.5 rounded">
                                     <Hash className="w-3 h-3 mr-1" /> {showRank}
                                 </span>
                             )}
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <td className="px-3 py-3 lg:px-6 lg:py-4 whitespace-nowrap text-right text-sm font-medium">
                          <div className="flex items-center justify-end space-x-2">
                             {teamFiles.length > 0 && (
                                 <div className="text-gray-400" title="มีไฟล์แนบ">
