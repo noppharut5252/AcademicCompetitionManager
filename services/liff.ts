@@ -235,7 +235,8 @@ export const shareScoreResult = async (
   activityName: string, 
   score: string | number, 
   medal: string, 
-  rank: string
+  rank: string,
+  teamId: string = '' // Added teamId param
 ): Promise<{ success: boolean; method: 'line' | 'share' | 'copy' | 'error' }> => {
     
     await ensureLiffInitialized();
@@ -243,7 +244,13 @@ export const shareScoreResult = async (
     const medalThai = (medal === 'Gold') ? 'เหรียญทอง' : (medal === 'Silver') ? 'เหรียญเงิน' : (medal === 'Bronze') ? 'เหรียญทองแดง' : 'เข้าร่วม';
     const rankText = rank ? ` (ลำดับที่ ${rank})` : '';
     const displayTeamName = (teamName && teamName.trim() !== '') ? teamName : schoolName || 'ไม่ระบุชื่อทีม';
-    const textSummary = `🏆 ผลการแข่งขัน: ${activityName}\nทีม: ${displayTeamName}\nโรงเรียน: ${schoolName}\n\n⭐ คะแนน: ${score}\n🏅 รางวัล: ${medalThai}${rankText}`;
+    
+    // New Public Link logic
+    const publicLink = teamId 
+        ? `${window.location.origin}${window.location.pathname}#/share-result?id=${teamId}`
+        : window.location.href;
+
+    const textSummary = `🏆 ผลการแข่งขัน: ${activityName}\nทีม: ${displayTeamName}\nโรงเรียน: ${schoolName}\n\n⭐ คะแนน: ${score}\n🏅 รางวัล: ${medalThai}${rankText}\n\nดูผลเต็มๆ: ${publicLink}`;
 
     // @ts-ignore
     const isLoggedIn = liff.isLoggedIn();
@@ -308,9 +315,9 @@ export const shareScoreResult = async (
                   "contents": [
                     {
                       "type": "button",
-                      "style": "link",
+                      "style": "primary",
                       "height": "sm",
-                      "action": { "type": "uri", "label": "ดูรายละเอียดเพิ่มเติม", "uri": window.location.href }
+                      "action": { "type": "uri", "label": "เปิดดูรายละเอียดเพิ่มเติม", "uri": publicLink }
                     }
                   ]
                 }
@@ -329,7 +336,7 @@ export const shareScoreResult = async (
             await navigator.share({
                 title: 'ผลการแข่งขัน',
                 text: textSummary,
-                url: window.location.href,
+                url: publicLink,
             });
             return { success: true, method: 'share' };
         } catch (error) { console.log("Web Share cancelled/failed"); }
@@ -343,6 +350,7 @@ export const shareScoreResult = async (
     }
 }
 
+// ... rest of the file (shareTop3Result, shareVenue, shareSchedule, shareAnnouncement) remains unchanged ...
 export const shareTop3Result = async (
   activityName: string,
   winners: { rank: number; teamName: string; schoolName: string; score: string; medal: string }[]
