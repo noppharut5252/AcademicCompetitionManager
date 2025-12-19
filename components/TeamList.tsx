@@ -1,9 +1,10 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { AppData, Team, TeamStatus, User, AreaStageInfo, Activity } from '../types';
-import { Search, Filter, CheckCircle, XCircle, Clock, ChevronLeft, ChevronRight, Eye, Trophy, Medal, Hash, LayoutGrid, Users, Award, School, Printer, FileText, Star, Crown, Zap, Edit, Trash2, Plus, Square, CheckSquare, Loader2, AlertTriangle, Info, X, Calendar, AlertCircle, History } from 'lucide-react';
+import { Search, Filter, CheckCircle, XCircle, Clock, ChevronLeft, ChevronRight, Eye, Trophy, Medal, Hash, LayoutGrid, Users, Award, School, Printer, FileText, Star, Crown, Zap, Edit, Trash2, Plus, Square, CheckSquare, Loader2, AlertTriangle, Info, X, Calendar, AlertCircle, History, ArrowUpDown, ArrowUp, ArrowDown, FileWarning } from 'lucide-react';
 import TeamDetailModal from './TeamDetailModal';
 import ConfirmationModal from './ConfirmationModal';
+import SearchableSelect from './SearchableSelect';
 import { updateTeamStatus, deleteTeam } from '../services/api';
 import { formatDeadline } from '../services/utils';
 
@@ -55,7 +56,13 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [categoryFilter, setCategoryFilter] = useState<string>('All');
   const [clusterFilter, setClusterFilter] = useState<string>('All');
+  const [schoolFilter, setSchoolFilter] = useState<string>(''); // New: School Filter
+  const [showWarningsOnly, setShowWarningsOnly] = useState(false); // New: Validation Filter
   const [quickFilter, setQuickFilter] = useState<'all' | 'gold' | 'qualified'>('all'); 
+  
+  // Sorting State
+  const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' } | null>(null);
+
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState<number>(20); 
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
@@ -64,6 +71,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
   // Bulk Action State
   const [selectedTeamIds, setSelectedTeamIds] = useState<Set<string>>(new Set());
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const [statusReason, setStatusReason] = useState(''); // New: Reason for bulk action
   
   // Toast & Modal State
   const [toast, setToast] = useState({ message: '', type: 'info' as 'success' | 'error' | 'info', isVisible: false });
@@ -87,6 +95,14 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
   const clusters = useMemo(() => {
     return data.clusters.sort((a, b) => a.ClusterName.localeCompare(b.ClusterName));
   }, [data.clusters]);
+
+  // Extract schools for filter
+  const schoolOptions = useMemo(() => {
+      return [
+          { label: 'ทั้งหมด (All Schools)', value: '' },
+          ...data.schools.map(s => ({ label: s.SchoolName, value: s.SchoolID }))
+      ];
+  }, [data.schools]);
 
   // Helper to normalize status
   const normalizeStatus = (status: string) => {
@@ -208,6 +224,15 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
       }
 
       return false;
+  };
+
+  // Sorting Handler
+  const handleSort = (key: string) => {
+      let direction: 'asc' | 'desc' = 'asc';
+      if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
+          direction = 'desc';
+      }
+      setSortConfig({ key, direction });
   };
 
   // --- Dynamic Dashboard Stats Logic ---
@@ -339,7 +364,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
         teams = teams.filter(team => isTeamQualifiedForArea(team));
     }
 
-    return teams.filter(team => {
+    let result = teams.filter(team => {
       const activity = data.activities.find(a => a.id === team.activityId);
       const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
       const cluster = school ? data.clusters.find(c => c.ClusterID === school.SchoolCluster) : null;
@@ -351,12 +376,14 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
         team.teamId.toLowerCase().includes(term) ||
         (school && school.SchoolName.toLowerCase().includes(term)) ||
         (cluster && cluster.ClusterName.toLowerCase().includes(term)) ||
-        (activity && activity.name.toLowerCase().includes(term)) || // SEARCH BY ACTIVITY NAME
-        (activity && activity.category.toLowerCase().includes(term)); // SEARCH BY CATEGORY
+        (activity && activity.name.toLowerCase().includes(term)) || 
+        (activity && activity.category.toLowerCase().includes(term));
       
       const matchesStatus = statusFilter === 'All' || normalizedStatus === statusFilter;
       const matchesCategory = categoryFilter === 'All' || (activity && activity.category === categoryFilter);
       const matchesCluster = clusterFilter === 'All' || (cluster && cluster.ClusterID === clusterFilter);
+      // School Filter Logic
+      const matchesSchool = !schoolFilter || (school && school.SchoolID === schoolFilter);
 
       let matchesQuickFilter = true;
       if (quickFilter === 'gold') {
@@ -366,9 +393,59 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
           matchesQuickFilter = isTeamQualifiedForArea(team);
       }
 
-      return matchesSearch && matchesStatus && matchesCategory && matchesCluster && matchesQuickFilter;
+      // Warning Filter Logic
+      let matchesWarning = true;
+      if (showWarningsOnly) {
+          const warnings = getValidationWarnings(team, activity, viewRound);
+          matchesWarning = warnings.length > 0;
+      }
+
+      return matchesSearch && matchesStatus && matchesCategory && matchesCluster && matchesSchool && matchesQuickFilter && matchesWarning;
     });
-  }, [data.teams, data.schools, data.activities, data.clusters, user, searchTerm, statusFilter, categoryFilter, clusterFilter, viewRound, quickFilter, role]);
+
+    // Sorting Logic
+    if (sortConfig) {
+        result.sort((a, b) => {
+            let valA: any = '';
+            let valB: any = '';
+
+            switch (sortConfig.key) {
+                case 'teamName':
+                    valA = a.teamName.toLowerCase();
+                    valB = b.teamName.toLowerCase();
+                    break;
+                case 'school':
+                    const schoolA = data.schools.find(s => s.SchoolID === a.schoolId || s.SchoolName === a.schoolId);
+                    const schoolB = data.schools.find(s => s.SchoolID === b.schoolId || s.SchoolName === b.schoolId);
+                    valA = (schoolA?.SchoolName || a.schoolId).toLowerCase();
+                    valB = (schoolB?.SchoolName || b.schoolId).toLowerCase();
+                    break;
+                case 'status':
+                    valA = normalizeStatus(a.status);
+                    valB = normalizeStatus(b.status);
+                    break;
+                case 'score':
+                    // Score depends on viewRound
+                    if (viewRound === 'area') {
+                        valA = getAreaInfo(a.stageInfo)?.score || 0;
+                        valB = getAreaInfo(b.stageInfo)?.score || 0;
+                    } else {
+                        valA = a.score || 0;
+                        valB = b.score || 0;
+                    }
+                    break;
+                default:
+                    return 0;
+            }
+
+            if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+            if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+            return 0;
+        });
+    }
+
+    return result;
+  }, [data.teams, data.schools, data.activities, data.clusters, user, searchTerm, statusFilter, categoryFilter, clusterFilter, schoolFilter, showWarningsOnly, viewRound, quickFilter, role, sortConfig]);
 
   const totalPages = Math.ceil(filteredTeams.length / itemsPerPage);
   const paginatedTeams = filteredTeams.slice(
@@ -459,6 +536,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
       }
 
       setEditDeadline(''); // Reset deadline
+      setStatusReason(''); // Reset reason
       setConfirmModal({
           isOpen: true,
           action: actionType,
@@ -482,8 +560,8 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
               const updates = targetIds.map(id => deleteTeam(id));
               await Promise.all(updates);
           } else {
-              // Passing deadline only if status is pending
-              const updates = targetIds.map(id => updateTeamStatus(id, status, '', status === '0' ? editDeadline : ''));
+              // Pass reason and deadline
+              const updates = targetIds.map(id => updateTeamStatus(id, status, statusReason, status === '0' ? editDeadline : ''));
               await Promise.all(updates);
           }
           
@@ -619,6 +697,22 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
         onCancel={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
         isLoading={isUpdatingStatus}
       >
+          {confirmModal.action === 'updateStatus' && (
+              <div className="mt-2 text-left">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                      ระบุเหตุผล / หมายเหตุ (Optional)
+                  </label>
+                  <textarea
+                      className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                      rows={2}
+                      placeholder={confirmModal.statusValue === '2' ? 'เช่น เอกสารไม่ครบถ้วน...' : 'หมายเหตุเพิ่มเติม...'}
+                      value={statusReason}
+                      onChange={(e) => setStatusReason(e.target.value)}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">* ข้อความนี้จะถูกบันทึกในประวัติของทุกทีมที่เลือก</p>
+              </div>
+          )}
+
           {confirmModal.statusValue === '0' && isSuperUser && (
               <div className="mt-4 bg-yellow-50 p-3 rounded-lg text-left border border-yellow-100">
                   <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
@@ -846,6 +940,12 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
             >
                 <Zap className="w-3 h-3 mr-1.5 fill-current" /> ตัวแทน/Qualified
             </button>
+            <button
+                onClick={() => setShowWarningsOnly(!showWarningsOnly)}
+                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap flex items-center ${showWarningsOnly ? 'bg-red-600 text-white border-red-600' : 'bg-white text-red-600 border border-red-200 hover:bg-red-50'}`}
+            >
+                <FileWarning className="w-3 h-3 mr-1.5" /> ข้อมูลไม่ครบ
+            </button>
         </div>
 
         {/* Search Bar - Full Width on own line */}
@@ -874,23 +974,26 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
         <div className="flex flex-wrap gap-3 w-full">
             {(!isGroupAdmin && !isSchoolAdmin) && (
                 <div className="flex-1 min-w-[200px]">
-                    <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <LayoutGrid className="h-4 w-4 text-gray-500" />
-                        </div>
-                        <select 
-                            className="block w-full pl-9 pr-8 py-2.5 text-sm border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 rounded-lg bg-gray-50 hover:bg-white transition-colors cursor-pointer"
-                            value={clusterFilter}
-                            onChange={(e) => { setClusterFilter(e.target.value); setCurrentPage(1); }}
-                        >
-                            <option value="All">ทุกกลุ่มเครือข่าย</option>
-                            {clusters.map(c => (
-                            <option key={c.ClusterID} value={c.ClusterID}>{c.ClusterName}</option>
-                            ))}
-                        </select>
-                    </div>
+                    <SearchableSelect 
+                        options={[{ label: 'ทุกกลุ่มเครือข่าย', value: 'All' }, ...clusters.map(c => ({ label: c.ClusterName, value: c.ClusterID }))]}
+                        value={clusterFilter}
+                        onChange={(val) => { setClusterFilter(val); setCurrentPage(1); }}
+                        placeholder="ทุกกลุ่มเครือข่าย"
+                        icon={<LayoutGrid className="h-4 w-4" />}
+                    />
                 </div>
             )}
+
+            {/* School Filter */}
+            <div className="flex-1 min-w-[200px]">
+                <SearchableSelect 
+                    options={schoolOptions}
+                    value={schoolFilter}
+                    onChange={(val) => { setSchoolFilter(val); setCurrentPage(1); }}
+                    placeholder="ค้นหาโรงเรียน..."
+                    icon={<School className="h-4 w-4" />}
+                />
+            </div>
 
             <div className="flex-1 min-w-[180px]">
                 <div className="relative">
@@ -1062,12 +1165,46 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
                         </button>
                     </th>
                 )}
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ทีม (Team)</th>
+                <th 
+                    scope="col" 
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                    onClick={() => handleSort('teamName')}
+                >
+                    <div className="flex items-center">
+                        ทีม (Team)
+                        {sortConfig?.key === 'teamName' ? (sortConfig.direction === 'asc' ? <ArrowUp className="w-4 h-4 ml-1"/> : <ArrowDown className="w-4 h-4 ml-1"/>) : <ArrowUpDown className="w-4 h-4 ml-1 opacity-50"/>}
+                    </div>
+                </th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">หมวดหมู่ & รายการ</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">โรงเรียน / กลุ่มเครือข่าย</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">สถานะ</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    {viewRound === 'cluster' ? 'คะแนน / ลำดับ (Score/Rank)' : 'คะแนนเขต / ผล'}
+                <th 
+                    scope="col" 
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                    onClick={() => handleSort('school')}
+                >
+                    <div className="flex items-center">
+                        โรงเรียน / กลุ่มเครือข่าย
+                        {sortConfig?.key === 'school' ? (sortConfig.direction === 'asc' ? <ArrowUp className="w-4 h-4 ml-1"/> : <ArrowDown className="w-4 h-4 ml-1"/>) : <ArrowUpDown className="w-4 h-4 ml-1 opacity-50"/>}
+                    </div>
+                </th>
+                <th 
+                    scope="col" 
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                    onClick={() => handleSort('status')}
+                >
+                    <div className="flex items-center">
+                        สถานะ
+                        {sortConfig?.key === 'status' ? (sortConfig.direction === 'asc' ? <ArrowUp className="w-4 h-4 ml-1"/> : <ArrowDown className="w-4 h-4 ml-1"/>) : <ArrowUpDown className="w-4 h-4 ml-1 opacity-50"/>}
+                    </div>
+                </th>
+                <th 
+                    scope="col" 
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                    onClick={() => handleSort('score')}
+                >
+                    <div className="flex items-center">
+                        {viewRound === 'cluster' ? 'คะแนน / ลำดับ (Score/Rank)' : 'คะแนนเขต / ผล'}
+                        {sortConfig?.key === 'score' ? (sortConfig.direction === 'asc' ? <ArrowUp className="w-4 h-4 ml-1"/> : <ArrowDown className="w-4 h-4 ml-1"/>) : <ArrowUpDown className="w-4 h-4 ml-1 opacity-50"/>}
+                    </div>
                 </th>
                 <th scope="col" className="relative px-6 py-3"><span className="sr-only">Actions</span></th>
               </tr>
