@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { AppData, User, Team, AreaStageInfo } from '../types';
 import { updateTeamResult, updateAreaResult } from '../services/api';
@@ -31,6 +30,7 @@ interface ConfirmModalProps {
     count?: number;
     totalCount?: number;
     teamName?: string;
+    schoolName?: string;
     newScore?: string;
     newRank?: string;
     newMedal?: string;
@@ -213,7 +213,10 @@ const ConfirmModal: React.FC<ConfirmModalProps> = (props) => {
                     </div>
                 ) : props.type === 'single' ? (
                     <div className="overflow-y-auto">
-                        <p className="text-gray-600 text-sm">กรุณาตรวจสอบความถูกต้องของข้อมูลทีม <br/><span className="font-bold text-gray-800">{props.teamName}</span></p>
+                        <p className="text-gray-600 text-sm">กรุณาตรวจสอบความถูกต้องของข้อมูลทีม <br/>
+                        <span className="font-bold text-gray-800">{props.teamName}</span>
+                        {props.schoolName && <><br/><span className="text-xs text-gray-500">({props.schoolName})</span></>}
+                        </p>
                         <div className="bg-gray-50 p-4 rounded-lg border border-gray-100 space-y-2 text-sm mt-2">
                             <div className="flex justify-between">
                                 <span className="text-gray-500">คะแนน:</span>
@@ -1708,6 +1711,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
               count={dirtyCount}
               totalCount={batchConfirmData.length}
               teamName={singleConfirmData?.teamName}
+              schoolName={singleConfirmData?.schoolName}
               newScore={singleConfirmData?.newScore}
               newRank={singleConfirmData?.newRank}
               newMedal={singleConfirmData?.newMedal}
@@ -1722,4 +1726,4 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
   );
 };
 
-export default ScoreInputView;
+export default ScoreEntry;
