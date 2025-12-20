@@ -27,7 +27,7 @@ interface BatchItem {
 
 interface ConfirmModalProps {
     isOpen: boolean;
-    type: 'single' | 'batch' | 'reset'; // Added 'reset'
+    type: 'single' | 'batch' | 'reset';
     count?: number;
     totalCount?: number;
     teamName?: string;
@@ -146,8 +146,10 @@ const ConfirmModal: React.FC<ConfirmModalProps> = (props) => {
                         <p className="text-gray-600 text-sm mb-4">
                             คุณกำลังจะลบข้อมูลคะแนน อันดับ และเหรียญรางวัลของทุกทีมในกิจกรรมนี้
                             <br/>
-                            <span className="text-xs text-gray-500">(เฉพาะในขอบเขต {props.viewScope === 'area' ? 'ระดับเขตพื้นที่' : 'กลุ่มเครือข่ายของคุณ'})</span>
-                            <br/><br/>
+                            <span className="text-xs text-gray-500 font-bold mt-1 block">
+                                (เฉพาะข้อมูลในระดับ {props.viewScope === 'area' ? 'เขตพื้นที่' : 'กลุ่มเครือข่าย'} เท่านั้น)
+                            </span>
+                            <br/>
                             <span className="font-bold text-red-600">การกระทำนี้ไม่สามารถย้อนกลับได้</span>
                         </p>
                     </div>
@@ -276,10 +278,8 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
   const [activityToReset, setActivityToReset] = useState<string | null>(null);
 
   // Modal States for Tables
-  const [showRepSummaryModal, setShowRepSummaryModal] = useState(false);
-  const [showMedalSummaryModal, setShowMedalSummaryModal] = useState(false);
-  // View specific reps modal
-  const [viewingRepActivity, setViewingRepActivity] = useState<string | null>(null);
+  const [showResultListModal, setShowResultListModal] = useState(false);
+  const [viewingResultActivity, setViewingResultActivity] = useState<string | null>(null);
 
   // References for keyboard navigation
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -311,9 +311,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
   // Permissions for Area Score Entry: Admin, Area, Score (Group Admin usually manages Cluster only)
   const canScoreArea = ['admin', 'area', 'score'].includes(role || '');
   
-  // Updated Reset Permissions:
-  // Admin/Area can always reset.
-  // Group Admin can reset ONLY in Cluster View.
+  // Reset Permissions: Admin/Area always, Group Admin only in Cluster View
   const canReset = ['admin', 'area'].includes(role || '') || (role === 'group_admin' && viewScope === 'cluster');
 
   if (!user || !allowedRoles.includes(role || '')) {
@@ -355,37 +353,45 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       return { availableCategories: categories, availableActivities: activeActivities, allAuthorizedTeams: authorizedTeams };
   }, [data.activities, data.teams, data.schools, role, user]);
 
-  // Announced Activities Data (for the new section)
-  // Refined: Logic now respects viewScope strictly to separate Area vs Cluster progress
+  // Announced Activities Data (Refined to match strict scope context)
   const announcedActivitiesData = useMemo(() => {
       return availableActivities.map(act => {
-          // Filter teams based on authorized list (handles Group Admin restriction)
-          const actTeams = allAuthorizedTeams.filter(t => t.activityId === act.id);
-          const totalTeams = actTeams.length;
+          // Base teams are from allAuthorizedTeams (which already filters Group Admin's cluster)
+          let actTeams = allAuthorizedTeams.filter(t => t.activityId === act.id);
           
+          // STRICT SCOPE FILTERING for the "Manager Table"
+          if (viewScope === 'area') {
+              // In Area View, count ONLY teams that reached the Area round (Qualified)
+              actTeams = actTeams.filter(t => t.stageStatus === 'Area' || String(t.flag).toUpperCase() === 'TRUE');
+          } else {
+              // In Cluster View
+              if (canFilterCluster && selectedClusterFilter) {
+                  // If Admin is filtering by cluster, only count that cluster
+                  actTeams = actTeams.filter(t => {
+                      const s = data.schools.find(sc => sc.SchoolID === t.schoolId || sc.SchoolName === t.schoolId);
+                      return s?.SchoolCluster === selectedClusterFilter;
+                  });
+              }
+              // If Group Admin, actTeams is already filtered to their cluster by allAuthorizedTeams logic above
+          }
+
+          const totalTeams = actTeams.length;
           let scoredTeams = 0;
-          let clusterRepCount = 0; // Only relevant for Cluster View analysis really
-          const scoredClusters = new Set<string>();
+          let rank1Count = 0;
 
           actTeams.forEach(t => {
-              // Crucial Scope Check:
-              // If View = Area, only count Area Scores
-              // If View = Cluster, only count Cluster Scores
               const score = viewScope === 'area' ? (getAreaInfo(t)?.score || 0) : t.score;
-              
-              if (score > 0 || score === -1) {
-                  scoredTeams++;
-                  
-                  // Track unique clusters that have scores (useful stat)
-                  const school = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
-                  if (school?.SchoolCluster) {
-                      scoredClusters.add(school.SchoolCluster);
-                  }
-              }
+              const rank = viewScope === 'area' ? (getAreaInfo(t)?.rank || '') : t.rank;
+              const flag = t.flag;
 
-              // Count Reps (Only relevant for Cluster View really, but kept for stat)
-              if (String(t.rank) === '1' && String(t.flag).toUpperCase() === 'TRUE') {
-                  clusterRepCount++;
+              if (score > 0 || score === -1) scoredTeams++;
+
+              // Count Rank 1 (For Area) or Reps (For Cluster)
+              if (viewScope === 'area') {
+                  if (String(rank) === '1') rank1Count++;
+              } else {
+                  // Cluster Rep
+                  if (String(rank) === '1' && String(flag).toUpperCase() === 'TRUE') rank1Count++;
               }
           });
 
@@ -393,23 +399,21 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
               ...act,
               totalTeams,
               scoredTeams,
-              clusterRepCount,
-              scoredClustersCount: scoredClusters.size,
+              rank1Count, // Represents Winners (Area) or Reps (Cluster)
               isFullyScored: totalTeams > 0 && totalTeams === scoredTeams
           };
       }).filter(a => {
-          // Filter by logic: Must have some scores IN THE CURRENT SCOPE to be "Announced"
+          // Filter by logic: Must have some scores in the CURRENT SCOPE to be listed
           if (a.scoredTeams === 0) return false;
           // Apply Filters
           if (announcedCategoryFilter !== 'All' && a.category !== announcedCategoryFilter) return false;
           if (announcedSearch && !a.name.toLowerCase().includes(announcedSearch.toLowerCase())) return false;
           return true;
       });
-  }, [availableActivities, allAuthorizedTeams, viewScope, announcedCategoryFilter, announcedSearch, data.schools]);
+  }, [availableActivities, allAuthorizedTeams, viewScope, announcedCategoryFilter, announcedSearch, data.schools, selectedClusterFilter, canFilterCluster]);
 
-  // Completion Stats Calculation
+  // Completion Stats Calculation (Existing Logic)
   const completionStats = useMemo(() => {
-      // ... (Existing Logic) ...
       const scopeTeams = viewScope === 'area' 
         ? allAuthorizedTeams.filter(t => t.stageStatus === 'Area' || t.flag === 'TRUE')
         : allAuthorizedTeams;
@@ -422,7 +426,6 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
 
       const pendingActivityIds = new Set<string>();
       const scoredActivityIds = new Set<string>();
-      
       const pendingReasons: Record<string, { unscored: number, missingRep: boolean }> = {};
 
       availableActivities.forEach(act => {
@@ -469,95 +472,8 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       };
   }, [availableActivities, allAuthorizedTeams, viewScope]);
 
-  // Representative Stats Calculation & School Stats
-  const { repStats, schoolStats, representativesList } = useMemo(() => {
-      // ... (Existing Logic) ...
-      const activityIds = new Set(availableActivities.map(a => a.id));
-      const activitiesWithRep = new Set(
-          allAuthorizedTeams
-            .filter(t => String(t.flag).toUpperCase() === 'TRUE')
-            .map(t => t.activityId)
-            .filter(id => activityIds.has(id))
-      );
-      const missingActivities = availableActivities.filter(a => !activitiesWithRep.has(a.id));
-
-      const schoolMap: Record<string, { name: string, gold: number, silver: number, bronze: number, participant: number, total: number, repCount: number, repTeams: Team[] }> = {};
-      const repList: { activity: string, category: string, school: string, teamName: string, teamId: string }[] = [];
-
-      const targetTeams = viewScope === 'area'
-        ? allAuthorizedTeams.filter(t => t.stageStatus === 'Area' || t.flag === 'TRUE')
-        : allAuthorizedTeams;
-
-      targetTeams.forEach(t => {
-          const schoolName = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId)?.SchoolName || t.schoolId;
-          
-          if (!schoolMap[schoolName]) {
-              schoolMap[schoolName] = { name: schoolName, gold: 0, silver: 0, bronze: 0, participant: 0, total: 0, repCount: 0, repTeams: [] };
-          }
-
-          let score = 0;
-          let medal = '';
-          let flag = '';
-          let rank = '';
-
-          if (viewScope === 'area') {
-              const info = getAreaInfo(t);
-              score = info?.score || 0;
-              medal = info?.medal || '';
-              rank = info?.rank || '';
-          } else {
-              score = t.score;
-              medal = t.medalOverride || '';
-              flag = t.flag;
-              rank = t.rank;
-          }
-
-          const calculatedMedal = calculateMedal(String(score), medal);
-          if (score > 0 || score === -1) {
-              schoolMap[schoolName].total++;
-              if (calculatedMedal === 'Gold') schoolMap[schoolName].gold++;
-              else if (calculatedMedal === 'Silver') schoolMap[schoolName].silver++;
-              else if (calculatedMedal === 'Bronze') schoolMap[schoolName].bronze++;
-              else schoolMap[schoolName].participant++;
-          }
-
-          const isRep = viewScope === 'area' 
-            ? (String(rank) === '1') 
-            : (String(flag).toUpperCase() === 'TRUE' && String(rank) === '1');
-          
-          if (isRep) {
-              schoolMap[schoolName].repCount++;
-              schoolMap[schoolName].repTeams.push(t);
-              
-              const act = data.activities.find(a => a.id === t.activityId);
-              repList.push({
-                  activity: act?.name || t.activityId,
-                  category: act?.category || 'General',
-                  school: schoolName,
-                  teamName: t.teamName,
-                  teamId: t.teamId
-              });
-          }
-      });
-
-      const sortedSchoolStats = Object.values(schoolMap).sort((a, b) => b.repCount - a.repCount || b.gold - a.gold || b.total - a.total);
-      repList.sort((a, b) => a.category.localeCompare(b.category) || a.activity.localeCompare(b.activity));
-
-      return {
-          repStats: {
-              total: availableActivities.length,
-              countWithRep: activitiesWithRep.size,
-              countMissing: missingActivities.length,
-              missingList: missingActivities
-          },
-          schoolStats: sortedSchoolStats,
-          representativesList: repList
-      };
-  }, [availableActivities, allAuthorizedTeams, data.schools, data.activities, viewScope]);
-
   // Global Dashboard Stats
   const globalStats = useMemo(() => {
-      // ... (Existing Logic) ...
       const targetTeams = viewScope === 'area' 
         ? allAuthorizedTeams.filter(t => t.stageStatus === 'Area' || t.flag === 'TRUE')
         : allAuthorizedTeams;
@@ -1046,14 +962,25 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
 
           let targetTeams = allAuthorizedTeams.filter(t => t.activityId === activityToReset);
           
-          // Group Admin Filter: Reset only their cluster if in Cluster View
-          if (viewScope === 'cluster' && role === 'group_admin') {
-              const userSchool = data.schools.find(s => s.SchoolID === user?.SchoolID);
-              const clusterId = userSchool?.SchoolCluster;
-              if (clusterId) {
+          if (viewScope === 'area') {
+              // Reset only Qualified teams
+              targetTeams = targetTeams.filter(t => t.stageStatus === 'Area' || String(t.flag).toUpperCase() === 'TRUE');
+          } else {
+              // Group Admin Filter: Reset only their cluster if in Cluster View
+              if (role === 'group_admin') {
+                  const userSchool = data.schools.find(s => s.SchoolID === user?.SchoolID);
+                  const clusterId = userSchool?.SchoolCluster;
+                  if (clusterId) {
+                      targetTeams = targetTeams.filter(t => {
+                          const s = data.schools.find(sc => sc.SchoolID === t.schoolId || sc.SchoolName === t.schoolId);
+                          return s?.SchoolCluster === clusterId;
+                      });
+                  }
+              } else if (role === 'admin' && selectedClusterFilter) {
+                  // Admin filtered by cluster
                   targetTeams = targetTeams.filter(t => {
                       const s = data.schools.find(sc => sc.SchoolID === t.schoolId || sc.SchoolName === t.schoolId);
-                      return s?.SchoolCluster === clusterId;
+                      return s?.SchoolCluster === selectedClusterFilter;
                   });
               }
           }
@@ -1063,9 +990,8 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
           // Loop through all teams in activity and clear fields
           for (const team of targetTeams) {
               // Create a blank edit object effectively clearing the record
-              // Note: performUpdate decides between updateTeamResult (Cluster) and updateAreaResult (Area) based on viewScope state.
-              // So we just need to ensure the targetTeams list is correct.
               const blankEdit = { score: '0', rank: '', medal: '', flag: '' }; 
+              // performUpdate will decide based on viewScope whether to call updateTeamResult or updateAreaResult
               const result = await performUpdate(team.teamId, blankEdit);
               if (result) successCount++;
           }
@@ -1073,7 +999,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
           setIsLoading(false);
           onDataUpdate();
           setActivityToReset(null);
-          showToast(`รีเซ็ตข้อมูล ${successCount} รายการเรียบร้อยแล้ว`, 'success');
+          showToast(`รีเซ็ตข้อมูล ${successCount} รายการเรียบร้อยแล้ว (${viewScope === 'area' ? 'ระดับเขต' : 'ระดับกลุ่ม'})`, 'success');
       }
   };
 
@@ -1081,18 +1007,60 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
   const handlePrintActivityReps = () => { /* ...existing... */ };
   const handlePrintMedalSummary = () => { /* ...existing... */ };
 
-  const handleViewReps = (activityId: string) => {
-      setViewingRepActivity(activityId);
-      setShowRepSummaryModal(true);
+  // New: Show Result List Modal instead of just Reps
+  const handleViewResultList = (activityId: string) => {
+      setViewingResultActivity(activityId);
+      setShowResultListModal(true);
   };
 
-  const representativesListFiltered = useMemo(() => {
-      // If specific activity view
-      if (viewingRepActivity) {
-          return representativesList.filter(r => r.activity === (data.activities.find(a => a.id === viewingRepActivity)?.name || viewingRepActivity));
+  // Filtered List for the new Modal
+  const activityResultList = useMemo(() => {
+      if (!viewingResultActivity) return [];
+      
+      let teams = allAuthorizedTeams.filter(t => t.activityId === viewingResultActivity);
+      
+      if (viewScope === 'area') {
+          // Area View: Show only qualified teams
+          teams = teams.filter(t => t.stageStatus === 'Area' || String(t.flag).toUpperCase() === 'TRUE');
+      } else {
+          // Cluster View: Filter by Cluster logic (Group Admin or Admin Filter)
+          if (role === 'group_admin') {
+              // Already filtered in allAuthorizedTeams via main hook logic
+          } else if (canFilterCluster && selectedClusterFilter) {
+              teams = teams.filter(t => {
+                  const s = data.schools.find(sc => sc.SchoolID === t.schoolId || sc.SchoolName === t.schoolId);
+                  return s?.SchoolCluster === selectedClusterFilter;
+              });
+          }
       }
-      return representativesList;
-  }, [representativesList, viewingRepActivity, data.activities]);
+
+      // Process for display
+      return teams.map(t => {
+          const school = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
+          let score = 0;
+          let rank = '';
+          let medal = '';
+          
+          if (viewScope === 'area') {
+              const info = getAreaInfo(t);
+              score = info?.score || 0;
+              rank = info?.rank || '';
+              medal = info?.medal || calculateMedal(String(score), '');
+          } else {
+              score = t.score;
+              rank = t.rank;
+              medal = t.medalOverride || calculateMedal(String(score), '');
+          }
+
+          return {
+              ...t,
+              schoolName: school?.SchoolName || t.schoolId,
+              displayScore: score,
+              displayRank: rank,
+              displayMedal: medal
+          };
+      }).sort((a, b) => b.displayScore - a.displayScore); // Sort by score desc
+  }, [allAuthorizedTeams, viewingResultActivity, viewScope, role, selectedClusterFilter, data.schools]);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20 relative">
@@ -1136,7 +1104,97 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
         </div>
       </div>
 
-      {/* Completion Dashboard */}
+      {/* Announced Activities Manager Section */}
+      {showAnnouncedManager && (
+          <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-6 animate-in slide-in-from-top-4">
+              <div className="flex justify-between items-center mb-4 border-b border-indigo-200 pb-2">
+                  <h3 className="font-bold text-indigo-800 flex items-center">
+                      <ListChecks className="w-5 h-5 mr-2" /> 
+                      รายการที่ประกาศผลแล้ว ({announcedActivitiesData.length})
+                      <span className="text-xs font-normal text-indigo-600 ml-2 bg-indigo-100 px-2 py-0.5 rounded">
+                          {viewScope === 'area' ? 'เฉพาะรอบเขตพื้นที่' : 'เฉพาะกลุ่มเครือข่ายของท่าน'}
+                      </span>
+                  </h3>
+                  <div className="flex gap-2">
+                        <select 
+                            className="bg-white border border-indigo-200 text-indigo-700 text-xs rounded px-2 py-1 focus:outline-none"
+                            value={announcedCategoryFilter}
+                            onChange={(e) => setAnnouncedCategoryFilter(e.target.value)}
+                        >
+                            <option value="All">ทุกหมวดหมู่</option>
+                            {availableCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                        <input 
+                            type="text" 
+                            className="bg-white border border-indigo-200 text-xs rounded px-2 py-1 focus:outline-none"
+                            placeholder="ค้นหากิจกรรม..."
+                            value={announcedSearch}
+                            onChange={(e) => setAnnouncedSearch(e.target.value)}
+                        />
+                  </div>
+              </div>
+
+              <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-indigo-100">
+                  <table className="min-w-full divide-y divide-indigo-100">
+                      <thead className="bg-indigo-50/50">
+                          <tr>
+                              <th className="px-4 py-3 text-left text-xs font-bold text-indigo-700 uppercase tracking-wider">กิจกรรม</th>
+                              <th className="px-4 py-3 text-center text-xs font-bold text-indigo-700 uppercase tracking-wider w-24">ทีมทั้งหมด</th>
+                              <th className="px-4 py-3 text-center text-xs font-bold text-indigo-700 uppercase tracking-wider w-24">บันทึกแล้ว</th>
+                              <th className="px-4 py-3 text-center text-xs font-bold text-indigo-700 uppercase tracking-wider w-32">
+                                  {viewScope === 'area' ? 'Rank 1 (เขต)' : 'ตัวแทนกลุ่ม (Rank 1 + Q)'}
+                              </th>
+                              <th className="px-4 py-3 text-right text-xs font-bold text-indigo-700 uppercase tracking-wider">จัดการ</th>
+                          </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-50">
+                          {announcedActivitiesData.map((act) => (
+                              <tr key={act.id} className="hover:bg-indigo-50/30 transition-colors">
+                                  <td className="px-4 py-3">
+                                      <div className="text-sm font-bold text-gray-800">{act.name}</div>
+                                      <div className="text-xs text-gray-500">{act.category}</div>
+                                  </td>
+                                  <td className="px-4 py-3 text-center text-sm">{act.totalTeams}</td>
+                                  <td className="px-4 py-3 text-center text-sm font-bold text-green-600">{act.scoredTeams}</td>
+                                  <td className="px-4 py-3 text-center">
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-purple-100 text-purple-700">
+                                          {act.rank1Count} ทีม
+                                      </span>
+                                  </td>
+                                  <td className="px-4 py-3 text-right">
+                                      <div className="flex justify-end gap-2">
+                                          <button 
+                                              onClick={() => handleViewResultList(act.id)}
+                                              className="p-1.5 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded border border-blue-200 transition-colors"
+                                              title="ดูรายชื่อและผลการแข่งขัน"
+                                          >
+                                              <Eye className="w-4 h-4" />
+                                          </button>
+                                          {canReset && (
+                                              <button 
+                                                  onClick={() => initiateResetActivity(act.id)}
+                                                  className="p-1.5 text-red-600 bg-red-50 hover:bg-red-100 rounded border border-red-200 transition-colors"
+                                                  title="รีเซ็ตผลการแข่งขัน (เฉพาะในขอบเขตนี้)"
+                                              >
+                                                  <RotateCcw className="w-4 h-4" />
+                                              </button>
+                                          )}
+                                      </div>
+                                  </td>
+                              </tr>
+                          ))}
+                          {announcedActivitiesData.length === 0 && (
+                              <tr>
+                                  <td colSpan={5} className="px-6 py-8 text-center text-gray-400 italic">ไม่พบข้อมูลกิจกรรมที่ประกาศผลแล้วในระดับนี้</td>
+                              </tr>
+                          )}
+                      </tbody>
+                  </table>
+              </div>
+          </div>
+      )}
+
+      {/* Completion Dashboard - Adjusted to respect viewScope teams only */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4 group">
                 <div className="p-3 bg-green-50 text-green-600 rounded-2xl group-hover:scale-110 transition-transform">
@@ -1198,95 +1256,6 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                 </div>
           </div>
       </div>
-
-      {/* Announced Activities Manager Section */}
-      {showAnnouncedManager && (
-          <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-6 animate-in slide-in-from-top-4">
-              <div className="flex justify-between items-center mb-4 border-b border-indigo-200 pb-2">
-                  <h3 className="font-bold text-indigo-800 flex items-center">
-                      <ListChecks className="w-5 h-5 mr-2" /> 
-                      รายการที่ประกาศผลแล้ว ({announcedActivitiesData.length})
-                  </h3>
-                  <div className="flex gap-2">
-                        {/* Filters for this specific table */}
-                        <select 
-                            className="bg-white border border-indigo-200 text-indigo-700 text-xs rounded px-2 py-1 focus:outline-none"
-                            value={announcedCategoryFilter}
-                            onChange={(e) => setAnnouncedCategoryFilter(e.target.value)}
-                        >
-                            <option value="All">ทุกหมวดหมู่</option>
-                            {availableCategories.map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
-                        <input 
-                            type="text" 
-                            className="bg-white border border-indigo-200 text-xs rounded px-2 py-1 focus:outline-none"
-                            placeholder="ค้นหากิจกรรม..."
-                            value={announcedSearch}
-                            onChange={(e) => setAnnouncedSearch(e.target.value)}
-                        />
-                  </div>
-              </div>
-
-              <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-indigo-100">
-                  <table className="min-w-full divide-y divide-indigo-100">
-                      <thead className="bg-indigo-50/50">
-                          <tr>
-                              <th className="px-4 py-3 text-left text-xs font-bold text-indigo-700 uppercase tracking-wider">กิจกรรม</th>
-                              <th className="px-4 py-3 text-center text-xs font-bold text-indigo-700 uppercase tracking-wider w-24">ทีมทั้งหมด</th>
-                              <th className="px-4 py-3 text-center text-xs font-bold text-indigo-700 uppercase tracking-wider w-24">บันทึกแล้ว</th>
-                              <th className="px-4 py-3 text-center text-xs font-bold text-indigo-700 uppercase tracking-wider w-32">
-                                  {viewScope === 'area' ? 'Rank 1 (เขต)' : 'ตัวแทนกลุ่ม (Rank 1 + Q)'}
-                              </th>
-                              <th className="px-4 py-3 text-right text-xs font-bold text-indigo-700 uppercase tracking-wider">จัดการ</th>
-                          </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-50">
-                          {announcedActivitiesData.map((act) => (
-                              <tr key={act.id} className="hover:bg-indigo-50/30 transition-colors">
-                                  <td className="px-4 py-3">
-                                      <div className="text-sm font-bold text-gray-800">{act.name}</div>
-                                      <div className="text-xs text-gray-500">{act.category}</div>
-                                  </td>
-                                  <td className="px-4 py-3 text-center text-sm">{act.totalTeams}</td>
-                                  <td className="px-4 py-3 text-center text-sm font-bold text-green-600">{act.scoredTeams}</td>
-                                  <td className="px-4 py-3 text-center">
-                                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-purple-100 text-purple-700">
-                                          {viewScope === 'area' ? act.clusterRepCount : act.scoredClustersCount} {viewScope === 'area' ? 'กลุ่ม/เขต' : 'กลุ่ม'}
-                                      </span>
-                                  </td>
-                                  <td className="px-4 py-3 text-right">
-                                      <div className="flex justify-end gap-2">
-                                          <button 
-                                              onClick={() => handleViewReps(act.id)}
-                                              className="p-1.5 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded border border-blue-200 transition-colors"
-                                              title="ดูรายชื่อตัวแทน/ผู้ชนะ"
-                                          >
-                                              <Eye className="w-4 h-4" />
-                                          </button>
-                                          {/* Reset Button */}
-                                          {canReset && (
-                                              <button 
-                                                  onClick={() => initiateResetActivity(act.id)}
-                                                  className="p-1.5 text-red-600 bg-red-50 hover:bg-red-100 rounded border border-red-200 transition-colors"
-                                                  title="รีเซ็ตผลการแข่งขัน"
-                                              >
-                                                  <RotateCcw className="w-4 h-4" />
-                                              </button>
-                                          )}
-                                      </div>
-                                  </td>
-                              </tr>
-                          ))}
-                          {announcedActivitiesData.length === 0 && (
-                              <tr>
-                                  <td colSpan={5} className="px-6 py-8 text-center text-gray-400 italic">ไม่พบข้อมูลกิจกรรมที่ประกาศผลแล้วในระดับนี้</td>
-                              </tr>
-                          )}
-                      </tbody>
-                  </table>
-              </div>
-          </div>
-      )}
 
       {/* Conditional: Pending Activities List */}
       {showPendingActivities && (
@@ -1617,57 +1586,67 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
           </div>
       )}
 
-      {/* Summary Table: Representatives */}
-      {showRepSummaryModal && (
+      {/* Summary Table: Full Activity Results (Replaced Rep Summary) */}
+      {showResultListModal && (
           <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
               <div className="bg-white rounded-2xl w-full max-w-5xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-                  <div className="bg-purple-600 p-4 border-b border-purple-100 flex justify-between items-center text-white shrink-0">
+                  <div className={`p-4 border-b border-gray-100 flex justify-between items-center shrink-0 ${viewScope === 'area' ? 'bg-purple-600 text-white' : 'bg-blue-600 text-white'}`}>
                       <div>
                           <h3 className="font-bold text-lg flex items-center">
-                              <Flag className="w-5 h-5 mr-2" />
-                              สรุปรายชื่อโรงเรียนตัวแทนกิจกรรม ({viewScope === 'area' ? 'ระดับเขต' : 'ระดับกลุ่ม'})
+                              <Trophy className="w-5 h-5 mr-2" />
+                              สรุปผลการแข่งขัน ({viewScope === 'area' ? 'ระดับเขตพื้นที่' : 'ระดับกลุ่มเครือข่าย'})
                           </h3>
-                          <p className="text-purple-100 text-xs mt-0.5">
-                              {viewScope === 'area' ? 'รายการกิจกรรมที่ได้ลำดับที่ 1 (ระดับเขต)' : 'รายการทั้งหมดที่มีตัวแทนเข้ารอบ (Rank 1 + Q)'}
+                          <p className="text-white/80 text-xs mt-0.5">
+                              {viewingResultActivity ? data.activities.find(a => a.id === viewingResultActivity)?.name : ''}
                           </p>
                       </div>
                       <div className="flex gap-2">
-                        <button onClick={() => setShowRepSummaryModal(false)} className="p-2 hover:bg-white/20 rounded-full transition-colors"><X className="w-6 h-6"/></button>
+                        <button onClick={() => setShowResultListModal(false)} className="p-2 hover:bg-white/20 rounded-full transition-colors"><X className="w-6 h-6"/></button>
                       </div>
                   </div>
-                  <div className="flex-1 overflow-y-auto p-4">
-                      <table className="min-w-full text-sm">
-                          <thead className="bg-gray-50 sticky top-0 z-10 border-b border-gray-200">
-                              <tr>
-                                  <th className="px-4 py-3 text-center w-16">#</th>
-                                  <th className="px-4 py-3 text-left">หมวดหมู่</th>
-                                  <th className="px-4 py-3 text-left">ชื่อกิจกรรม</th>
-                                  <th className="px-4 py-3 text-left">โรงเรียนตัวแทน</th>
-                                  <th className="px-4 py-3 text-left">ชื่อทีม</th>
-                              </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-100">
-                              {representativesListFiltered.map((item, idx) => (
-                                  <tr key={idx} className="hover:bg-gray-50">
-                                      <td className="px-4 py-3 text-center text-gray-500">{idx + 1}</td>
-                                      <td className="px-4 py-3">
-                                          <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded uppercase border border-blue-100">
-                                              {item.category}
-                                          </span>
-                                      </td>
-                                      <td className="px-4 py-3 font-medium text-gray-900">{item.activity}</td>
-                                      <td className="px-4 py-3 text-gray-700 font-bold">{item.school}</td>
-                                      <td className="px-4 py-3 text-gray-500 italic">{item.teamName}</td>
-                                  </tr>
-                              ))}
-                              {representativesListFiltered.length === 0 && (
-                                  <tr><td colSpan={5} className="py-20 text-center text-gray-400 italic">ยังไม่มีข้อมูลตัวแทน</td></tr>
-                              )}
-                          </tbody>
-                      </table>
+                  <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
+                      {activityResultList.length > 0 ? (
+                          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                              <table className="min-w-full text-sm divide-y divide-gray-100">
+                                  <thead className="bg-gray-50">
+                                      <tr>
+                                          <th className="px-4 py-3 text-center w-16">อันดับ</th>
+                                          <th className="px-4 py-3 text-left">ทีม</th>
+                                          <th className="px-4 py-3 text-left">โรงเรียน</th>
+                                          <th className="px-4 py-3 text-center w-24">คะแนน</th>
+                                          <th className="px-4 py-3 text-left">รางวัล</th>
+                                      </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-gray-100">
+                                      {activityResultList.map((t, idx) => (
+                                          <tr key={idx} className={`hover:bg-gray-50 ${(viewScope === 'area' && t.displayRank === '1') || (viewScope === 'cluster' && t.displayRank === '1' && String(t.flag).toUpperCase() === 'TRUE') ? 'bg-yellow-50/50' : ''}`}>
+                                              <td className="px-4 py-3 text-center font-bold text-gray-500">
+                                                  {t.displayRank ? `#${t.displayRank}` : '-'}
+                                              </td>
+                                              <td className="px-4 py-3 font-medium text-gray-900">{t.teamName}</td>
+                                              <td className="px-4 py-3 text-gray-600">{t.schoolName}</td>
+                                              <td className="px-4 py-3 text-center font-bold text-blue-600">
+                                                  {t.displayScore === -1 ? '-' : t.displayScore}
+                                              </td>
+                                              <td className="px-4 py-3 text-xs">
+                                                  <span className={`px-2 py-1 rounded border ${t.displayMedal.includes('Gold') ? 'bg-yellow-100 text-yellow-800 border-yellow-200' : t.displayMedal.includes('Silver') ? 'bg-gray-100 text-gray-800 border-gray-200' : t.displayMedal.includes('Bronze') ? 'bg-orange-100 text-orange-800 border-orange-200' : 'bg-gray-50 text-gray-500 border-gray-100'}`}>
+                                                      {t.displayMedal}
+                                                  </span>
+                                              </td>
+                                          </tr>
+                                      ))}
+                                  </tbody>
+                              </table>
+                          </div>
+                      ) : (
+                          <div className="flex flex-col items-center justify-center h-48 text-gray-400">
+                              <ListChecks className="w-12 h-12 mb-2 opacity-20" />
+                              <p className="text-sm">ไม่พบรายการข้อมูลในขอบเขตนี้</p>
+                          </div>
+                      )}
                   </div>
-                  <div className="p-3 bg-gray-50 border-t text-right text-xs text-gray-500 font-medium">
-                      รวมทั้งหมด {representativesListFiltered.length} รายการ
+                  <div className="p-3 bg-white border-t border-gray-200 text-right text-xs text-gray-500 font-medium">
+                      รวมทั้งหมด {activityResultList.length} ทีม
                   </div>
               </div>
           </div>
