@@ -3,9 +3,10 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { AppData, User, Team, AreaStageInfo } from '../types';
 import { updateTeamResult, updateAreaResult } from '../services/api';
 import { shareScoreResult, shareTop3Result } from '../services/liff';
-import { Save, Filter, AlertCircle, CheckCircle, Lock, Trophy, Search, ChevronRight, ChevronLeft, Share2, AlertTriangle, Calculator, X, Copy, PieChart, Check, ChevronDown, Flag, History, Loader2, ListChecks, Edit2, Crown, LayoutGrid, AlertOctagon, Wand2, Eye, EyeOff, ArrowDownWideNarrow, GraduationCap, Printer, School, FileBadge, UserX, ClipboardCheck, BarChart3, ClipboardList, Info } from 'lucide-react';
+import { Save, Filter, AlertCircle, CheckCircle, Lock, Trophy, Search, ChevronRight, ChevronLeft, Share2, AlertTriangle, Calculator, X, Copy, PieChart, Check, ChevronDown, Flag, History, Loader2, ListChecks, Edit2, Crown, LayoutGrid, AlertOctagon, Wand2, Eye, EyeOff, ArrowDownWideNarrow, GraduationCap, Printer, School, FileBadge, UserX, ClipboardCheck, BarChart3, ClipboardList, Info, RotateCcw } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import SearchableSelect from './SearchableSelect';
+import ConfirmationModal from './ConfirmationModal';
 
 // --- Types & Interfaces ---
 
@@ -18,7 +19,7 @@ interface ScoreInputViewProps {
 interface BatchItem {
     id: string;
     teamName: string;
-    schoolName: string; // Added schoolName
+    schoolName: string; 
     score: string;
     rank: string;
     medal: string;
@@ -32,7 +33,7 @@ interface ConfirmModalProps {
     count?: number;
     totalCount?: number;
     teamName?: string;
-    schoolName?: string; // Added schoolName
+    schoolName?: string; 
     newScore?: string;
     newRank?: string;
     newMedal?: string;
@@ -238,6 +239,10 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
   const [toast, setToast] = useState<{ message: string, type: 'success'|'error'|'info', isVisible: boolean }>({ message: '', type: 'info', isVisible: false });
   const [isLoading, setIsLoading] = useState(false);
   const [confirmState, setConfirmState] = useState<{ isOpen: boolean, type: 'single' | 'batch', teamId: string | null }>({ isOpen: false, type: 'single', teamId: null });
+  
+  // New Modal States
+  const [showAutoRankConfirm, setShowAutoRankConfirm] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   // Refs for keyboard navigation
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -271,7 +276,7 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
           list = list.filter(t => t.teamName.toLowerCase().includes(lower) || t.schoolId.toLowerCase().includes(lower));
       }
 
-      // SORTING CHANGE: Sort by School Name (Thai Alphabetical) matches Score Sheet Order
+      // SORTING: Sort by School Name (Thai Alphabetical) matches Score Sheet Order
       return list.sort((a, b) => {
           const schoolA = data.schools.find(s => s.SchoolID === a.schoolId || s.SchoolName === a.schoolId)?.SchoolName || a.schoolId;
           const schoolB = data.schools.find(s => s.SchoolID === b.schoolId || s.SchoolName === b.schoolId)?.SchoolName || b.schoolId;
@@ -404,8 +409,8 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
       }
   };
 
-  const handleAutoRank = () => {
-      if (!confirm('ต้องการคำนวณลำดับคะแนนอัตโนมัติหรือไม่? (ระบบจะเรียงตามคะแนนมากไปน้อย)')) return;
+  const executeAutoRank = () => {
+      setShowAutoRankConfirm(false);
       
       const teamsWithScores = teams.map(t => {
           const edit = edits[t.teamId];
@@ -445,7 +450,13 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
           }
       });
       setEdits(prev => ({ ...prev, ...newEdits }));
-      showToast('คำนวณลำดับแล้ว', 'info');
+      showToast('คำนวณลำดับเรียบร้อยแล้ว', 'info');
+  };
+
+  const handleReset = () => {
+      setShowResetConfirm(false);
+      setEdits({});
+      showToast('ล้างข้อมูลที่แก้ไขแล้ว', 'info');
   };
 
   // --- Share Handlers ---
@@ -526,6 +537,7 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
   const dirtyCount = teams.filter(t => edits[t.teamId]?.isDirty).length;
 
   // Prepare batch confirmation data
+  // Note: 'teams' is already sorted by School Name via useMemo
   const batchConfirmData = useMemo<BatchItem[]>(() => {
     return teams.map(t => {
         const edit = edits[t.teamId];
@@ -615,6 +627,28 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
             onCancel={() => setConfirmState({ isOpen: false, type: 'single', teamId: null })}
         />
 
+        {/* Auto Rank Alert Modal */}
+        <ConfirmationModal
+            isOpen={showAutoRankConfirm}
+            title="คำนวณลำดับคะแนนอัตโนมัติ"
+            description="ระบบจะเรียงลำดับ (Rank 1, 2, 3...) ตามคะแนนจากมากไปน้อย ข้อมูลลำดับเดิมที่กรอกไว้จะถูกทับ"
+            confirmLabel="คำนวณทันที"
+            confirmColor="blue"
+            onConfirm={executeAutoRank}
+            onCancel={() => setShowAutoRankConfirm(false)}
+        />
+
+        {/* Reset Alert Modal */}
+        <ConfirmationModal
+            isOpen={showResetConfirm}
+            title="ล้างข้อมูลที่แก้ไข"
+            description="คุณต้องการรีเซ็ตข้อมูลคะแนนที่กำลังแก้ไขทั้งหมดในหน้านี้ใช่หรือไม่? (ข้อมูลที่บันทึกไปแล้วจะไม่หาย)"
+            confirmLabel="รีเซ็ต"
+            confirmColor="red"
+            onConfirm={handleReset}
+            onCancel={() => setShowResetConfirm(false)}
+        />
+
         {/* Header */}
         <div className="bg-white border-b border-gray-200 sticky top-0 z-20 shadow-sm">
             <div className="px-4 py-3 flex items-center justify-between">
@@ -653,9 +687,14 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
                 </div>
                 
                 <div className="flex gap-2">
-                    <button onClick={handleAutoRank} className="bg-white border border-purple-200 text-purple-600 p-2 rounded-lg shadow-sm" title="Auto Rank">
+                    <button onClick={() => setShowAutoRankConfirm(true)} className="bg-white border border-purple-200 text-purple-600 p-2 rounded-lg shadow-sm" title="Auto Rank">
                         <Wand2 className="w-4 h-4" />
                     </button>
+                    {Object.keys(edits).length > 0 && (
+                        <button onClick={() => setShowResetConfirm(true)} className="bg-white border border-red-200 text-red-500 p-2 rounded-lg shadow-sm" title="Reset Edits">
+                            <RotateCcw className="w-4 h-4" />
+                        </button>
+                    )}
                     <button onClick={handleShareTop3} className="bg-white border border-green-200 text-green-600 p-2 rounded-lg shadow-sm" title="Share Top 3">
                         <Share2 className="w-4 h-4" />
                     </button>
