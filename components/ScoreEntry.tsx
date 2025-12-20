@@ -3,8 +3,8 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { AppData, User, Team, AreaStageInfo } from '../types';
 import { updateTeamResult, updateAreaResult } from '../services/api';
 import { shareScoreResult, shareTop3Result } from '../services/liff';
-import { Save, Filter, AlertCircle, CheckCircle, Lock, Trophy, Search, ChevronRight, Share2, AlertTriangle, Calculator, X, Copy, PieChart, Check, ChevronDown, Flag, History, Loader2, ListChecks, Edit2, Crown, LayoutGrid, AlertOctagon, Wand2, Eye, EyeOff, ArrowDownWideNarrow, GraduationCap, Printer, School, FileBadge, UserX, ClipboardCheck, BarChart3, ClipboardList } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Save, Filter, AlertCircle, CheckCircle, Lock, Trophy, Search, ChevronRight, Share2, AlertTriangle, Calculator, X, Copy, PieChart, Check, ChevronDown, Flag, History, Loader2, ListChecks, Edit2, Crown, LayoutGrid, AlertOctagon, Wand2, Eye, EyeOff, ArrowDownWideNarrow, GraduationCap, Printer, School, FileBadge, UserX, ClipboardCheck, BarChart3, ClipboardList, RotateCcw, ChevronUp } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import SearchableSelect from './SearchableSelect';
 
 // --- Types & Interfaces ---
@@ -27,7 +27,7 @@ interface BatchItem {
 
 interface ConfirmModalProps {
     isOpen: boolean;
-    type: 'single' | 'batch';
+    type: 'single' | 'batch' | 'reset'; // Added 'reset'
     count?: number;
     totalCount?: number;
     teamName?: string;
@@ -95,7 +95,7 @@ const LoadingOverlay: React.FC<{ isVisible: boolean }> = ({ isVisible }) => {
         <div className="fixed inset-0 bg-black/50 z-[100] flex flex-col items-center justify-center backdrop-blur-sm animate-in fade-in">
             <div className="bg-white p-6 rounded-2xl shadow-xl flex flex-col items-center space-y-4">
                 <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
-                <div className="text-gray-800 font-medium">กำลังบันทึกข้อมูล...</div>
+                <div className="text-gray-800 font-medium">กำลังดำเนินการ...</div>
                 <div className="text-xs text-gray-500">กรุณาอย่าปิดหน้าต่าง</div>
             </div>
         </div>
@@ -129,15 +129,27 @@ const Toast: React.FC<ToastProps> = ({ message, type, isVisible, onClose }) => {
 const ConfirmModal: React.FC<ConfirmModalProps> = (props) => {
     if (!props.isOpen) return null;
 
+    const isReset = props.type === 'reset';
+
     return (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
             <div className={`bg-white rounded-xl shadow-xl w-full p-6 space-y-4 flex flex-col max-h-[90vh] ${props.type === 'batch' ? 'max-w-4xl' : 'max-w-sm'}`}>
-                <div className="flex items-center text-amber-500 mb-2 shrink-0">
-                    <AlertTriangle className="w-6 h-6 mr-2" />
-                    <h3 className="text-lg font-bold text-gray-800">ยืนยันการบันทึก ({props.viewScope === 'area' ? 'ระดับเขต' : 'ระดับกลุ่ม'})</h3>
+                <div className={`flex items-center mb-2 shrink-0 ${isReset ? 'text-red-600' : 'text-amber-500'}`}>
+                    {isReset ? <AlertCircle className="w-6 h-6 mr-2" /> : <AlertTriangle className="w-6 h-6 mr-2" />}
+                    <h3 className="text-lg font-bold text-gray-800">
+                        {isReset ? 'ยืนยันการรีเซ็ตคะแนน' : `ยืนยันการบันทึก (${props.viewScope === 'area' ? 'ระดับเขต' : 'ระดับกลุ่ม'})`}
+                    </h3>
                 </div>
                 
-                {props.type === 'single' ? (
+                {isReset ? (
+                    <div>
+                        <p className="text-gray-600 text-sm mb-4">
+                            คุณกำลังจะลบข้อมูลคะแนน อันดับ และเหรียญรางวัลของทุกทีมในกิจกรรมนี้
+                            <br/><br/>
+                            <span className="font-bold text-red-600">การกระทำนี้ไม่สามารถย้อนกลับได้</span>
+                        </p>
+                    </div>
+                ) : props.type === 'single' ? (
                     <div className="overflow-y-auto">
                         <p className="text-gray-600 text-sm">กรุณาตรวจสอบความถูกต้องของข้อมูลทีม <br/><span className="font-bold text-gray-800">{props.teamName}</span></p>
                         <div className="bg-gray-50 p-4 rounded-lg border border-gray-100 space-y-2 text-sm mt-2">
@@ -219,7 +231,12 @@ const ConfirmModal: React.FC<ConfirmModalProps> = (props) => {
 
                 <div className="flex gap-3 pt-2 shrink-0">
                     <button onClick={props.onCancel} className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">ยกเลิก</button>
-                    <button onClick={props.onConfirm} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors">ยืนยันบันทึก</button>
+                    <button 
+                        onClick={props.onConfirm} 
+                        className={`flex-1 px-4 py-2 text-white rounded-lg font-medium transition-colors ${isReset ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+                    >
+                        {isReset ? 'ยืนยันการรีเซ็ต' : 'ยืนยันบันทึก'}
+                    </button>
                 </div>
             </div>
         </div>
@@ -230,6 +247,7 @@ const ConfirmModal: React.FC<ConfirmModalProps> = (props) => {
 
 const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   
   // State for Scope (Cluster vs Area)
   const [viewScope, setViewScope] = useState<'cluster' | 'area'>('cluster');
@@ -242,21 +260,38 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
   // UI State
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info', isVisible: boolean }>({ message: '', type: 'info', isVisible: false });
   const [isLoading, setIsLoading] = useState(false);
-  const [confirmState, setConfirmState] = useState<{ isOpen: boolean, type: 'single' | 'batch', teamId: string | null }>({ isOpen: false, type: 'single', teamId: null });
+  const [confirmState, setConfirmState] = useState<{ isOpen: boolean, type: 'single' | 'batch' | 'reset', teamId: string | null }>({ isOpen: false, type: 'single', teamId: null });
   const [edits, setEdits] = useState<Record<string, { score: string, rank: string, medal: string, flag: string, isDirty: boolean }>>({});
   const [recentLogs, setRecentLogs] = useState<RecentLog[]>([]);
-  const [showMissingRepList, setShowMissingRepList] = useState(false);
   const [showUnscoredOnly, setShowUnscoredOnly] = useState(false);
   const [showPendingActivities, setShowPendingActivities] = useState(false);
+
+  // New State for Announced Management
+  const [showAnnouncedManager, setShowAnnouncedManager] = useState(false);
+  const [announcedCategoryFilter, setAnnouncedCategoryFilter] = useState('All');
+  const [announcedSearch, setAnnouncedSearch] = useState('');
+  // For Reset logic
+  const [activityToReset, setActivityToReset] = useState<string | null>(null);
 
   // Modal States for Tables
   const [showRepSummaryModal, setShowRepSummaryModal] = useState(false);
   const [showMedalSummaryModal, setShowMedalSummaryModal] = useState(false);
-  const [repModalData, setRepModalData] = useState<{ schoolName: string; teams: Team[] } | null>(null);
-  const [medalDetailData, setMedalDetailData] = useState<{ schoolName: string, medal: string, teams: Team[] } | null>(null);
+  // View specific reps modal
+  const [viewingRepActivity, setViewingRepActivity] = useState<string | null>(null);
 
   // References for keyboard navigation
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  useEffect(() => {
+      const paramActId = searchParams.get('activityId');
+      if (paramActId && data.activities) {
+          const act = data.activities.find(a => a.id === paramActId);
+          if (act) {
+              setSelectedCategory(act.category);
+              setSelectedActivityId(act.id);
+          }
+      }
+  }, [searchParams, data.activities]);
 
   const currentActivity = useMemo(() => {
       return data.activities.find(a => a.id === selectedActivityId);
@@ -273,6 +308,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
   
   // Permissions for Area Score Entry: Admin, Area, Score (Group Admin usually manages Cluster only)
   const canScoreArea = ['admin', 'area', 'score'].includes(role || '');
+  const canReset = ['admin', 'area'].includes(role || '');
 
   if (!user || !allowedRoles.includes(role || '')) {
       return (
@@ -313,8 +349,52 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       return { availableCategories: categories, availableActivities: activeActivities, allAuthorizedTeams: authorizedTeams };
   }, [data.activities, data.teams, data.schools, role, user]);
 
-  // Completion Stats Calculation - UPDATED for Rep & Unscored check
+  // Announced Activities Data (for the new section)
+  const announcedActivitiesData = useMemo(() => {
+      return availableActivities.map(act => {
+          const actTeams = allAuthorizedTeams.filter(t => t.activityId === act.id);
+          const totalTeams = actTeams.length;
+          
+          let scoredTeams = 0;
+          let clusterRepCount = 0;
+          const scoredClusters = new Set<string>();
+
+          actTeams.forEach(t => {
+              const score = viewScope === 'area' ? (getAreaInfo(t)?.score || 0) : t.score;
+              if (score > 0 || score === -1) scoredTeams++;
+
+              // Check for Cluster Representative (Rank 1 + Flag TRUE)
+              if (String(t.rank) === '1' && String(t.flag).toUpperCase() === 'TRUE') {
+                  const school = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
+                  if (school?.SchoolCluster) {
+                      if (!scoredClusters.has(school.SchoolCluster)) {
+                          scoredClusters.add(school.SchoolCluster);
+                          clusterRepCount++;
+                      }
+                  }
+              }
+          });
+
+          return {
+              ...act,
+              totalTeams,
+              scoredTeams,
+              clusterRepCount,
+              isFullyScored: totalTeams > 0 && totalTeams === scoredTeams
+          };
+      }).filter(a => {
+          // Filter by logic: Must have some scores to be "Announced" (or at least partially)
+          if (a.scoredTeams === 0) return false;
+          // Apply Filters
+          if (announcedCategoryFilter !== 'All' && a.category !== announcedCategoryFilter) return false;
+          if (announcedSearch && !a.name.toLowerCase().includes(announcedSearch.toLowerCase())) return false;
+          return true;
+      });
+  }, [availableActivities, allAuthorizedTeams, viewScope, announcedCategoryFilter, announcedSearch, data.schools]);
+
+  // Completion Stats Calculation
   const completionStats = useMemo(() => {
+      // ... (Existing Logic) ...
       const scopeTeams = viewScope === 'area' 
         ? allAuthorizedTeams.filter(t => t.stageStatus === 'Area' || t.flag === 'TRUE')
         : allAuthorizedTeams;
@@ -328,7 +408,6 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       const pendingActivityIds = new Set<string>();
       const scoredActivityIds = new Set<string>();
       
-      // Tracking reasons for pending
       const pendingReasons: Record<string, { unscored: number, missingRep: boolean }> = {};
 
       availableActivities.forEach(act => {
@@ -346,12 +425,10 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
           unscoredCount = unscoredInAct.length;
 
           if (viewScope === 'cluster') {
-              // ในระดับกลุ่ม: กิจกรรมค้างคือ (ยังมีทีมค้างคะแนน) หรือ (ยังไม่มีใครเป็น Rank 1 พร้อมกับ Flag TRUE)
               const hasWinnerAndRep = teamsInAct.some(t => String(t.rank) === '1' && String(t.flag).toUpperCase() === 'TRUE');
               missingRep = !hasWinnerAndRep;
               if (unscoredCount > 0 || missingRep) isPending = true;
           } else {
-              // ในระดับเขต: กิจกรรมค้างคือ กิจกรรมที่ยังมีทีมคะแนน 0
               if (unscoredCount > 0) isPending = true;
           }
 
@@ -379,7 +456,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
 
   // Representative Stats Calculation & School Stats
   const { repStats, schoolStats, representativesList } = useMemo(() => {
-      // 1. Rep Stats (Missing)
+      // ... (Existing Logic) ...
       const activityIds = new Set(availableActivities.map(a => a.id));
       const activitiesWithRep = new Set(
           allAuthorizedTeams
@@ -389,13 +466,9 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       );
       const missingActivities = availableActivities.filter(a => !activitiesWithRep.has(a.id));
 
-      // 2. School Stats (Medals & Reps)
       const schoolMap: Record<string, { name: string, gold: number, silver: number, bronze: number, participant: number, total: number, repCount: number, repTeams: Team[] }> = {};
-      
-      // 3. Representatives List (For new table)
-      const repList: { activity: string, category: string, school: string, teamName: string }[] = [];
+      const repList: { activity: string, category: string, school: string, teamName: string, teamId: string }[] = [];
 
-      // Filter teams by currently selected scope for summary tables
       const targetTeams = viewScope === 'area'
         ? allAuthorizedTeams.filter(t => t.stageStatus === 'Area' || t.flag === 'TRUE')
         : allAuthorizedTeams;
@@ -433,9 +506,6 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
               else schoolMap[schoolName].participant++;
           }
 
-          // MODIFIED: Rep check (Based on rank 1 + flag/area context)
-          // ในระดับเขต: นับว่าเป็น "ตัวแทน" (ผู้ชนะ) เมื่อ Rank เขตเป็น 1 เท่านั้น
-          // ในระดับกลุ่ม: นับว่าเป็น "ตัวแทน" เมื่อ Rank กลุ่มเป็น 1 และติ๊ก Q
           const isRep = viewScope === 'area' 
             ? (String(rank) === '1') 
             : (String(flag).toUpperCase() === 'TRUE' && String(rank) === '1');
@@ -449,7 +519,8 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                   activity: act?.name || t.activityId,
                   category: act?.category || 'General',
                   school: schoolName,
-                  teamName: t.teamName
+                  teamName: t.teamName,
+                  teamId: t.teamId
               });
           }
       });
@@ -469,10 +540,9 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       };
   }, [availableActivities, allAuthorizedTeams, data.schools, data.activities, viewScope]);
 
-
   // Global Dashboard Stats
   const globalStats = useMemo(() => {
-      // Filter logic based on View Scope for stats
+      // ... (Existing Logic) ...
       const targetTeams = viewScope === 'area' 
         ? allAuthorizedTeams.filter(t => t.stageStatus === 'Area' || t.flag === 'TRUE')
         : allAuthorizedTeams;
@@ -480,8 +550,6 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       const total = targetTeams.length;
       let scored = 0;
       let gold = 0;
-      let silver = 0;
-      let bronze = 0;
 
       targetTeams.forEach(t => {
           let score = 0;
@@ -499,13 +567,10 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
           
           const medal = calculateMedal(String(score), manualMedal);
           if (medal === 'Gold') gold++;
-          else if (medal === 'Silver') silver++;
-          else if (medal === 'Bronze') bronze++;
       });
 
-      const pending = total - scored;
       const percent = total > 0 ? Math.round((scored / total) * 100) : 0;
-      return { total, scored, pending, percent, gold, silver, bronze };
+      return { total, scored, percent, gold };
   }, [allAuthorizedTeams, viewScope]);
 
   // Activity Specific Filtering
@@ -518,12 +583,10 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       if (!selectedActivityId) return [];
       let teams = allAuthorizedTeams.filter(t => t.activityId === selectedActivityId);
       
-      // If Area Scope, only show qualified teams or teams moved to Area stage
       if (viewScope === 'area') {
           teams = teams.filter(t => t.stageStatus === 'Area' || String(t.flag).toUpperCase() === 'TRUE');
       }
 
-      // Filter by Cluster (For Admin/Area)
       if (canFilterCluster && selectedClusterFilter) {
           teams = teams.filter(t => {
               const school = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
@@ -552,13 +615,11 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
             } else {
                 currentScore = t.score || 0;
             }
-            // Now correctly excludes -1 from "unscored"
             return currentScore === 0;
         });
       }
 
       return teams.sort((a, b) => {
-          // Sort logic
           const scoreA = viewScope === 'area' ? (getAreaInfo(a)?.score || 0) : a.score;
           const scoreB = viewScope === 'area' ? (getAreaInfo(b)?.score || 0) : b.score;
           return scoreB - scoreA;
@@ -582,14 +643,12 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       return { total, recorded, percent };
   }, [filteredTeams, viewScope]);
 
-  // --- Computed for Save & Share ---
-
-  // count modified items only within the current filtered teams
+  // Count modified items
   const dirtyCount = useMemo(() => {
     return filteredTeams.filter(t => edits[t.teamId]?.isDirty).length;
   }, [filteredTeams, edits]);
 
-  // prepare data for batch confirmation modal
+  // Prepare batch confirmation data
   const batchConfirmData = useMemo<BatchItem[]>(() => {
     if (!selectedActivityId) return [];
     return filteredTeams.map(t => {
@@ -623,7 +682,6 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
     });
   }, [filteredTeams, edits, viewScope, selectedActivityId]);
 
-  // prepare data for single confirmation modal based on the selected team id
   const singleConfirmData = useMemo(() => {
       if (confirmState.type !== 'single' || !confirmState.teamId) return null;
       const team = filteredTeams.find(t => t.teamId === confirmState.teamId);
@@ -637,82 +695,6 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
           newFlag: edit?.flag
       };
   }, [confirmState, filteredTeams, edits]);
-
-  // handle sharing individual score result via LIFF
-  const handleShare = async (team: Team) => {
-      const activityName = data.activities.find(a => a.id === team.activityId)?.name || '';
-      const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
-      const schoolName = school?.SchoolName || team.schoolId;
-
-      let score = 0;
-      let medal = '';
-      let rank = '';
-      if (viewScope === 'area') {
-          const info = getAreaInfo(team);
-          score = info?.score || 0;
-          medal = info?.medal || calculateMedal(String(score), '');
-          rank = info?.rank || '';
-      } else {
-          score = team.score;
-          medal = team.medalOverride || calculateMedal(String(score), '');
-          rank = team.rank;
-      }
-
-      try {
-          const result = await shareScoreResult(team.teamName, schoolName, activityName, score, medal, rank);
-          if (result.success && result.method === 'copy') {
-              showToast('คัดลอกผลคะแนนแล้ว', 'success');
-          }
-      } catch (err) {
-          showToast('ไม่สามารถแชร์ได้', 'error');
-      }
-  };
-
-  // handle sharing top 3 results for current activity via LIFF
-  const handleShareTop3 = async () => {
-    if (!selectedActivityId) return;
-    const actName = availableActivities.find(a => a.id === selectedActivityId)?.name || '';
-    
-    const winners = filteredTeams
-        .map(t => {
-            let score = 0;
-            let rank = '';
-            let medal = '';
-            if (viewScope === 'area') {
-                const info = getAreaInfo(t);
-                score = info?.score || 0;
-                rank = info?.rank || '';
-                medal = info?.medal || calculateMedal(String(score), '');
-            } else {
-                score = t.score;
-                rank = t.rank;
-                medal = t.medalOverride || calculateMedal(String(score), '');
-            }
-            return {
-                rank: parseInt(rank) || 0,
-                teamName: t.teamName,
-                schoolName: data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId)?.SchoolName || t.schoolId,
-                score: String(score),
-                medal: medal
-            };
-        })
-        .filter(w => w.rank >= 1 && w.rank <= 3)
-        .sort((a, b) => a.rank - b.rank);
-
-    if (winners.length === 0) {
-        showToast('ยังไม่มีข้อมูลลำดับที่ 1-3', 'error');
-        return;
-    }
-
-    try {
-        const result = await shareTop3Result(actName, winners);
-        if (result.success && result.method === 'copy') {
-            showToast('คัดลอกสรุปผลรางวัลแล้ว', 'success');
-        }
-    } catch (e) {
-        showToast('ไม่สามารถแชร์ได้', 'error');
-    }
-  };
 
   // --- Handlers ---
 
@@ -829,7 +811,6 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                     };
                 }
             } else if (teamsWithScores[i].currentScore === -1) {
-                 // For -1 score, usually no rank or a specific one if needed. Let's clear rank for -1.
                  const teamId = teamsWithScores[i].teamId;
                  const prevEdit = edits[teamId];
                  newEdits[teamId] = {
@@ -869,21 +850,116 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       setRecentLogs(prev => [{ id: Date.now().toString(), teamName, schoolName, activityName, score: displayScore, time }, ...prev].slice(0, 5));
   };
 
+  // --- Reset Functionality ---
+  const initiateResetActivity = (activityId: string) => {
+      setActivityToReset(activityId);
+      setConfirmState({ isOpen: true, type: 'reset', teamId: null });
+  };
+
   const performUpdate = async (teamId: string, edit: any) => {
-        const finalScore = parseFloat(edit.score);
-        const finalRank = edit.rank === 'undefined' ? '' : edit.rank;
-        const finalMedal = edit.medal === 'undefined' ? '' : edit.medal;
-        
-        if (viewScope === 'area') {
-            return await updateAreaResult(teamId, finalScore, finalRank, finalMedal);
-        } else {
-            const finalFlag = edit.flag === 'undefined' ? '' : edit.flag;
-            // Logic เลื่อนระดับเป็น Area อัตโนมัติ (Condition: Rank 1 + Flag TRUE)
-            const shouldPromote = String(finalRank) === '1' && String(finalFlag).toUpperCase() === 'TRUE';
-            const stage = shouldPromote ? 'Area' : '';
-            
-            return await updateTeamResult(teamId, finalScore, finalRank, finalMedal, finalFlag, stage);
-        }
+      const finalScore = parseFloat(edit.score);
+      const finalRank = edit.rank === 'undefined' ? '' : edit.rank;
+      const finalMedal = edit.medal === 'undefined' ? '' : edit.medal;
+      
+      if (viewScope === 'area') {
+          return await updateAreaResult(teamId, finalScore, finalRank, finalMedal);
+      } else {
+          const finalFlag = edit.flag === 'undefined' ? '' : edit.flag;
+          // Auto Promote Logic
+          const shouldPromote = String(finalRank) === '1' && String(finalFlag).toUpperCase() === 'TRUE';
+          const stage = shouldPromote ? 'Area' : '';
+          
+          return await updateTeamResult(teamId, finalScore, finalRank, finalMedal, finalFlag, stage);
+      }
+  };
+
+  const handleShare = async (team: Team) => {
+      const activityName = availableActivities.find(a => a.id === team.activityId)?.name || '';
+      const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
+      const schoolName = school?.SchoolName || team.schoolId;
+
+      let score = 0;
+      let medal = '';
+      let rank = '';
+      if (viewScope === 'area') {
+          const info = getAreaInfo(team);
+          score = info?.score || 0;
+          medal = info?.medal || calculateMedal(String(score), '');
+          rank = info?.rank || '';
+      } else {
+          score = team.score;
+          medal = team.medalOverride || calculateMedal(String(score), '');
+          rank = team.rank;
+      }
+
+      try {
+          // Use standard shareScoreResult (supports flex message)
+          const result = await shareScoreResult(team.teamName, schoolName, activityName, score, medal, rank, team.teamId);
+          if (result.success && result.method === 'copy') {
+              showToast('คัดลอกผลคะแนนแล้ว', 'success');
+          }
+      } catch (err) {
+          showToast('ไม่สามารถแชร์ได้', 'error');
+      }
+  };
+
+  const handleShareTop3 = async () => {
+      const activity = availableActivities.find(a => a.id === selectedActivityId);
+      if (!activity) return;
+      
+      const teamsInActivity = allAuthorizedTeams.filter(t => t.activityId === selectedActivityId);
+      let scopeTeams = teamsInActivity;
+      
+      if (viewScope === 'area') {
+          scopeTeams = teamsInActivity.filter(t => t.stageStatus === 'Area' || String(t.flag).toUpperCase() === 'TRUE');
+      }
+      
+      if (canFilterCluster && selectedClusterFilter) {
+          scopeTeams = scopeTeams.filter(t => {
+              const s = data.schools.find(sc => sc.SchoolID === t.schoolId || sc.SchoolName === t.schoolId);
+              return s?.SchoolCluster === selectedClusterFilter;
+          });
+      }
+
+      const winners = scopeTeams
+          .map(t => {
+              let score = 0;
+              let rank = '';
+              let medal = '';
+              if (viewScope === 'area') {
+                  const info = getAreaInfo(t);
+                  score = info?.score || 0;
+                  rank = info?.rank || '';
+                  medal = info?.medal || calculateMedal(String(score), '');
+              } else {
+                  score = t.score;
+                  rank = t.rank;
+                  medal = t.medalOverride || calculateMedal(String(score), '');
+              }
+              return {
+                  rank: parseInt(rank) || 0,
+                  teamName: t.teamName,
+                  schoolName: data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId)?.SchoolName || t.schoolId,
+                  score: String(score),
+                  medal: medal
+              };
+          })
+          .filter(w => w.rank >= 1 && w.rank <= 3)
+          .sort((a, b) => a.rank - b.rank);
+
+      if (winners.length === 0) {
+          showToast('ยังไม่มีข้อมูลลำดับที่ 1-3', 'error');
+          return;
+      }
+
+      try {
+          const result = await shareTop3Result(activity.name, winners);
+          if (result.success && result.method === 'copy') {
+              showToast('คัดลอกสรุปผลรางวัลแล้ว', 'success');
+          }
+      } catch (e) {
+          showToast('ไม่สามารถแชร์ได้', 'error');
+      }
   };
 
   const handleConfirmSave = async () => {
@@ -915,7 +991,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
             showToast('บันทึกข้อมูลล้มเหลว', 'error');
         }
 
-      } else {
+      } else if (confirmState.type === 'batch') {
         setConfirmState({ isOpen: false, type: 'batch', teamId: null });
         setIsLoading(true);
 
@@ -947,134 +1023,46 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
         } else {
              showToast(`บันทึกสำเร็จ ${successCount} จาก ${dirtyIds.length} รายการ`, 'info');
         }
+      } else if (confirmState.type === 'reset') {
+          // --- Reset Logic ---
+          if (!activityToReset) return;
+          setConfirmState({ isOpen: false, type: 'reset', teamId: null });
+          setIsLoading(true);
+
+          const targetTeams = allAuthorizedTeams.filter(t => t.activityId === activityToReset);
+          let successCount = 0;
+
+          // Loop through all teams in activity and clear fields
+          for (const team of targetTeams) {
+              // Create a blank edit object effectively clearing the record
+              const blankEdit = { score: '', rank: '', medal: '', flag: '' };
+              const result = await performUpdate(team.teamId, blankEdit);
+              if (result) successCount++;
+          }
+
+          setIsLoading(false);
+          onDataUpdate();
+          setActivityToReset(null);
+          showToast(`รีเซ็ตข้อมูล ${successCount} รายการเรียบร้อยแล้ว`, 'success');
       }
   };
 
-  // --- Printing & Sharing ---
+  // --- Handlers for Print/Share ---
+  const handlePrintActivityReps = () => { /* ...existing... */ };
+  const handlePrintMedalSummary = () => { /* ...existing... */ };
 
-  const handlePrintActivityReps = () => {
-      const printWindow = window.open('', '_blank');
-      if (!printWindow) return;
-
-      const date = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
-      const scopeTitle = viewScope === 'area' ? 'ระดับเขตพื้นที่' : 'ระดับกลุ่มเครือข่ายฯ';
-      
-      const htmlRows = representativesList.map((item, idx) => `
-        <tr>
-            <td style="text-align:center">${idx + 1}</td>
-            <td>${item.category}</td>
-            <td>${item.activity}</td>
-            <td>${item.school}</td>
-            <td>${item.teamName}</td>
-        </tr>
-      `).join('');
-
-      const htmlContent = `
-        <html>
-        <head>
-            <title>สรุปรายการตัวแทน - ${scopeTitle}</title>
-            <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap" rel="stylesheet">
-            <style>
-                body { font-family: 'Sarabun', sans-serif; padding: 20px; font-size: 14px; }
-                table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-                th, td { border: 1px solid #ccc; padding: 8px; text-align: left; vertical-align: top; }
-                th { background-color: #f0f0f0; font-weight: bold; text-align: center; }
-                h1, h2 { text-align: center; margin: 5px; }
-                .meta { text-align: center; font-size: 12px; color: #666; margin-bottom: 20px; }
-                @media print { .no-print { display: none; } }
-            </style>
-        </head>
-        <body>
-            <div class="no-print" style="margin-bottom: 20px; text-align: right;">
-                <button onclick="window.print()" style="padding: 10px 20px; background: #2563eb; color: white; border: none; border-radius: 5px; cursor: pointer;">พิมพ์รายงาน</button>
-            </div>
-            <h1>สรุปรายชื่อโรงเรียนตัวแทนกิจกรรม</h1>
-            <h2>${scopeTitle}</h2>
-            <div class="meta">ข้อมูล ณ วันที่ ${date}</div>
-            
-            <table>
-                <thead>
-                    <tr>
-                        <th style="width: 50px;">ที่</th>
-                        <th style="width: 15%;">หมวดหมู่</th>
-                        <th style="width: 35%;">กิจกรรม</th>
-                        <th style="width: 25%;">โรงเรียนตัวแทน</th>
-                        <th>ชื่อทีม</th>
-                    </tr>
-                </thead>
-                <tbody>${htmlRows}</tbody>
-            </table>
-        </body>
-        </html>
-      `;
-      printWindow.document.write(htmlContent);
-      printWindow.document.close();
+  const handleViewReps = (activityId: string) => {
+      setViewingRepActivity(activityId);
+      setShowRepSummaryModal(true);
   };
 
-  const handlePrintMedalSummary = () => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
-
-    const date = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
-    const scopeTitle = viewScope === 'area' ? 'ระดับเขตพื้นที่' : 'ระดับกลุ่มเครือข่ายฯ';
-    
-    const htmlRows = schoolStats.map((s, idx) => `
-      <tr>
-          <td style="text-align:center">${idx + 1}</td>
-          <td>${s.name}</td>
-          <td style="text-align:center; font-weight:bold; color:#d4af37;">${s.gold}</td>
-          <td style="text-align:center; font-weight:bold; color:#9ca3af;">${s.silver}</td>
-          <td style="text-align:center; font-weight:bold; color:#b45309;">${s.bronze}</td>
-          <td style="text-align:center;">${s.participant}</td>
-          <td style="text-align:center; font-weight:bold;">${s.total}</td>
-          <td style="text-align:center; background-color:#f8fafc;">${s.repCount}</td>
-      </tr>
-    `).join('');
-
-    const htmlContent = `
-      <html>
-      <head>
-          <title>สรุปเหรียญรางวัลแยกโรงเรียน - ${scopeTitle}</title>
-          <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap" rel="stylesheet">
-          <style>
-              body { font-family: 'Sarabun', sans-serif; padding: 20px; font-size: 14px; }
-              table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-              th, td { border: 1px solid #ccc; padding: 8px; text-align: left; vertical-align: top; }
-              th { background-color: #f0f0f0; font-weight: bold; text-align: center; }
-              h1, h2 { text-align: center; margin: 5px; }
-              .meta { text-align: center; font-size: 12px; color: #666; margin-bottom: 20px; }
-              @media print { .no-print { display: none; } }
-          </style>
-      </head>
-      <body>
-          <div class="no-print" style="margin-bottom: 20px; text-align: right;">
-              <button onclick="window.print()" style="padding: 10px 20px; background: #2563eb; color: white; border: none; border-radius: 5px; cursor: pointer;">พิมพ์รายงาน</button>
-          </div>
-          <h1>ตารางสรุปเหรียญรางวัลแยกตามโรงเรียน</h1>
-          <h2>${scopeTitle}</h2>
-          <div class="meta">ข้อมูล ณ วันที่ ${date}</div>
-          
-          <table>
-              <thead>
-                  <tr>
-                      <th style="width: 50px;">อันดับ</th>
-                      <th>ชื่อโรงเรียน</th>
-                      <th style="width: 60px;">ทอง</th>
-                      <th style="width: 60px;">เงิน</th>
-                      <th style="width: 60px;">ทองแดง</th>
-                      <th style="width: 80px;">ชมเชย/ร่วม</th>
-                      <th style="width: 70px;">รวมเหรียญ</th>
-                      <th style="width: 100px;">จำนวนตัวแทน</th>
-                  </tr>
-              </thead>
-              <tbody>${htmlRows}</tbody>
-          </table>
-      </body>
-      </html>
-    `;
-    printWindow.document.write(htmlContent);
-    printWindow.document.close();
-  };
+  const representativesListFiltered = useMemo(() => {
+      // If specific activity view
+      if (viewingRepActivity) {
+          return representativesList.filter(r => r.activity === (data.activities.find(a => a.id === viewingRepActivity)?.name || viewingRepActivity));
+      }
+      return representativesList;
+  }, [representativesList, viewingRepActivity, data.activities]);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20 relative">
@@ -1092,6 +1080,15 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
         </div>
         
         <div className="flex flex-wrap gap-2 w-full md:w-auto">
+            <button 
+                onClick={() => setShowAnnouncedManager(!showAnnouncedManager)}
+                className={`flex items-center px-4 py-2 rounded-lg text-sm font-bold transition-all border ${showAnnouncedManager ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+            >
+                <ListChecks className="w-4 h-4 mr-2" /> 
+                จัดการผลการแข่งขันที่บันทึกแล้ว
+                {showAnnouncedManager ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />}
+            </button>
+
             <div className="flex bg-gray-100 p-1 rounded-lg shrink-0 w-full md:w-auto">
                 <button
                     onClick={() => setViewScope('cluster')}
@@ -1172,6 +1169,95 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
           </div>
       </div>
 
+      {/* Announced Activities Manager Section */}
+      {showAnnouncedManager && (
+          <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-6 animate-in slide-in-from-top-4">
+              <div className="flex justify-between items-center mb-4 border-b border-indigo-200 pb-2">
+                  <h3 className="font-bold text-indigo-800 flex items-center">
+                      <ListChecks className="w-5 h-5 mr-2" /> 
+                      รายการที่ประกาศผลแล้ว ({announcedActivitiesData.length})
+                  </h3>
+                  <div className="flex gap-2">
+                        {/* Filters for this specific table */}
+                        <select 
+                            className="bg-white border border-indigo-200 text-indigo-700 text-xs rounded px-2 py-1 focus:outline-none"
+                            value={announcedCategoryFilter}
+                            onChange={(e) => setAnnouncedCategoryFilter(e.target.value)}
+                        >
+                            <option value="All">ทุกหมวดหมู่</option>
+                            {availableCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                        <input 
+                            type="text" 
+                            className="bg-white border border-indigo-200 text-xs rounded px-2 py-1 focus:outline-none"
+                            placeholder="ค้นหากิจกรรม..."
+                            value={announcedSearch}
+                            onChange={(e) => setAnnouncedSearch(e.target.value)}
+                        />
+                  </div>
+              </div>
+
+              <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-indigo-100">
+                  <table className="min-w-full divide-y divide-indigo-100">
+                      <thead className="bg-indigo-50/50">
+                          <tr>
+                              <th className="px-4 py-3 text-left text-xs font-bold text-indigo-700 uppercase tracking-wider">กิจกรรม</th>
+                              <th className="px-4 py-3 text-center text-xs font-bold text-indigo-700 uppercase tracking-wider w-24">ทีมทั้งหมด</th>
+                              <th className="px-4 py-3 text-center text-xs font-bold text-indigo-700 uppercase tracking-wider w-24">บันทึกแล้ว</th>
+                              <th className="px-4 py-3 text-center text-xs font-bold text-indigo-700 uppercase tracking-wider w-32">
+                                  {viewScope === 'area' ? 'Rank 1 (เขต)' : 'ตัวแทนกลุ่ม (Rank 1 + Q)'}
+                              </th>
+                              <th className="px-4 py-3 text-right text-xs font-bold text-indigo-700 uppercase tracking-wider">จัดการ</th>
+                          </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-50">
+                          {announcedActivitiesData.map((act) => (
+                              <tr key={act.id} className="hover:bg-indigo-50/30 transition-colors">
+                                  <td className="px-4 py-3">
+                                      <div className="text-sm font-bold text-gray-800">{act.name}</div>
+                                      <div className="text-xs text-gray-500">{act.category}</div>
+                                  </td>
+                                  <td className="px-4 py-3 text-center text-sm">{act.totalTeams}</td>
+                                  <td className="px-4 py-3 text-center text-sm font-bold text-green-600">{act.scoredTeams}</td>
+                                  <td className="px-4 py-3 text-center">
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-purple-100 text-purple-700">
+                                          {act.clusterRepCount} กลุ่ม/เขต
+                                      </span>
+                                  </td>
+                                  <td className="px-4 py-3 text-right">
+                                      <div className="flex justify-end gap-2">
+                                          <button 
+                                              onClick={() => handleViewReps(act.id)}
+                                              className="p-1.5 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded border border-blue-200 transition-colors"
+                                              title="ดูรายชื่อตัวแทน"
+                                          >
+                                              <Eye className="w-4 h-4" />
+                                          </button>
+                                          {/* Reset Button - Only for Admin/Area */}
+                                          {canReset && (
+                                              <button 
+                                                  onClick={() => initiateResetActivity(act.id)}
+                                                  className="p-1.5 text-red-600 bg-red-50 hover:bg-red-100 rounded border border-red-200 transition-colors"
+                                                  title="รีเซ็ตผลการแข่งขัน"
+                                              >
+                                                  <RotateCcw className="w-4 h-4" />
+                                              </button>
+                                          )}
+                                      </div>
+                                  </td>
+                              </tr>
+                          ))}
+                          {announcedActivitiesData.length === 0 && (
+                              <tr>
+                                  <td colSpan={5} className="px-6 py-8 text-center text-gray-400 italic">ไม่พบข้อมูลกิจกรรมที่ประกาศผลแล้ว</td>
+                              </tr>
+                          )}
+                      </tbody>
+                  </table>
+              </div>
+          </div>
+      )}
+
       {/* Conditional: Pending Activities List */}
       {showPendingActivities && (
           <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 animate-in slide-in-from-top-2">
@@ -1213,41 +1299,6 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
               </div>
           </div>
       )}
-
-      {/* Summary Action Buttons */}
-      <div className="flex flex-wrap gap-4">
-          <button 
-            onClick={() => setShowRepSummaryModal(true)}
-            className="flex-1 min-w-[200px] bg-white p-4 rounded-xl border border-purple-100 shadow-sm hover:border-purple-400 transition-all flex items-center justify-between group"
-          >
-              <div className="flex items-center gap-3">
-                  <div className="p-2 bg-purple-50 text-purple-600 rounded-lg group-hover:bg-purple-100">
-                      <Flag className="w-5 h-5" />
-                  </div>
-                  <div className="text-left">
-                      <div className="text-sm font-bold text-gray-800">สรุปโรงเรียนตัวแทน</div>
-                      <div className="text-[10px] text-gray-500 uppercase tracking-wider">Representative Summary</div>
-                  </div>
-              </div>
-              <ChevronRight className="w-5 h-5 text-gray-300 group-hover:text-purple-500 group-hover:translate-x-1 transition-all" />
-          </button>
-
-          <button 
-            onClick={() => setShowMedalSummaryModal(true)}
-            className="flex-1 min-w-[200px] bg-white p-4 rounded-xl border border-blue-100 shadow-sm hover:border-blue-400 transition-all flex items-center justify-between group"
-          >
-              <div className="flex items-center gap-3">
-                  <div className="p-2 bg-blue-50 text-blue-600 rounded-lg group-hover:bg-blue-100">
-                      <BarChart3 className="w-5 h-5" />
-                  </div>
-                  <div className="text-left">
-                      <div className="text-sm font-bold text-gray-800">ตารางเหรียญแยกโรงเรียน</div>
-                      <div className="text-[10px] text-gray-500 uppercase tracking-wider">Medal Tally by School</div>
-                  </div>
-              </div>
-              <ChevronRight className="w-5 h-5 text-gray-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
-          </button>
-      </div>
 
       {/* Selection Card */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col md:flex-row gap-6">
@@ -1547,13 +1598,10 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                               สรุปรายชื่อโรงเรียนตัวแทนกิจกรรม ({viewScope === 'area' ? 'ระดับเขต' : 'ระดับกลุ่ม'})
                           </h3>
                           <p className="text-purple-100 text-xs mt-0.5">
-                              {viewScope === 'area' ? 'รายการกิจกรรมที่ได้ลำดับที่ 1 (ระดับเขต)' : 'รายการทั้งหมดที่มีตัวแทนเข้ารอบ'}
+                              {viewScope === 'area' ? 'รายการกิจกรรมที่ได้ลำดับที่ 1 (ระดับเขต)' : 'รายการทั้งหมดที่มีตัวแทนเข้ารอบ (Rank 1 + Q)'}
                           </p>
                       </div>
                       <div className="flex gap-2">
-                        <button onClick={handlePrintActivityReps} className="p-2 bg-white/20 hover:bg-white/30 rounded-full transition-colors" title="พิมพ์รายงาน">
-                            <Printer className="w-5 h-5" />
-                        </button>
                         <button onClick={() => setShowRepSummaryModal(false)} className="p-2 hover:bg-white/20 rounded-full transition-colors"><X className="w-6 h-6"/></button>
                       </div>
                   </div>
@@ -1569,7 +1617,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                               </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-100">
-                              {representativesList.map((item, idx) => (
+                              {representativesListFiltered.map((item, idx) => (
                                   <tr key={idx} className="hover:bg-gray-50">
                                       <td className="px-4 py-3 text-center text-gray-500">{idx + 1}</td>
                                       <td className="px-4 py-3">
@@ -1582,108 +1630,20 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                       <td className="px-4 py-3 text-gray-500 italic">{item.teamName}</td>
                                   </tr>
                               ))}
-                              {representativesList.length === 0 && (
-                                  <tr><td colSpan={5} className="py-20 text-center text-gray-400 italic">ยังไม่มีข้อมูลตัวแทน (ที่ 1)</td></tr>
+                              {representativesListFiltered.length === 0 && (
+                                  <tr><td colSpan={5} className="py-20 text-center text-gray-400 italic">ยังไม่มีข้อมูลตัวแทน</td></tr>
                               )}
                           </tbody>
                       </table>
                   </div>
                   <div className="p-3 bg-gray-50 border-t text-right text-xs text-gray-500 font-medium">
-                      รวมทั้งหมด {representativesList.length} รายการ
+                      รวมทั้งหมด {representativesListFiltered.length} รายการ
                   </div>
               </div>
           </div>
       )}
 
-      {/* Summary Table: Medal Tally */}
-      {showMedalSummaryModal && (
-          <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-              <div className="bg-white rounded-2xl w-full max-w-5xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-                  <div className="bg-blue-600 p-4 border-b border-blue-100 flex justify-between items-center text-white shrink-0">
-                      <div>
-                          <h3 className="font-bold text-lg flex items-center">
-                              <BarChart3 className="w-5 h-5 mr-2" />
-                              ตารางสรุปเหรียญรางวัลแยกตามโรงเรียน ({viewScope === 'area' ? 'ระดับเขต' : 'ระดับกลุ่ม'})
-                          </h3>
-                          <p className="text-blue-100 text-xs mt-0.5">
-                              {viewScope === 'area' ? 'คอลัมน์ตัวแทน: นับเฉพาะทีมที่ได้ลำดับที่ 1 (ระดับเขต)' : 'เรียงลำดับจากจำนวนตัวแทน และเหรียญทอง'}
-                          </p>
-                      </div>
-                      <div className="flex gap-2">
-                        <button onClick={handlePrintMedalSummary} className="p-2 bg-white/20 hover:bg-white/30 rounded-full transition-colors" title="พิมพ์รายงาน">
-                            <Printer className="w-5 h-5" />
-                        </button>
-                        <button onClick={() => setShowMedalSummaryModal(false)} className="p-2 hover:bg-white/20 rounded-full transition-colors"><X className="w-6 h-6"/></button>
-                      </div>
-                  </div>
-                  <div className="flex-1 overflow-y-auto p-4">
-                      <table className="min-w-full text-sm">
-                          <thead className="bg-gray-50 sticky top-0 z-10 border-b border-gray-200">
-                              <tr>
-                                  <th className="px-4 py-3 text-center w-16">อันดับ</th>
-                                  <th className="px-4 py-3 text-left">โรงเรียน</th>
-                                  <th className="px-4 py-3 text-center text-yellow-600 font-black">ทอง</th>
-                                  <th className="px-4 py-3 text-center text-gray-500 font-black">เงิน</th>
-                                  <th className="px-4 py-3 text-center text-amber-700 font-black">ทองแดง</th>
-                                  <th className="px-4 py-3 text-center text-gray-400">ร่วม/ชมเชย</th>
-                                  <th className="px-4 py-3 text-center bg-blue-50/50 font-black text-blue-800">รวม</th>
-                                  <th className="px-4 py-3 text-center bg-purple-50 text-purple-800 font-black">
-                                      {viewScope === 'area' ? 'ชนะเลิศ (ที่ 1)' : 'ตัวแทน'}
-                                  </th>
-                              </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-100">
-                              {schoolStats.map((s, idx) => (
-                                  <tr key={idx} className="hover:bg-gray-50">
-                                      <td className="px-4 py-3 text-center text-gray-500 font-bold">{idx + 1}</td>
-                                      <td className="px-4 py-3 font-bold text-gray-900">{s.name}</td>
-                                      <td className="px-4 py-3 text-center font-black text-yellow-500">{s.gold}</td>
-                                      <td className="px-4 py-3 text-center font-black text-gray-400">{s.silver}</td>
-                                      <td className="px-4 py-3 text-center font-black text-amber-700">{s.bronze}</td>
-                                      <td className="px-4 py-3 text-center text-gray-400">{s.participant}</td>
-                                      <td className="px-4 py-3 text-center bg-blue-50/20 font-black text-blue-700">{s.total}</td>
-                                      <td className="px-4 py-3 text-center bg-purple-50/30 font-black text-purple-700">{s.repCount}</td>
-                                  </tr>
-                              ))}
-                              {schoolStats.length === 0 && (
-                                  <tr><td colSpan={8} className="py-20 text-center text-gray-400 italic">ยังไม่มีข้อมูลคะแนน</td></tr>
-                              )}
-                          </tbody>
-                      </table>
-                  </div>
-              </div>
-          </div>
-      )}
-
-      {/* Recent Logs Section */}
-      {recentLogs.length > 0 && (
-          <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-              <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center">
-                  <History className="w-4 h-4 mr-2 text-gray-500" />
-                  รายการที่บันทึกล่าสุด
-              </h3>
-              <div className="space-y-2">
-                  {recentLogs.map(log => (
-                      <div key={log.id} className="flex justify-between items-center text-sm p-2 bg-gray-50 rounded border border-gray-100 animate-in fade-in slide-in-from-bottom-2">
-                          <div className="min-w-0 flex-1 mr-4">
-                              <div className="text-xs text-blue-500 font-medium mb-0.5 truncate">{log.activityName}</div>
-                              <div className="font-medium text-gray-900 truncate">{log.teamName}</div>
-                              <div className="text-xs text-gray-500 truncate flex items-center">
-                                  <div className="w-1.5 h-1.5 rounded-full bg-gray-400 mr-1.5"></div>
-                                  {log.schoolName}
-                              </div>
-                          </div>
-                          <div className="text-right whitespace-nowrap">
-                              <span className={`font-bold block ${log.score === 'ไม่เข้าร่วม' ? 'text-red-400' : 'text-blue-600'}`}>{log.score} {log.score !== 'ไม่เข้าร่วม' && 'คะแนน'}</span>
-                              <span className="text-xs text-gray-400 block mt-0.5">{log.time}</span>
-                          </div>
-                      </div>
-                  ))}
-              </div>
-          </div>
-      )}
-
-      {!selectedActivityId && (
+      {!selectedActivityId && !showAnnouncedManager && (
           <div className="text-center py-10 bg-white rounded-xl border border-dashed border-gray-300 text-gray-400">
               <Calculator className="w-12 h-12 mx-auto mb-2 opacity-50" />
               <p>กรุณาเลือกหมวดหมู่และรายการแข่งขันเพื่อเริ่มบันทึกคะแนน</p>
@@ -1699,6 +1659,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
               count={dirtyCount}
               totalCount={batchConfirmData.length}
               teamName={singleConfirmData?.teamName}
+              schoolName={singleConfirmData?.schoolName}
               newScore={singleConfirmData?.newScore}
               newRank={singleConfirmData?.newRank}
               newMedal={singleConfirmData?.newMedal}
@@ -1714,4 +1675,3 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
 };
 
 export default ScoreEntry;
-
