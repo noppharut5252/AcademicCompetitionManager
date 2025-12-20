@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { AppData, User, Team, AreaStageInfo } from '../types';
 import { updateTeamResult, updateAreaResult } from '../services/api';
 import { shareScoreResult, shareTop3Result } from '../services/liff';
-import { Save, Filter, AlertCircle, CheckCircle, Lock, Trophy, Search, ChevronRight, ChevronLeft, Share2, AlertTriangle, Calculator, X, Copy, PieChart, Check, ChevronDown, Flag, History, Loader2, ListChecks, Edit2, Crown, LayoutGrid, AlertOctagon, Wand2, Eye, EyeOff, ArrowDownWideNarrow, GraduationCap, Printer, School, FileBadge, UserX, ClipboardCheck, BarChart3, ClipboardList, Info, RotateCcw, Clock, ChevronUp } from 'lucide-react';
+import { Save, Filter, AlertCircle, CheckCircle, Lock, Trophy, Search, ChevronRight, ChevronLeft, Share2, AlertTriangle, Calculator, X, Copy, PieChart, Check, ChevronDown, Flag, History, Loader2, ListChecks, Edit2, Crown, LayoutGrid, AlertOctagon, Wand2, Eye, EyeOff, ArrowDownWideNarrow, GraduationCap, Printer, School, FileBadge, UserX, ClipboardCheck, BarChart3, ClipboardList, Info, RotateCcw, Clock, ChevronUp, Trash2 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import SearchableSelect from './SearchableSelect';
 import ConfirmationModal from './ConfirmationModal';
@@ -67,6 +67,14 @@ const calculateMedal = (scoreStr: string, manualMedal: string): string => {
     if (score === -1) return 'ไม่เข้าร่วมแข่งขัน';
     if (manualMedal && manualMedal !== '' && manualMedal !== '- Auto -') return manualMedal;
     if (isNaN(score)) return '';
+    if (score >= 80) return 'Gold';
+    if (score >= 70) return 'Silver';
+    if (score >= 60) return 'Bronze';
+    return 'Participant';
+};
+
+const getAutoMedal = (score: number) => {
+    if (score === -1) return 'ไม่เข้าร่วมแข่งขัน';
     if (score >= 80) return 'Gold';
     if (score >= 70) return 'Silver';
     if (score >= 60) return 'Bronze';
@@ -344,6 +352,9 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
   // References for keyboard navigation
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
+  // Local Storage Key
+  const storageKey = `score_draft_${selectedActivityId}_${viewScope}`;
+
   useEffect(() => {
       const paramActId = searchParams.get('activityId');
       if (paramActId && data.activities) {
@@ -354,6 +365,39 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
           }
       }
   }, [searchParams, data.activities]);
+
+  // Load Draft from LocalStorage
+  useEffect(() => {
+      if (selectedActivityId) {
+          const saved = localStorage.getItem(storageKey);
+          if (saved) {
+              try {
+                  const parsed = JSON.parse(saved);
+                  if (Object.keys(parsed).length > 0) {
+                      setEdits(parsed);
+                      showToast('โหลดข้อมูลร่างที่บันทึกไว้', 'info');
+                  } else {
+                      setEdits({});
+                  }
+              } catch (e) {
+                  console.error("Failed to load drafts", e);
+              }
+          } else {
+              setEdits({});
+          }
+      }
+  }, [selectedActivityId, viewScope, storageKey]);
+
+  // Save Draft to LocalStorage
+  useEffect(() => {
+      if (selectedActivityId) {
+          if (Object.keys(edits).length > 0) {
+              localStorage.setItem(storageKey, JSON.stringify(edits));
+          } else {
+              localStorage.removeItem(storageKey);
+          }
+      }
+  }, [edits, selectedActivityId, viewScope, storageKey]);
 
   const currentActivity = useMemo(() => {
       return data.activities.find(a => a.id === selectedActivityId);
@@ -603,6 +647,38 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       }); 
   }, [allAuthorizedTeams, selectedActivityId, searchTerm, showUnscoredOnly, edits, selectedClusterFilter, canFilterCluster, data.schools, viewScope]);
 
+  // Validation Logic
+  const validationWarnings = useMemo(() => {
+      if (!selectedActivityId) return [];
+      const warnings: string[] = [];
+      let rank1Count = 0;
+      
+      filteredTeams.forEach(t => {
+          const edit = edits[t.teamId];
+          
+          let score = 0;
+          let rank = "";
+          
+          if (edit) {
+              score = parseFloat(edit.score);
+              rank = edit.rank;
+          } else if (viewScope === 'area') {
+              const info = getAreaInfo(t);
+              score = info?.score || 0;
+              rank = info?.rank || '';
+          } else {
+              score = t.score;
+              rank = t.rank;
+          }
+
+          if (score > 100) warnings.push(`ทีม ${t.teamName}: คะแนนเกิน 100`);
+          if (rank === '1') rank1Count++;
+      });
+
+      if (rank1Count > 1) warnings.push(`มีทีมได้อันดับ 1 จำนวน ${rank1Count} ทีม (ควรมีเพียง 1 ทีม)`);
+      return warnings;
+  }, [filteredTeams, edits, viewScope, selectedActivityId]);
+
   const activityProgress = useMemo(() => {
       const total = filteredTeams.length;
       const recorded = filteredTeams.filter(t => {
@@ -708,6 +784,15 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
               flag: currentEdit?.flag ?? baseFlag,
           };
 
+          // Feature 1: Auto-Calculate Medal
+          if (field === 'score') {
+              const score = parseFloat(value);
+              if (!isNaN(score) && score !== -1) {
+                  const autoMedal = getAutoMedal(score);
+                  baseState.medal = autoMedal; // Update medal automatically
+              }
+          }
+
           const newState = { ...baseState, [field]: value, isDirty: true };
           return { ...prev, [teamId]: newState };
       });
@@ -808,11 +893,114 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
     showToast(`คำนวณลำดับ (ระดับ${viewScope === 'area' ? 'เขต' : 'กลุ่ม'}) เรียบร้อยแล้ว`, 'info');
   };
 
-  // Add Reset Handler
   const handleResetEdits = () => {
       setEdits({});
       setShowResetConfirm(false);
       showToast('ล้างข้อมูลที่แก้ไขแล้ว', 'info');
+  };
+
+  const handleClearDraft = () => {
+      setEdits({});
+      localStorage.removeItem(storageKey);
+      showToast('ล้างข้อมูลร่างเรียบร้อยแล้ว', 'info');
+  };
+
+  const handlePrintDraft = () => {
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+          showToast('Pop-up ถูกบล็อก', 'error');
+          return;
+      }
+
+      const date = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
+      const scopeTitle = viewScope === 'cluster' ? `ระดับกลุ่มเครือข่าย ${selectedClusterFilter ? `(${data.clusters.find(c => c.ClusterID === selectedClusterFilter)?.ClusterName})` : ''}` : 'ระดับเขตพื้นที่การศึกษา';
+      const activityName = currentActivity?.name || '';
+
+      const rows = filteredTeams.map((t, idx) => {
+          const edit = edits[t.teamId];
+          const school = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
+          
+          let score = edit?.score || (viewScope === 'area' ? (getAreaInfo(t)?.score || 0) : t.score);
+          let rank = edit?.rank || (viewScope === 'area' ? (getAreaInfo(t)?.rank || '') : t.rank);
+          let medal = edit?.medal || (viewScope === 'area' ? (getAreaInfo(t)?.medal || '') : t.medalOverride);
+          
+          if (typeof score === 'string') score = parseFloat(score);
+          const displayScore = score === -1 ? 'ไม่มา' : (score > 0 ? score : '-');
+          
+          // Re-calculate medal display if dirty to ensure accuracy
+          if (edit && !edit.medal && score > 0 && score !== -1) {
+              medal = getAutoMedal(score as number);
+          } else if (!medal && score > 0) {
+              medal = getAutoMedal(score as number);
+          }
+
+          return `
+            <tr>
+                <td style="text-align: center;">${idx + 1}</td>
+                <td>${t.teamName}</td>
+                <td>${school?.SchoolName || t.schoolId}</td>
+                <td style="text-align: center; font-weight: bold;">${displayScore}</td>
+                <td style="text-align: center;">${rank || '-'}</td>
+                <td style="text-align: center;">${medal || '-'}</td>
+                ${edit?.isDirty ? '<td style="text-align: center; color: blue;">Draft</td>' : '<td style="text-align: center;">Saved</td>'}
+            </tr>
+          `;
+      }).join('');
+
+      const content = `
+        <html>
+        <head>
+            <title>ใบสรุปคะแนนร่าง - ${activityName}</title>
+            <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap" rel="stylesheet">
+            <style>
+                body { font-family: 'Sarabun', sans-serif; padding: 20px; }
+                h1, h2 { text-align: center; margin: 5px 0; }
+                table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px; }
+                th, td { border: 1px solid #000; padding: 8px; }
+                th { background-color: #f2f2f2; text-align: center; }
+                .draft-mark { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-45deg); font-size: 100px; color: rgba(0,0,0,0.1); pointer-events: none; z-index: -1; }
+                @media print { .no-print { display: none; } }
+            </style>
+        </head>
+        <body>
+            <div class="no-print" style="margin-bottom: 20px; text-align: right;">
+                <button onclick="window.print()" style="padding: 10px 20px; background: #2563eb; color: white; border: none; borderRadius: 5px; cursor: pointer;">พิมพ์เอกสาร</button>
+            </div>
+            <div class="draft-mark">DRAFT</div>
+            <h1>ใบสรุปผลการแข่งขัน (ฉบับร่าง)</h1>
+            <h2>${activityName}</h2>
+            <h2>${scopeTitle}</h2>
+            <div style="text-align: center; margin-top: 10px;">ข้อมูล ณ วันที่ ${date} (รวมข้อมูลที่ยังไม่บันทึก)</div>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 50px;">ที่</th>
+                        <th>ทีม</th>
+                        <th>โรงเรียน</th>
+                        <th style="width: 80px;">คะแนน</th>
+                        <th style="width: 60px;">อันดับ</th>
+                        <th style="width: 100px;">เหรียญ</th>
+                        <th style="width: 60px;">สถานะ</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rows}
+                </tbody>
+            </table>
+            
+            <div style="margin-top: 40px; display: flex; justify-content: flex-end;">
+                <div style="text-align: center; width: 300px;">
+                    <div style="border-bottom: 1px dotted #000; margin-bottom: 10px;"></div>
+                    <div>( ........................................................ )</div>
+                    <div style="margin-top: 5px;">กรรมการตัดสิน</div>
+                </div>
+            </div>
+        </body>
+        </html>
+      `;
+      printWindow.document.write(content);
+      printWindow.document.close();
   };
 
   const initiateSave = (teamId: string) => {
@@ -965,10 +1153,11 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
 
         if (success) {
             onDataUpdate(); 
-            setEdits(prev => {
-                const { [teamId]: _, ...rest } = prev;
-                return rest;
-            });
+            // Clear only this edit from local storage state
+            const newEdits = { ...edits };
+            delete newEdits[teamId];
+            setEdits(newEdits);
+            
             const team = data.teams.find(t => t.teamId === teamId);
             const school = data.schools.find(s => s.SchoolID === team?.schoolId || s.SchoolName === team?.schoolId);
             addRecentLog(team?.teamName || teamId, school?.SchoolName || '', currentActivityName, edit.score);
@@ -1006,11 +1195,10 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
         setProgress({ current: 0, total: 0 }); // Reset
         onDataUpdate(); 
         
-        setEdits(prev => {
-             const newEdits = { ...prev };
-             dirtyIds.forEach(id => delete newEdits[id]);
-             return newEdits;
-        });
+        // Clear saved edits from state and local storage
+        const newEdits = { ...edits };
+        dirtyIds.forEach(id => delete newEdits[id]);
+        setEdits(newEdits);
 
         if (successCount === dirtyIds.length) {
             showToast(`บันทึกข้อมูลทั้งหมด ${successCount} รายการเรียบร้อยแล้ว`, 'success');
@@ -1459,8 +1647,34 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                          >
                              <Share2 className="w-4 h-4" />
                          </button>
+                         
+                         {/* Print Draft Button */}
+                         <button 
+                            onClick={handlePrintDraft}
+                            className="p-2 bg-white text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors whitespace-nowrap flex items-center"
+                            title="พิมพ์ใบสรุปคะแนน (ร่าง)"
+                         >
+                             <Printer className="w-4 h-4" />
+                         </button>
                    </div>
               </div>
+
+              {/* Validation Warning Banner */}
+              {validationWarnings.length > 0 && (
+                  <div className="bg-orange-50 border-l-4 border-orange-500 p-4 rounded-r-lg shadow-sm animate-pulse">
+                      <div className="flex items-start">
+                          <AlertTriangle className="w-5 h-5 text-orange-600 mr-3 mt-0.5 shrink-0" />
+                          <div>
+                              <h4 className="text-sm font-bold text-orange-800">พบข้อควรระวัง (Validation Warnings)</h4>
+                              <ul className="list-disc list-inside mt-1 text-xs text-orange-700 space-y-1">
+                                  {validationWarnings.map((w, i) => (
+                                      <li key={i}>{w}</li>
+                                  ))}
+                              </ul>
+                          </div>
+                      </div>
+                  </div>
+              )}
 
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                   <div className="overflow-x-auto">
@@ -1486,6 +1700,17 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                         >
                                             <Wand2 className="w-3 h-3 mr-1" /> Auto Rank
                                         </button>
+
+                                        {/* Clear Draft Button */}
+                                        {Object.keys(edits).length > 0 && (
+                                            <button 
+                                                onClick={handleClearDraft}
+                                                className="inline-flex items-center px-2 py-1 bg-gray-100 text-gray-600 border border-gray-200 rounded text-xs hover:bg-gray-200 transition-colors"
+                                                title="ล้างข้อมูลร่างทั้งหมด"
+                                            >
+                                                <X className="w-3 h-3 mr-1" /> Clear Draft
+                                            </button>
+                                        )}
 
                                         {dirtyCount > 0 ? (
                                             <>
