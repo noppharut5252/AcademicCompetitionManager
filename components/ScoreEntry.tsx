@@ -137,7 +137,7 @@ const ConfirmModal: React.FC<ConfirmModalProps> = (props) => {
                 <div className={`flex items-center mb-2 shrink-0 ${isReset ? 'text-red-600' : 'text-amber-500'}`}>
                     {isReset ? <AlertCircle className="w-6 h-6 mr-2" /> : <AlertTriangle className="w-6 h-6 mr-2" />}
                     <h3 className="text-lg font-bold text-gray-800">
-                        {isReset ? 'ยืนยันการรีเซ็ตคะแนน' : `ยืนยันการบันทึก (${props.viewScope === 'area' ? 'ระดับเขต' : 'ระดับกลุ่ม'})`}
+                        {isReset ? `ยืนยันการรีเซ็ต (${props.viewScope === 'area' ? 'ระดับเขต' : 'ระดับกลุ่ม'})` : `ยืนยันการบันทึก (${props.viewScope === 'area' ? 'ระดับเขต' : 'ระดับกลุ่ม'})`}
                     </h3>
                 </div>
                 
@@ -145,6 +145,8 @@ const ConfirmModal: React.FC<ConfirmModalProps> = (props) => {
                     <div>
                         <p className="text-gray-600 text-sm mb-4">
                             คุณกำลังจะลบข้อมูลคะแนน อันดับ และเหรียญรางวัลของทุกทีมในกิจกรรมนี้
+                            <br/>
+                            <span className="text-xs text-gray-500">(เฉพาะในขอบเขต {props.viewScope === 'area' ? 'ระดับเขตพื้นที่' : 'กลุ่มเครือข่ายของคุณ'})</span>
                             <br/><br/>
                             <span className="font-bold text-red-600">การกระทำนี้ไม่สามารถย้อนกลับได้</span>
                         </p>
@@ -308,7 +310,11 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
   
   // Permissions for Area Score Entry: Admin, Area, Score (Group Admin usually manages Cluster only)
   const canScoreArea = ['admin', 'area', 'score'].includes(role || '');
-  const canReset = ['admin', 'area'].includes(role || '');
+  
+  // Updated Reset Permissions:
+  // Admin/Area can always reset.
+  // Group Admin can reset ONLY in Cluster View.
+  const canReset = ['admin', 'area'].includes(role || '') || (role === 'group_admin' && viewScope === 'cluster');
 
   if (!user || !allowedRoles.includes(role || '')) {
       return (
@@ -350,28 +356,36 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
   }, [data.activities, data.teams, data.schools, role, user]);
 
   // Announced Activities Data (for the new section)
+  // Refined: Logic now respects viewScope strictly to separate Area vs Cluster progress
   const announcedActivitiesData = useMemo(() => {
       return availableActivities.map(act => {
+          // Filter teams based on authorized list (handles Group Admin restriction)
           const actTeams = allAuthorizedTeams.filter(t => t.activityId === act.id);
           const totalTeams = actTeams.length;
           
           let scoredTeams = 0;
-          let clusterRepCount = 0;
+          let clusterRepCount = 0; // Only relevant for Cluster View analysis really
           const scoredClusters = new Set<string>();
 
           actTeams.forEach(t => {
+              // Crucial Scope Check:
+              // If View = Area, only count Area Scores
+              // If View = Cluster, only count Cluster Scores
               const score = viewScope === 'area' ? (getAreaInfo(t)?.score || 0) : t.score;
-              if (score > 0 || score === -1) scoredTeams++;
-
-              // Check for Cluster Representative (Rank 1 + Flag TRUE)
-              if (String(t.rank) === '1' && String(t.flag).toUpperCase() === 'TRUE') {
+              
+              if (score > 0 || score === -1) {
+                  scoredTeams++;
+                  
+                  // Track unique clusters that have scores (useful stat)
                   const school = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
                   if (school?.SchoolCluster) {
-                      if (!scoredClusters.has(school.SchoolCluster)) {
-                          scoredClusters.add(school.SchoolCluster);
-                          clusterRepCount++;
-                      }
+                      scoredClusters.add(school.SchoolCluster);
                   }
+              }
+
+              // Count Reps (Only relevant for Cluster View really, but kept for stat)
+              if (String(t.rank) === '1' && String(t.flag).toUpperCase() === 'TRUE') {
+                  clusterRepCount++;
               }
           });
 
@@ -380,10 +394,11 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
               totalTeams,
               scoredTeams,
               clusterRepCount,
+              scoredClustersCount: scoredClusters.size,
               isFullyScored: totalTeams > 0 && totalTeams === scoredTeams
           };
       }).filter(a => {
-          // Filter by logic: Must have some scores to be "Announced" (or at least partially)
+          // Filter by logic: Must have some scores IN THE CURRENT SCOPE to be "Announced"
           if (a.scoredTeams === 0) return false;
           // Apply Filters
           if (announcedCategoryFilter !== 'All' && a.category !== announcedCategoryFilter) return false;
@@ -1029,13 +1044,28 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
           setConfirmState({ isOpen: false, type: 'reset', teamId: null });
           setIsLoading(true);
 
-          const targetTeams = allAuthorizedTeams.filter(t => t.activityId === activityToReset);
+          let targetTeams = allAuthorizedTeams.filter(t => t.activityId === activityToReset);
+          
+          // Group Admin Filter: Reset only their cluster if in Cluster View
+          if (viewScope === 'cluster' && role === 'group_admin') {
+              const userSchool = data.schools.find(s => s.SchoolID === user?.SchoolID);
+              const clusterId = userSchool?.SchoolCluster;
+              if (clusterId) {
+                  targetTeams = targetTeams.filter(t => {
+                      const s = data.schools.find(sc => sc.SchoolID === t.schoolId || sc.SchoolName === t.schoolId);
+                      return s?.SchoolCluster === clusterId;
+                  });
+              }
+          }
+
           let successCount = 0;
 
           // Loop through all teams in activity and clear fields
           for (const team of targetTeams) {
               // Create a blank edit object effectively clearing the record
-              const blankEdit = { score: '', rank: '', medal: '', flag: '' };
+              // Note: performUpdate decides between updateTeamResult (Cluster) and updateAreaResult (Area) based on viewScope state.
+              // So we just need to ensure the targetTeams list is correct.
+              const blankEdit = { score: '0', rank: '', medal: '', flag: '' }; 
               const result = await performUpdate(team.teamId, blankEdit);
               if (result) successCount++;
           }
@@ -1221,7 +1251,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                   <td className="px-4 py-3 text-center text-sm font-bold text-green-600">{act.scoredTeams}</td>
                                   <td className="px-4 py-3 text-center">
                                       <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-purple-100 text-purple-700">
-                                          {act.clusterRepCount} กลุ่ม/เขต
+                                          {viewScope === 'area' ? act.clusterRepCount : act.scoredClustersCount} {viewScope === 'area' ? 'กลุ่ม/เขต' : 'กลุ่ม'}
                                       </span>
                                   </td>
                                   <td className="px-4 py-3 text-right">
@@ -1229,11 +1259,11 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                           <button 
                                               onClick={() => handleViewReps(act.id)}
                                               className="p-1.5 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded border border-blue-200 transition-colors"
-                                              title="ดูรายชื่อตัวแทน"
+                                              title="ดูรายชื่อตัวแทน/ผู้ชนะ"
                                           >
                                               <Eye className="w-4 h-4" />
                                           </button>
-                                          {/* Reset Button - Only for Admin/Area */}
+                                          {/* Reset Button */}
                                           {canReset && (
                                               <button 
                                                   onClick={() => initiateResetActivity(act.id)}
@@ -1249,7 +1279,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                           ))}
                           {announcedActivitiesData.length === 0 && (
                               <tr>
-                                  <td colSpan={5} className="px-6 py-8 text-center text-gray-400 italic">ไม่พบข้อมูลกิจกรรมที่ประกาศผลแล้ว</td>
+                                  <td colSpan={5} className="px-6 py-8 text-center text-gray-400 italic">ไม่พบข้อมูลกิจกรรมที่ประกาศผลแล้วในระดับนี้</td>
                               </tr>
                           )}
                       </tbody>
@@ -1659,7 +1689,6 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
               count={dirtyCount}
               totalCount={batchConfirmData.length}
               teamName={singleConfirmData?.teamName}
-              schoolName={singleConfirmData?.schoolName}
               newScore={singleConfirmData?.newScore}
               newRank={singleConfirmData?.newRank}
               newMedal={singleConfirmData?.newMedal}
