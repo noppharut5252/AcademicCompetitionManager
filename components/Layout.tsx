@@ -209,8 +209,8 @@ const ScannerModal = ({
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[100] bg-black flex flex-col animate-in fade-in duration-300">
-            <div className="flex justify-between items-center p-4 bg-black/50 text-white absolute top-0 w-full z-10 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[100] bg-black flex flex-col animate-in fade-in duration-300 pb-safe">
+            <div className="flex justify-between items-center p-4 bg-black/50 text-white absolute top-0 w-full z-10 backdrop-blur-sm pt-safe">
                 <h3 className="font-bold text-lg flex items-center">
                     {mode === 'scan' ? <ScanLine className="w-5 h-5 mr-2" /> : <IdCard className="w-5 h-5 mr-2" />}
                     {mode === 'scan' ? 'สแกน QR Code' : 'เลือกบัตรประจำตัว'}
@@ -370,7 +370,7 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
   const visibleMenuItems = menuItems.filter(item => item.visible);
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row font-kanit">
+    <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row font-kanit pb-safe">
       
       <ScannerModal 
         isOpen={showScanner} 
@@ -485,7 +485,7 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
       <div 
         className={`flex-1 flex flex-col mb-20 md:mb-0 h-screen overflow-hidden bg-gray-50 transition-all duration-300 ease-in-out ${isSidebarOpen ? 'md:ml-64' : 'md:ml-0'}`}
       >
-        <header className="md:hidden h-14 bg-white border-b border-gray-200 flex items-center justify-between px-4 sticky top-0 z-20">
+        <header className="md:hidden h-14 bg-white border-b border-gray-200 flex items-center justify-between px-4 sticky top-0 z-20 pt-safe">
             <div className="flex items-center" onClick={() => handleNav('dashboard')}>
                 <Trophy className="w-6 h-6 text-blue-600 mr-2" />
                 <span className="font-bold text-gray-900 text-lg">CompManager</span>
@@ -505,7 +505,7 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
             </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-4 md:p-8 pb-24 md:pb-8 relative">
+        <main className="flex-1 overflow-y-auto p-4 md:p-8 pb-32 md:pb-8 relative">
             {/* Desktop Sidebar Toggle (Visible when closed) */}
             {!isSidebarOpen && (
                 <button 
@@ -530,7 +530,7 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
       </div>
 
       {/* Updated Mobile Bottom Navigation Bar (Grid 5) */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-white border-t border-gray-200 z-30 safe-area-bottom shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+      <div className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-white border-t border-gray-200 z-30 pb-safe shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
         <div className="grid grid-cols-5 h-full relative">
             {/* 1. หน้าหลัก */}
             <button onClick={() => handleNav('dashboard')} className={`flex flex-col items-center justify-center space-y-1 ${activeTab === 'dashboard' ? 'text-blue-600' : 'text-gray-400'}`}>
@@ -577,7 +577,7 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
       {/* Mobile Menu Overlay */}
       {isMobileMenuOpen && (
         <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm md:hidden flex flex-col justify-end" onClick={() => setIsMobileMenuOpen(false)}>
-            <div className="bg-white rounded-t-2xl p-4 animate-in slide-in-from-bottom-10 max-h-[70vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="bg-white rounded-t-2xl p-4 animate-in slide-in-from-bottom-10 max-h-[70vh] overflow-y-auto pb-safe" onClick={e => e.stopPropagation()}>
                 <div className="flex justify-between items-center mb-4 px-2">
                     <h3 className="font-bold text-gray-800 text-lg">เมนูทั้งหมด</h3>
                     <button onClick={() => setIsMobileMenuOpen(false)} className="p-1 bg-gray-100 rounded-full"><X className="w-5 h-5 text-gray-500"/></button>
