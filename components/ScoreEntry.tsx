@@ -40,7 +40,7 @@ interface ConfirmModalProps {
     newMedal?: string;
     newFlag?: string;
     batchItems?: BatchItem[];
-    onConfirm: (data?: any) => void;
+    onConfirm: (remark?: string) => void;
     onCancel: () => void;
     viewScope?: 'cluster' | 'area';
     isLoading?: boolean;
@@ -67,10 +67,7 @@ interface RecentLog {
 const calculateMedal = (scoreStr: string, manualMedal: string): string => {
     const score = parseFloat(scoreStr);
     if (score === -1) return 'ไม่เข้าร่วมแข่งขัน';
-    // If manual medal is specific (not Auto), return it. 
-    // NOTE: 'Auto' or empty usually implies recalculation.
-    if (manualMedal && manualMedal !== '' && manualMedal !== '- Auto -' && manualMedal !== 'Auto') return manualMedal;
-    
+    if (manualMedal && manualMedal !== '' && manualMedal !== '- Auto -') return manualMedal;
     if (isNaN(score)) return '';
     if (score >= 80) return 'Gold';
     if (score >= 70) return 'Silver';
@@ -240,36 +237,9 @@ const Toast: React.FC<ToastProps> = ({ message, type, isVisible, onClose }) => {
     );
 };
 
-// QUICK REASONS CONSTANT
-const QUICK_REASONS = [
-    'พิมพ์คะแนนผิดพลาด',
-    'กรรมการทักท้วง',
-    'ปรับลำดับใหม่',
-    'แก้ไขข้อมูลตกหล่น',
-    'เปลี่ยนสถานะการเข้าแข่งขัน'
-];
-
 const ConfirmModal: React.FC<ConfirmModalProps> = (props) => {
     const [remark, setRemark] = useState('');
     
-    // States for Editable Correction Mode
-    const [editScore, setEditScore] = useState('');
-    const [editRank, setEditRank] = useState('');
-    const [editMedal, setEditMedal] = useState('');
-    const [editFlag, setEditFlag] = useState('');
-
-    useEffect(() => {
-        if (props.isOpen) {
-            setRemark(''); // Reset remark
-            if (props.type === 'correction') {
-                setEditScore(props.newScore === '-' ? '0' : props.newScore || '');
-                setEditRank(props.newRank === '-' ? '' : props.newRank || '');
-                setEditMedal(props.newMedal || calculateMedal(props.newScore || '0', ''));
-                setEditFlag(props.newFlag || '');
-            }
-        }
-    }, [props.isOpen, props.type, props.newScore, props.newRank, props.newMedal, props.newFlag]);
-
     if (!props.isOpen) return null;
 
     const isReset = props.type === 'reset';
@@ -280,53 +250,28 @@ const ConfirmModal: React.FC<ConfirmModalProps> = (props) => {
             alert("กรุณาระบุเหตุผลการแก้ไข (Remark)");
             return;
         }
-        
-        if (isCorrection) {
-            // Pass the edited values back
-            props.onConfirm({
-                remark,
-                score: editScore,
-                rank: editRank,
-                medal: editMedal,
-                flag: editFlag
-            });
-        } else {
-            // Pass just the remark for other modes
-            props.onConfirm(remark);
-        }
-    };
-
-    const handleQuickReason = (r: string) => {
-        setRemark(r);
-    };
-
-    const handleScoreChange = (val: string) => {
-        setEditScore(val);
-        // Auto-calc medal when score changes in modal
-        if (val && !isNaN(parseFloat(val))) {
-            setEditMedal(getAutoMedal(parseFloat(val)));
-        }
+        props.onConfirm(remark);
     };
 
     return (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-            <div className={`bg-white rounded-xl shadow-2xl w-full p-6 space-y-4 flex flex-col max-h-[90vh] ${props.type === 'batch' ? 'max-w-4xl' : 'max-w-md'}`}>
-                <div className={`flex items-center mb-1 shrink-0 ${isReset ? 'text-red-600' : isCorrection ? 'text-orange-600' : 'text-blue-600'}`}>
-                    {isReset ? <AlertCircle className="w-6 h-6 mr-2" /> : isCorrection ? <AlertTriangle className="w-6 h-6 mr-2" /> : <Save className="w-6 h-6 mr-2" />}
-                    <h3 className="text-xl font-bold text-gray-800">
-                        {isReset ? `ยืนยันการรีเซ็ต` : isCorrection ? `แก้ไขคะแนน (Correction)` : `ยืนยันการบันทึก`}
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+            <div className={`bg-white rounded-xl shadow-xl w-full p-6 space-y-4 flex flex-col max-h-[90vh] ${props.type === 'batch' ? 'max-w-4xl' : 'max-w-sm'}`}>
+                <div className={`flex items-center mb-2 shrink-0 ${isReset ? 'text-red-600' : isCorrection ? 'text-orange-600' : 'text-amber-500'}`}>
+                    {isReset ? <AlertCircle className="w-6 h-6 mr-2" /> : <AlertTriangle className="w-6 h-6 mr-2" />}
+                    <h3 className="text-lg font-bold text-gray-800">
+                        {isReset ? `ยืนยันการรีเซ็ต` : isCorrection ? `ยืนยันการแก้ไขด่วน` : `ยืนยันการบันทึก`}
                     </h3>
                 </div>
                 
                 {isReset ? (
                     <div>
-                        <p className="text-gray-600 text-sm mb-4 bg-red-50 p-4 rounded-lg border border-red-100">
+                        <p className="text-gray-600 text-sm mb-4">
                             คุณกำลังจะลบข้อมูลคะแนน อันดับ และเหรียญรางวัลของทุกทีมในกิจกรรมนี้
-                            <br/><br/>
-                            <span className="font-bold text-red-600 flex items-center"><AlertOctagon className="w-4 h-4 mr-1"/> การกระทำนี้ไม่สามารถย้อนกลับได้</span>
+                            <br/>
+                            <span className="font-bold text-red-600">การกระทำนี้ไม่สามารถย้อนกลับได้</span>
                         </p>
                     </div>
-                ) : props.type === 'single' ? (
+                ) : props.type === 'single' || isCorrection ? (
                     <div className="overflow-y-auto">
                         <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-center mb-4">
                             <p className="text-xs text-blue-500 font-bold uppercase tracking-wider mb-1">โรงเรียน (School)</p>
@@ -334,8 +279,8 @@ const ConfirmModal: React.FC<ConfirmModalProps> = (props) => {
                             <p className="text-sm text-gray-600">ทีม: {props.teamName}</p>
                         </div>
 
-                        <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3 shadow-sm">
-                            <div className="flex justify-between items-center border-b border-gray-100 pb-2">
+                        <div className="bg-gray-50 p-4 rounded-lg border border-gray-100 space-y-2 text-sm">
+                            <div className="flex justify-between items-center border-b border-gray-200 pb-2 mb-2">
                                 <span className="text-gray-500 font-medium">คะแนนที่ได้:</span>
                                 <span className="font-black text-blue-600 text-3xl">{props.newScore === '-1' ? '-1 (ไม่มา)' : props.newScore}</span>
                             </div>
@@ -347,88 +292,21 @@ const ConfirmModal: React.FC<ConfirmModalProps> = (props) => {
                                 <span className="text-gray-500">ลำดับที่:</span>
                                 <span className="font-medium text-gray-900">{props.newRank || '-'}</span>
                             </div>
-                        </div>
-                    </div>
-                ) : isCorrection ? (
-                    <div className="overflow-y-auto space-y-4">
-                        <div className="bg-orange-50 border border-orange-100 rounded-xl p-4 mb-2">
-                            <p className="text-xs text-orange-600 font-bold uppercase tracking-wider mb-1">กำลังแก้ไขข้อมูลของ</p>
-                            <h2 className="text-lg font-bold text-gray-900 leading-tight">{props.teamName}</h2>
-                            <p className="text-xs text-gray-500">{props.schoolName}</p>
-                        </div>
-
-                        {/* Editable Fields for Correction */}
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-xs font-bold text-gray-500 mb-1">คะแนน (Score)</label>
-                                <input 
-                                    type="number" step="0.01" 
-                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-lg font-bold text-blue-600 focus:ring-2 focus:ring-orange-500 outline-none"
-                                    value={editScore}
-                                    onChange={(e) => handleScoreChange(e.target.value)}
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-gray-500 mb-1">ลำดับ (Rank)</label>
-                                <input 
-                                    type="text"
-                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-lg font-medium text-gray-800 focus:ring-2 focus:ring-orange-500 outline-none"
-                                    value={editRank}
-                                    onChange={(e) => setEditRank(e.target.value)}
-                                />
-                            </div>
-                            <div className="col-span-2">
-                                <label className="block text-xs font-bold text-gray-500 mb-1">เหรียญรางวัล (Medal)</label>
-                                <select 
-                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 outline-none bg-white"
-                                    value={editMedal}
-                                    onChange={(e) => setEditMedal(e.target.value)}
-                                >
-                                    <option value="">- Auto -</option>
-                                    <option value="Gold">Gold</option>
-                                    <option value="Silver">Silver</option>
-                                    <option value="Bronze">Bronze</option>
-                                    <option value="Participant">Participant</option>
-                                    <option value="ไม่เข้าร่วมแข่งขัน">ไม่เข้าร่วมแข่งขัน</option>
-                                </select>
-                            </div>
-                            {props.viewScope === 'cluster' && (
-                                <div className="col-span-2 flex items-center">
-                                    <input 
-                                        type="checkbox" 
-                                        id="editFlag" 
-                                        className="w-5 h-5 text-orange-600 rounded border-gray-300 focus:ring-orange-500 mr-2"
-                                        checked={String(editFlag).toUpperCase() === 'TRUE'}
-                                        onChange={(e) => setEditFlag(e.target.checked ? 'TRUE' : '')}
+                            
+                            {isCorrection && (
+                                <div className="mt-4 pt-2 border-t border-red-100">
+                                    <label className="block text-xs font-bold text-red-600 mb-1">
+                                        ระบุเหตุผลการแก้ไข (จำเป็น)
+                                    </label>
+                                    <textarea 
+                                        className="w-full border border-red-200 rounded p-2 text-sm focus:ring-2 focus:ring-red-500 outline-none"
+                                        placeholder="เช่น พิมพ์คะแนนผิดพลาด, กรรมการทักท้วง..."
+                                        rows={2}
+                                        value={remark}
+                                        onChange={(e) => setRemark(e.target.value)}
                                     />
-                                    <label htmlFor="editFlag" className="text-sm font-medium text-gray-700">เป็นตัวแทน (Qualified)</label>
                                 </div>
                             )}
-                        </div>
-
-                        {/* Remark Section with Quick Buttons */}
-                        <div className="pt-2 border-t border-gray-100">
-                            <label className="block text-xs font-bold text-red-600 mb-2">
-                                ระบุเหตุผลการแก้ไข (จำเป็น)
-                            </label>
-                            <div className="flex flex-wrap gap-2 mb-2">
-                                {QUICK_REASONS.map(r => (
-                                    <button 
-                                        key={r}
-                                        onClick={() => handleQuickReason(r)}
-                                        className={`px-2 py-1 text-[10px] rounded border transition-colors ${remark === r ? 'bg-orange-100 text-orange-700 border-orange-300' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
-                                    >
-                                        {r}
-                                    </button>
-                                ))}
-                            </div>
-                            <textarea 
-                                className="w-full border border-red-200 rounded-lg p-3 text-sm focus:ring-2 focus:ring-red-500 outline-none bg-red-50/30"
-                                placeholder="เช่น พิมพ์คะแนนผิดพลาด, กรรมการทักท้วง..."
-                                rows={2}
-                                value={remark}
-                                onChange={(e) => setRemark(e.target.value)}
-                            />
                         </div>
                     </div>
                 ) : (
@@ -493,7 +371,7 @@ const ConfirmModal: React.FC<ConfirmModalProps> = (props) => {
                         className={`flex-1 px-4 py-2 text-white rounded-lg font-medium transition-colors flex items-center justify-center ${isReset ? 'bg-red-600 hover:bg-red-700' : isCorrection ? 'bg-orange-600 hover:bg-orange-700' : 'bg-blue-600 hover:bg-blue-700'}`}
                     >
                         {props.isLoading && <Loader2 className="w-4 h-4 animate-spin mr-2"/>}
-                        {isReset ? 'ยืนยันการรีเซ็ต' : isCorrection ? 'บันทึกการแก้ไข' : 'ยืนยันและประกาศผล'}
+                        {isReset ? 'ยืนยันการรีเซ็ต' : isCorrection ? 'ยืนยันการแก้ไข' : 'ยืนยันและประกาศผล'}
                     </button>
                 </div>
             </div>
@@ -523,13 +401,8 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       isOpen: boolean, 
       type: 'single' | 'batch' | 'reset' | 'correction', 
       teamId: string | null,
-      items?: any[],
-      batchItems?: BatchItem[],
-      newScore?: string,
-      newRank?: string,
-      newMedal?: string,
-      newFlag?: string
-  }>({ isOpen: false, type: 'single', teamId: null, items: [] });
+      items?: any[] // Added items array
+  }>({ isOpen: false, type: 'single', teamId: null });
   const [edits, setEdits] = useState<Record<string, { score: string, rank: string, medal: string, flag: string, isDirty: boolean }>>({});
   const [recentLogs, setRecentLogs] = useState<RecentLog[]>([]);
   const [showUnscoredOnly, setShowUnscoredOnly] = useState(false);
@@ -1416,28 +1289,16 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       }
   };
 
-  const handleConfirmSave = async (data?: any) => {
+  const handleConfirmSave = async (remark?: string) => {
       const currentActivityName = availableActivities.find(a => a.id === selectedActivityId)?.name || '';
 
       if (confirmState.type === 'single' || confirmState.type === 'correction') {
         const teamId = confirmState.teamId;
         if (!teamId) return;
         
+        // Use edited value or fallback to existing for correction mode
         let edit = edits[teamId];
-        let remark = '';
-
-        if (confirmState.type === 'correction' && data) {
-            // Use data from the modal form
-            edit = {
-                score: data.score,
-                rank: data.rank,
-                medal: data.medal,
-                flag: data.flag,
-                isDirty: true
-            };
-            remark = data.remark || '';
-        } else if (!edit) {
-             // Fallback if no edit state exists yet (should be covered by modal logic usually)
+        if (!edit) {
              const team = teams.find(t => t.teamId === teamId);
              if (team) {
                  const baseScore = viewScope === 'area' ? (getAreaInfo(team)?.score || 0) : team.score;
@@ -1453,9 +1314,6 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                  };
              } else return;
         }
-        
-        // If passed generic remark string
-        if (typeof data === 'string') remark = data;
 
         setConfirmState(prev => ({ ...prev, isOpen: false }));
         setIsLoading(true);
@@ -2593,8 +2451,5 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
     </div>
   );
 };
-
-// Internal wrapper for Keypad to break dependency cycle if needed, but defined above is fine.
-const KeypadOverlay = NumericKeypad;
 
 export default ScoreEntry;
