@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { AppData, User, Team, AreaStageInfo } from '../types';
 import { updateTeamResult, updateAreaResult } from '../services/api';
@@ -899,7 +898,7 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
                             </div>
                             <div className="flex flex-col items-end gap-1">
                                 {displayScore && !isDirty && <div className="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-bold flex items-center"><CheckCircle className="w-3 h-3 mr-1"/> Saved</div>}
-                                {(displayScore > 0 || displayScore === -1) && !isDirty && (
+                                {(scoreVal > 0 || scoreVal === -1) && !isDirty && (
                                     <button onClick={(e) => { e.stopPropagation(); handleShare(team); }} className="text-blue-500 bg-blue-50 p-1.5 rounded-full">
                                         <Share2 className="w-4 h-4" />
                                     </button>
