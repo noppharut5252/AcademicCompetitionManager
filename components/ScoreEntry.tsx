@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { AppData, User, Team, AreaStageInfo } from '../types';
 import { updateTeamResult, updateAreaResult } from '../services/api';
 import { shareScoreResult, shareTop3Result } from '../services/liff';
-import { Save, Filter, AlertCircle, CheckCircle, Lock, Trophy, Search, ChevronRight, ChevronLeft, Share2, AlertTriangle, Calculator, X, Copy, PieChart, Check, ChevronDown, Flag, History, Loader2, ListChecks, Edit2, Crown, LayoutGrid, AlertOctagon, Wand2, Eye, EyeOff, ArrowDownWideNarrow, GraduationCap, Printer, School, FileBadge, UserX, ClipboardCheck, BarChart3, ClipboardList, Info, RotateCcw, Clock, ChevronUp, Trash2 } from 'lucide-react';
+import { Save, Filter, AlertCircle, CheckCircle, Lock, Trophy, Search, ChevronRight, ChevronLeft, Share2, AlertTriangle, Calculator, X, Copy, PieChart, Check, ChevronDown, Flag, History, Loader2, ListChecks, Edit2, Crown, LayoutGrid, AlertOctagon, Wand2, Eye, EyeOff, ArrowDownWideNarrow, GraduationCap, Printer, School, FileBadge, UserX, ClipboardCheck, BarChart3, ClipboardList, Info, RotateCcw, Clock, ChevronUp, Trash2, RefreshCw } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import SearchableSelect from './SearchableSelect';
 import ConfirmationModal from './ConfirmationModal';
@@ -311,8 +311,8 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   
-  // State for Scope (Cluster vs Area)
-  const [viewScope, setViewScope] = useState<'cluster' | 'area'>('cluster');
+  // State for Scope (Cluster vs Area) - Changed default to 'area'
+  const [viewScope, setViewScope] = useState<'cluster' | 'area'>('area');
 
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [selectedActivityId, setSelectedActivityId] = useState<string>('');
@@ -405,6 +405,13 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
 
   const showToast = (message: string, type: 'success' | 'error' | 'info') => {
       setToast({ message, type, isVisible: true });
+  };
+
+  const handleRefresh = async () => {
+        setIsLoading(true);
+        await onDataUpdate();
+        setIsLoading(false);
+        showToast('อัปเดตข้อมูลล่าสุดแล้ว', 'success');
   };
 
   // 1. Check Permissions
@@ -1353,17 +1360,24 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       {/* Announced Activities Manager Section */}
       {showAnnouncedManager && (
           <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-6 animate-in slide-in-from-top-4">
-              <div className="flex justify-between items-center mb-4 border-b border-indigo-200 pb-2">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 border-b border-indigo-200 pb-2 gap-2">
                   <h3 className="font-bold text-indigo-800 flex items-center">
                       <ListChecks className="w-5 h-5 mr-2" /> 
                       รายการที่ประกาศผลแล้ว ({announcedActivitiesData.length})
-                      <span className="text-xs font-normal text-indigo-600 ml-2 bg-indigo-100 px-2 py-0.5 rounded">
+                      <span className="text-xs font-normal text-indigo-600 ml-2 bg-indigo-100 px-2 py-0.5 rounded hidden md:inline-block">
                           {viewScope === 'area' ? 'เฉพาะรอบเขตพื้นที่' : 'เฉพาะกลุ่มเครือข่ายของท่าน'}
                       </span>
                   </h3>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 w-full md:w-auto">
+                        <button 
+                            onClick={handleRefresh}
+                            className="bg-white border border-indigo-200 text-indigo-700 text-xs rounded px-3 py-1.5 hover:bg-indigo-50 transition-colors flex items-center"
+                            title="อัปเดตข้อมูลล่าสุด"
+                        >
+                            <RefreshCw className="w-3.5 h-3.5 mr-1" /> Refresh
+                        </button>
                         <select 
-                            className="bg-white border border-indigo-200 text-indigo-700 text-xs rounded px-2 py-1 focus:outline-none"
+                            className="bg-white border border-indigo-200 text-indigo-700 text-xs rounded px-2 py-1 focus:outline-none flex-1 md:flex-none"
                             value={announcedCategoryFilter}
                             onChange={(e) => setAnnouncedCategoryFilter(e.target.value)}
                         >
@@ -1372,7 +1386,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                         </select>
                         <input 
                             type="text" 
-                            className="bg-white border border-indigo-200 text-xs rounded px-2 py-1 focus:outline-none"
+                            className="bg-white border border-indigo-200 text-xs rounded px-2 py-1 focus:outline-none flex-1 md:w-48"
                             placeholder="ค้นหากิจกรรม..."
                             value={announcedSearch}
                             onChange={(e) => setAnnouncedSearch(e.target.value)}
@@ -1380,7 +1394,8 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                   </div>
               </div>
 
-              <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-indigo-100">
+              {/* Desktop Table */}
+              <div className="hidden md:block bg-white rounded-xl shadow-sm overflow-hidden border border-indigo-100">
                   <table className="min-w-full divide-y divide-indigo-100">
                       <thead className="bg-indigo-50/50">
                           <tr>
@@ -1436,6 +1451,49 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                           )}
                       </tbody>
                   </table>
+              </div>
+
+              {/* Mobile/Tablet Card Layout */}
+              <div className="md:hidden space-y-3">
+                  {announcedActivitiesData.length > 0 ? (
+                      announcedActivitiesData.map((act) => (
+                          <div key={act.id} className="bg-white p-4 rounded-xl border border-indigo-100 shadow-sm flex flex-col gap-2">
+                              <div>
+                                  <div className="font-bold text-gray-800 text-sm leading-tight mb-1">{act.name}</div>
+                                  <div className="text-xs text-gray-500 bg-gray-50 px-2 py-0.5 rounded w-fit">{act.category}</div>
+                              </div>
+                              <div className="flex justify-between items-center text-xs mt-2 border-t border-gray-50 pt-2">
+                                  <div className="flex gap-3">
+                                      <span className="text-gray-500">ทั้งหมด: {act.totalTeams}</span>
+                                      <span className="text-green-600 font-bold">บันทึก: {act.scoredTeams}</span>
+                                  </div>
+                                  <span className="bg-purple-50 text-purple-700 px-2 py-0.5 rounded font-bold">
+                                      {viewScope === 'area' ? 'ที่ 1' : 'ตัวแทน'}: {act.rank1Count}
+                                  </span>
+                              </div>
+                              <div className="flex gap-2 mt-2 pt-2 border-t border-gray-100">
+                                  <button 
+                                      onClick={() => handleViewResultList(act.id)}
+                                      className="flex-1 py-1.5 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded text-xs font-bold flex items-center justify-center"
+                                  >
+                                      <Eye className="w-3.5 h-3.5 mr-1.5" /> ดูผล
+                                  </button>
+                                  {canReset && (
+                                      <button 
+                                          onClick={() => initiateResetActivity(act.id)}
+                                          className="flex-1 py-1.5 text-red-600 bg-red-50 hover:bg-red-100 rounded text-xs font-bold flex items-center justify-center"
+                                      >
+                                          <RotateCcw className="w-3.5 h-3.5 mr-1.5" /> รีเซ็ต
+                                      </button>
+                                  )}
+                              </div>
+                          </div>
+                      ))
+                  ) : (
+                      <div className="text-center py-8 text-gray-400 italic bg-white rounded-xl border border-dashed border-gray-200">
+                          ไม่พบข้อมูลกิจกรรมที่ประกาศผลแล้วในระดับนี้
+                      </div>
+                  )}
               </div>
           </div>
       )}
