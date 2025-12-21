@@ -30,7 +30,8 @@ export const fetchData = async (): Promise<AppData> => {
       files: data.files || [],
       announcements: data.announcements || [],
       venues: data.venues || [],
-      judges: data.judges || []
+      judges: data.judges || [],
+      activityStatus: data.activityStatus || []
     };
   } catch (error) {
     console.warn("Fetching from live API failed, falling back to mock data.", error);
@@ -141,9 +142,9 @@ export const updateUser = async (user: Partial<User>): Promise<boolean> => {
     }
 }
 
-export const updateTeamResult = async (teamId: string, score: number, rank: string, medal: string, flag: string = '', stage: string = ''): Promise<boolean> => {
+export const updateTeamResult = async (teamId: string, score: number, rank: string, medal: string, flag: string = '', stage: string = '', remark: string = ''): Promise<boolean> => {
     try {
-        const response = await fetch(`${API_URL}?action=updateTeamResult&teamId=${encodeURIComponent(teamId)}&score=${score}&rank=${encodeURIComponent(rank)}&medal=${encodeURIComponent(medal)}&flag=${encodeURIComponent(flag)}&stage=${encodeURIComponent(stage)}`, {
+        const response = await fetch(`${API_URL}?action=updateTeamResult&teamId=${encodeURIComponent(teamId)}&score=${score}&rank=${encodeURIComponent(rank)}&medal=${encodeURIComponent(medal)}&flag=${encodeURIComponent(flag)}&stage=${encodeURIComponent(stage)}&remark=${encodeURIComponent(remark)}`, {
             method: 'GET',
             mode: 'cors'
         });
@@ -156,9 +157,9 @@ export const updateTeamResult = async (teamId: string, score: number, rank: stri
     }
 }
 
-export const updateAreaResult = async (teamId: string, score: number, rank: string, medal: string): Promise<boolean> => {
+export const updateAreaResult = async (teamId: string, score: number, rank: string, medal: string, remark: string = ''): Promise<boolean> => {
     try {
-        const response = await fetch(`${API_URL}?action=updateAreaResult&teamId=${encodeURIComponent(teamId)}&score=${score}&rank=${encodeURIComponent(rank)}&medal=${encodeURIComponent(medal)}`, {
+        const response = await fetch(`${API_URL}?action=updateAreaResult&teamId=${encodeURIComponent(teamId)}&score=${score}&rank=${encodeURIComponent(rank)}&medal=${encodeURIComponent(medal)}&remark=${encodeURIComponent(remark)}`, {
             method: 'GET',
             mode: 'cors'
         });
@@ -168,6 +169,23 @@ export const updateAreaResult = async (teamId: string, score: number, rank: stri
     } catch (e) { 
         console.error("Update Area Score failed", e);
         return false; 
+    }
+}
+
+export const toggleActivityLock = async (activityId: string, scope: string, isLocked: boolean): Promise<boolean> => {
+    try {
+        const response = await fetch(`${API_URL}?action=toggleActivityLock`, {
+            method: 'POST',
+            mode: 'cors',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify({ activityId, scope, isLocked })
+        });
+        if (!response.ok) return false;
+        const result = await response.json();
+        return result.status === 'success';
+    } catch (e) {
+        console.error("Lock toggle failed", e);
+        return false;
     }
 }
 
