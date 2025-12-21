@@ -15,7 +15,8 @@ import JudgesView from './components/JudgesView';
 import AnnouncementManager from './components/AnnouncementManager'; 
 import PrintDocumentsView from './components/PrintDocumentsView';
 import LiveScoreView from './components/LiveScoreView'; 
-import PublicResultView from './components/PublicResultView'; // Import
+import PublicResultView from './components/PublicResultView'; 
+import SettingsView from './components/SettingsView'; // Import SettingsView
 import { AppData, User } from './types';
 import { fetchData, loginStandardUser, checkUserPermission, verifyAndLinkLine } from './services/api';
 import { initLiff, loginLiff, LiffProfile } from './services/liff';
@@ -525,7 +526,7 @@ const App: React.FC = () => {
                             <Route path="/documents" element={<PrintDocumentsView data={data} user={currentUser} />} />
                             <Route path="/announcements" element={<AnnouncementManager data={data} user={currentUser} onDataUpdate={() => fetchAppData(true)} />} />
                             <Route path="/schools" element={<PlaceholderMenu title="ข้อมูลโรงเรียน" />} />
-                            <Route path="/settings" element={<PlaceholderMenu title="ตั้งค่าระบบ" />} />
+                            <Route path="/settings" element={<SettingsView data={data} user={currentUser} onDataUpdate={() => fetchAppData(true)} />} />
                             <Route 
                                 path="/profile" 
                                 element={currentUser ? <ProfileView user={currentUser} data={data} onUpdateUser={setCurrentUser} /> : <Navigate to="/dashboard" />} 
