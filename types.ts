@@ -39,6 +39,13 @@ export interface Activity {
   registrationDeadline: string;
 }
 
+export interface ActivityStatus {
+  activityId: string;
+  scope: string; // 'area', 'cluster', or specific cluster ID
+  isLocked: boolean;
+  updatedAt: string;
+}
+
 export interface AreaStageInfo {
   name?: string;     // Area Team Name
   contact?: any;     // Area Contact
@@ -72,6 +79,8 @@ export interface Team {
   editDeadline?: string; // New field for editing deadline
   lastEditedBy?: string; // New: Who edited last
   lastEditedAt?: string; // New: When edited last
+  clusterRemark?: string; // New: Reason for correction
+  areaRemark?: string; // New: Reason for correction
 }
 
 export interface User {
@@ -252,4 +261,5 @@ export interface AppData {
   announcements: Announcement[];
   venues: Venue[];
   judges: Judge[];
+  activityStatus?: ActivityStatus[]; // New: Lock status
 }
