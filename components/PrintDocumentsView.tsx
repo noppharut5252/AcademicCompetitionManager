@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { AppData, User, Team, Judge, PrintConfig } from '../types';
-import { Printer, FileText, ClipboardList, Users, Mail, Trophy, LayoutGrid, Filter, Search, ChevronRight, School, UserCheck, CheckSquare, Square, Layers, Download, Settings, X, Save, CheckCircle, Loader2, Hash, Tag, UserRound, AlertTriangle, PrinterCheck, Lock, Check, FolderOpen, Type, MoveHorizontal, ArrowUpFromLine, ArrowDownToLine, ArrowLeftFromLine, ArrowRightFromLine, QrCode as QrIcon, FileBadge, CalendarClock } from 'lucide-react';
+import { Printer, FileText, ClipboardList, Users, Mail, Trophy, LayoutGrid, Filter, Search, ChevronRight, School, UserCheck, CheckSquare, Square, Layers, Download, Settings, X, Save, CheckCircle, Loader2, Hash, Tag, UserRound, AlertTriangle, PrinterCheck, Lock, Check, FolderOpen, Type, MoveHorizontal, ArrowUpFromLine, ArrowDownToLine, ArrowLeftFromLine, ArrowRightFromLine, QrCode as QrIcon, FileBadge, CalendarClock, Mic } from 'lucide-react';
 import SearchableSelect from './SearchableSelect';
 import { getPrintConfig, savePrintConfig } from '../services/api';
 import QRCode from 'qrcode';
@@ -11,8 +11,8 @@ interface PrintDocumentsViewProps {
   user?: User | null;
 }
 
-// Updated DocType to include 'result-announcement'
-type DocType = 'judge-signin' | 'competitor-signin' | 'score-sheet' | 'score-sheet-individual' | 'envelope' | 'full-set' | 'result-announcement';
+// Updated DocType to include 'mc-script'
+type DocType = 'judge-signin' | 'competitor-signin' | 'score-sheet' | 'score-sheet-individual' | 'envelope' | 'full-set' | 'result-announcement' | 'mc-script';
 
 const DOC_NAMES: Record<DocType, string> = {
     'judge-signin': 'ใบลงชื่อกรรมการ',
@@ -21,7 +21,8 @@ const DOC_NAMES: Record<DocType, string> = {
     'score-sheet-individual': 'แบบบันทึกคะแนนรายบุคคล',
     'envelope': 'ใบปะหน้าซองเอกสาร',
     'full-set': 'เอกสารจัดชุดครบจบ (แนวนอน)',
-    'result-announcement': 'ใบประกาศผลการแข่งขัน (Official Result)'
+    'result-announcement': 'ใบประกาศผลการแข่งขัน (Official Result)',
+    'mc-script': 'บัตรคำพิธีกร (MC Script)'
 };
 
 const DEFAULT_PRINT_CONFIG: PrintConfig = {
@@ -59,6 +60,7 @@ const PrintConfigModal = ({ isOpen, onClose, onSave, data, currentUser, currentC
 }) => {
     const role = currentUser?.level?.toLowerCase();
     const isAdminOrArea = role === 'admin' || role === 'area';
+    const isGroupAdmin = role === 'group_admin';
     const userSchool = data.schools.find(s => s.SchoolID === currentUser?.SchoolID);
     const userClusterID = userSchool?.SchoolCluster;
 
@@ -69,8 +71,10 @@ const PrintConfigModal = ({ isOpen, onClose, onSave, data, currentUser, currentC
     useEffect(() => {
         if (isOpen && isAdminOrArea) {
             setSelectedContext('area');
+        } else if (isOpen && isGroupAdmin && userClusterID) {
+            setSelectedContext(userClusterID);
         }
-    }, [isOpen, isAdminOrArea]);
+    }, [isOpen, isAdminOrArea, isGroupAdmin, userClusterID]);
 
     useEffect(() => {
         const existing = currentConfigs[selectedContext];
@@ -121,15 +125,17 @@ const PrintConfigModal = ({ isOpen, onClose, onSave, data, currentUser, currentC
                         <div>
                             <label className="block text-sm font-bold text-gray-700 mb-1">เลือกระดับที่ต้องการตั้งค่า</label>
                             <select 
-                                className="w-full border rounded-lg px-3 py-2 text-sm bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none"
+                                className="w-full border rounded-lg px-3 py-2 text-sm bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-gray-100 disabled:text-gray-500"
                                 value={selectedContext}
                                 onChange={(e) => setSelectedContext(e.target.value)}
+                                disabled={isGroupAdmin} // Lock for Group Admin
                             >
-                                <option value="area">ระดับเขตพื้นที่การศึกษา (Area)</option>
+                                {!isGroupAdmin && <option value="area">ระดับเขตพื้นที่การศึกษา (Area)</option>}
                                 <optgroup label="ระดับกลุ่มเครือข่าย (Clusters)">
-                                    {clusterOptions.map(c => (
-                                        <option key={c.ClusterID} value={c.ClusterID}>{c.ClusterName}</option>
-                                    ))}
+                                    {clusterOptions.map(c => {
+                                        if (isGroupAdmin && c.ClusterID !== userClusterID) return null;
+                                        return <option key={c.ClusterID} value={c.ClusterID}>{c.ClusterName}</option>;
+                                    })}
                                 </optgroup>
                             </select>
                         </div>
@@ -425,7 +431,9 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
     const margins = config.margins || DEFAULT_PRINT_CONFIG.margins || { top: 10, bottom: 10, left: 10, right: 10 };
     const font = config.font || 'Sarabun';
     const fontFamily = font === 'Noto Serif Thai' ? "'Noto Serif Thai', serif" : font === 'Kanit' ? "'Kanit', sans-serif" : "'Sarabun', sans-serif";
-    const isLandscape = type === 'full-set' || type === 'judge-signin' || type === 'score-sheet-individual' || type === 'competitor-signin' || type === 'score-sheet';
+    // For MC script, we'll use Portrait (2 cards per page vertically)
+    const isPortrait = type === 'mc-script';
+    const isLandscape = !isPortrait && (type === 'full-set' || type === 'judge-signin' || type === 'score-sheet-individual' || type === 'competitor-signin' || type === 'score-sheet');
 
     let htmlContent = `
         <html>
@@ -472,6 +480,23 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                 .result-rank-1 { background-color: #fef9c3; } 
                 .result-rank-2 { background-color: #f3f4f6; } 
                 .result-rank-3 { background-color: #fff7ed; }
+                .mc-card {
+                    height: 135mm; /* Approx half of printable A4 vertical space after margins */
+                    border-bottom: 2px dashed #999;
+                    padding: 20px;
+                    box-sizing: border-box;
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: center;
+                    align-items: center;
+                    text-align: center;
+                }
+                .mc-activity { font-size: 20px; color: #444; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px; width: 100%; }
+                .mc-rank { font-size: 42px; font-weight: bold; color: #b45309; margin-bottom: 10px; line-height: 1.1; }
+                .mc-school { font-size: 28px; font-weight: bold; color: #1e3a8a; margin-bottom: 15px; line-height: 1.2; }
+                .mc-team { font-size: 18px; color: #555; margin-bottom: 15px; font-weight: bold; }
+                .mc-students { font-size: 16px; line-height: 1.6; text-align: left; width: 100%; padding: 10px; background: #f9f9f9; border-radius: 8px; }
+                .mc-students ul { margin: 0; padding-left: 20px; }
                 .no-print { position: fixed; top: 20px; right: 20px; z-index: 1000; }
                 .btn-print { background: #2563eb; color: white; padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-family: ${fontFamily}; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
                 @media print { .no-print { display: none; } }
@@ -483,7 +508,6 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
             </div>
     `;
 
-    // ... (Existing render functions: CoverPage, JudgeSignin, CompetitorSignin, ScoreSheet) ...
     const renderCoverPage = (act: any, teamCount: number, judgeCount: number, clusterLabel: string, venueInfo: any, schedule: any) => {
         return `
           <div class="page">
@@ -546,7 +570,7 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                           <th rowspan="2" style="width: 40px;">ที่</th>
                           <th rowspan="2" style="width: 200px;">ชื่อ - สกุล</th>
                           <th rowspan="2">ตำแหน่ง / โรงเรียน</th>
-                          <th colspan="2">ลงเวลามาปฏิบัติหน้าที่</th>
+                          <th colspan="2">ลงเวลามา</th>
                           <th colspan="2">ลงเวลากลับ</th>
                           <th rowspan="2">หมายเหตุ</th>
                       </tr>
@@ -599,8 +623,7 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                 rows += `
                   <tr>
                       <td class="text-center">${count++}</td>
-                      <td>${prefix}</td>
-                      <td>${nameBody}</td>
+                      <td style="font-weight: bold;">${prefix} ${nameBody}</td>
                       <td>${schoolName}</td>
                       <td>${t.teamName}</td>
                       <td></td>
@@ -624,15 +647,14 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                   <thead>
                       <tr>
                           <th style="width: 40px;">ที่</th>
-                          <th style="width: 80px;">คำนำหน้า</th>
-                          <th style="width: 180px;">ชื่อ - สกุล</th>
+                          <th style="width: 250px;">ชื่อ - สกุล</th>
                           <th>โรงเรียน</th>
                           <th>ทีม</th>
                           <th style="width: 100px;">ลายมือชื่อ</th>
                       </tr>
                   </thead>
                   <tbody>
-                      ${rows || '<tr><td colspan="6" class="text-center">ไม่มีข้อมูล</td></tr>'}
+                      ${rows || '<tr><td colspan="5" class="text-center">ไม่มีข้อมูล</td></tr>'}
                   </tbody>
               </table>
           </div>
@@ -707,11 +729,98 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
         `;
     };
 
+    // --- NEW: Render MC Script (A4 Portrait, 2 cards vertically) ---
+    const renderMCScript = (act: any, teams: Team[]) => {
+        // Filter winners: Gold Medalist OR Rank 1-3
+        const winners = teams.filter(t => {
+            let rank, medal, score;
+            if (viewScope === 'area') {
+                const info = JSON.parse(t.stageInfo || '{}');
+                rank = info.rank; medal = info.medal; score = info.score;
+            } else {
+                rank = t.rank; medal = t.medalOverride; score = t.score;
+            }
+            // Auto calc medal if not present
+            if (!medal && score >= 80) medal = 'Gold';
+            
+            const isRanked = rank && parseInt(rank) <= 3;
+            const isGold = (medal || '').includes('Gold');
+            return isRanked || isGold;
+        }).sort((a, b) => {
+            // Sort by Rank ASC -> Score Desc
+            const rankA = parseInt(viewScope === 'area' ? JSON.parse(a.stageInfo||'{}').rank : a.rank) || 999;
+            const rankB = parseInt(viewScope === 'area' ? JSON.parse(b.stageInfo||'{}').rank : b.rank) || 999;
+            return rankA - rankB;
+        });
+
+        if (winners.length === 0) return '';
+
+        let pagesHtml = '';
+        // Group by 2 for A4 Portrait
+        for (let i = 0; i < winners.length; i += 2) {
+            const card1 = winners[i];
+            const card2 = winners[i+1]; // might be undefined
+
+            const renderCard = (t: Team, isLastOnPage: boolean) => {
+                if (!t) return '';
+                const schoolName = (data.schools || []).find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId)?.SchoolName || t.schoolId;
+                let rank, medal;
+                if (viewScope === 'area') {
+                    const info = JSON.parse(t.stageInfo || '{}');
+                    rank = info.rank; medal = info.medal;
+                } else {
+                    rank = t.rank; medal = t.medalOverride;
+                    if (!medal && t.score >= 80) medal = 'Gold';
+                }
+
+                const awardLabel = rank === '1' ? 'รางวัลชนะเลิศ (Winner)' : rank === '2' ? 'รองชนะเลิศอันดับ 1' : rank === '3' ? 'รองชนะเลิศอันดับ 2' : (medal?.includes('Gold') ? 'ระดับเหรียญทอง' : 'รางวัลเข้าร่วม');
+                
+                // Get students for list
+                let students: string[] = [];
+                try {
+                    let raw = t.members;
+                    if (viewScope === 'area') { const info = JSON.parse(t.stageInfo || '{}'); if (info.members) raw = info.members; }
+                    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+                    
+                    const extractName = (m: any) => `${m.prefix || ''}${m.name || (m.firstname + ' ' + m.lastname)}`.trim();
+
+                    if (Array.isArray(parsed)) students = parsed.map(extractName);
+                    else if (parsed && parsed.students) students = parsed.students.map(extractName);
+                } catch {}
+
+                return `
+                    <div class="mc-card" style="${isLastOnPage ? 'border-bottom: none;' : ''}">
+                        <div class="mc-activity">${act.name}</div>
+                        <div class="mc-rank">${awardLabel}</div>
+                        <div class="mc-school">${schoolName}</div>
+                        ${t.teamName && t.teamName !== schoolName ? `<div class="mc-team">ทีม: ${t.teamName}</div>` : ''}
+                        
+                        ${students.length > 0 ? `
+                            <div class="mc-students">
+                                <strong>ผู้รับรางวัล:</strong>
+                                <ul>
+                                    ${students.slice(0, 3).map(s => `<li>${s}</li>`).join('')}
+                                    ${students.length > 3 ? `<li>และคณะรวม ${students.length} คน</li>` : ''}
+                                </ul>
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            };
+
+            pagesHtml += `
+                <div class="page">
+                    ${renderCard(card1, !card2)}
+                    ${card2 ? renderCard(card2, true) : ''}
+                </div>
+            `;
+        }
+        return pagesHtml;
+    };
+
     // --- NEW: Render Result Announcement (Official) ---
     const renderResultAnnouncement = async (act: any, teams: Team[], judges: Judge[], venueInfo: any, schedule: any) => {
-        // Sort teams by Rank (Asc) -> Score (Desc)
-        // Data in `teams` is already sorted by getTeamsForActivity (Sorts by School Name). We need to resort by Rank/Score.
-        // Assuming team.rank and team.score or Area info is available.
+        // ... (Existing implementation) ...
         const sortedTeams = [...teams].sort((a, b) => {
             let rankA, rankB, scoreA, scoreB, medalA, medalB;
             if (viewScope === 'area') {
@@ -732,7 +841,6 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                 medalB = b.medalOverride || '';
             }
             
-            // Prioritize Medal Group (Gold > Silver > Bronze) if rank is not set
             const getMedalWeight = (m: string) => m.includes('Gold') ? 3 : m.includes('Silver') ? 2 : m.includes('Bronze') ? 1 : 0;
             const weightA = getMedalWeight(medalA);
             const weightB = getMedalWeight(medalB);
@@ -742,9 +850,8 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
             return scoreB - scoreA;
         });
 
-        // QR Code for Public Result
         const baseUrl = window.location.href.split('#')[0];
-        const publicUrl = `${baseUrl}#/results?activityId=${act.id}`; // Direct to results view
+        const publicUrl = `${baseUrl}#/results?activityId=${act.id}`; 
         let qrCodeImg = '';
         try {
             qrCodeImg = await QRCode.toDataURL(publicUrl, { margin: 0, width: 100 });
@@ -783,7 +890,6 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                                 score = info.score; rank = info.rank; medal = info.medal;
                             } else {
                                 score = t.score; rank = t.rank; medal = t.medalOverride;
-                                // Auto calc medal if missing but scored
                                 if (!medal && score >= 80) medal = 'Gold';
                                 else if (!medal && score >= 70) medal = 'Silver';
                                 else if (!medal && score >= 60) medal = 'Bronze';
@@ -997,8 +1103,9 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                 </div>
             `;
         } else if (type === 'result-announcement') {
-            // NEW: Result Announcement
             htmlContent += await renderResultAnnouncement(act, teams, judges, venueInfo, schedule);
+        } else if (type === 'mc-script') {
+            htmlContent += renderMCScript(act, teams);
         }
     }
 
@@ -1235,6 +1342,9 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                   <button onClick={() => handleSmartPrint('result-announcement')} className="px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-md text-xs font-bold shadow-sm flex items-center" title="ใบประกาศผล (Official)">
                       <FileBadge className="w-4 h-4 mr-1" /> ประกาศผล
                   </button>
+                  <button onClick={() => handleSmartPrint('mc-script')} className="px-3 py-2 bg-pink-600 hover:bg-pink-700 text-white rounded-md text-xs font-bold shadow-sm flex items-center" title="บัตรคำพิธีกร">
+                      <Mic className="w-4 h-4 mr-1" /> พิธีกร
+                  </button>
               </div>
 
               {/* Full Set */}
@@ -1294,6 +1404,7 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                           <button onClick={() => handlePrintAction('competitor-signin', [act.id])} className="text-xs bg-white border border-gray-200 text-gray-600 py-1.5 rounded hover:bg-gray-50">ใบเซ็นผู้แข่ง</button>
                           <button onClick={() => handlePrintAction('score-sheet', [act.id])} className="text-xs bg-white border border-gray-200 text-gray-600 py-1.5 rounded hover:bg-gray-50">ใบคะแนนรวม</button>
                           <button onClick={() => handlePrintAction('result-announcement', [act.id])} className="text-xs bg-purple-50 border border-purple-200 text-purple-700 py-1.5 rounded hover:bg-purple-100 font-bold">ใบประกาศผล</button>
+                          <button onClick={() => handlePrintAction('mc-script', [act.id])} className="text-xs bg-pink-50 border border-pink-200 text-pink-700 py-1.5 rounded hover:bg-pink-100 font-bold col-span-2">บัตรคำพิธีกร</button>
                       </div>
                   </div>
               )
@@ -1363,6 +1474,7 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                                           <button onClick={() => handlePrintAction('judge-signin', [act.id])} className="p-2 text-blue-600 hover:enabled:bg-blue-100 rounded-lg transition-colors border border-transparent hover:enabled:border-blue-200" title="พิมพ์ใบเซ็นชื่อกรรมการ"><UserCheck className="w-5 h-5" /></button>
                                           <button onClick={() => handlePrintAction('score-sheet', [act.id])} className="p-2 text-orange-600 hover:enabled:bg-orange-100 rounded-lg transition-colors border border-transparent hover:enabled:border-orange-200" title="พิมพ์แบบบันทึกคะแนนรวม"><ClipboardList className="w-5 h-5" /></button>
                                           <button onClick={() => handlePrintAction('result-announcement', [act.id])} className="p-2 text-purple-700 hover:enabled:bg-purple-100 rounded-lg transition-colors border border-transparent hover:enabled:border-purple-200 font-bold" title="พิมพ์ใบประกาศผล"><FileBadge className="w-5 h-5" /></button>
+                                          <button onClick={() => handlePrintAction('mc-script', [act.id])} className="p-2 text-pink-600 hover:enabled:bg-pink-100 rounded-lg transition-colors border border-transparent hover:enabled:border-pink-200 font-bold" title="บัตรคำพิธีกร"><Mic className="w-5 h-5" /></button>
                                       </div>
                                   </td>
                               </tr>
