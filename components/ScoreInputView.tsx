@@ -3,7 +3,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { AppData, User, Team, AreaStageInfo } from '../types';
 import { updateTeamResult, updateAreaResult } from '../services/api';
 import { shareScoreResult, shareTop3Result } from '../services/liff';
-import { Save, Filter, AlertCircle, CheckCircle, Lock, Trophy, Search, ChevronRight, ChevronLeft, Share2, AlertTriangle, Calculator, X, Copy, PieChart, Check, ChevronDown, Flag, History, Loader2, ListChecks, Edit2, Crown, LayoutGrid, AlertOctagon, Wand2, Eye, EyeOff, ArrowDownWideNarrow, GraduationCap, Printer, School, FileBadge, UserX, ClipboardCheck, BarChart3, ClipboardList, Info, RotateCcw } from 'lucide-react';
+import { Save, Filter, AlertCircle, CheckCircle, Lock, Trophy, Search, ChevronRight, ChevronLeft, Share2, AlertTriangle, Calculator, X, Copy, PieChart, Check, ChevronDown, Flag, History, Loader2, ListChecks, Edit2, Crown, LayoutGrid, AlertOctagon, Wand2, Eye, EyeOff, ArrowDownWideNarrow, GraduationCap, Printer, School, FileBadge, UserX, ClipboardCheck, BarChart3, ClipboardList, Info, RotateCcw, PenTool, Mic, MicOff, Eraser, Receipt, GripHorizontal, Delete, ArrowRight } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import SearchableSelect from './SearchableSelect';
 import ConfirmationModal from './ConfirmationModal';
@@ -16,39 +16,22 @@ interface ScoreInputViewProps {
   onDataUpdate: () => void;
 }
 
-interface BatchItem {
+interface ScoringCriteria {
+    id: string;
+    label: string;
+    score: string;
+    max: number;
+}
+
+interface SubmittedSlip {
     id: string;
     teamName: string;
-    schoolName: string; 
-    score: string;
-    rank: string;
-    medal: string;
-    flag: string;
-    isModified: boolean;
-}
-
-interface ConfirmModalProps {
-    isOpen: boolean;
-    type: 'single' | 'batch';
-    count?: number;
-    totalCount?: number;
-    teamName?: string;
-    schoolName?: string; 
-    newScore?: string;
-    newRank?: string;
-    newMedal?: string;
-    newFlag?: string;
-    batchItems?: BatchItem[];
-    onConfirm: () => void;
-    onCancel: () => void;
-    viewScope?: 'cluster' | 'area';
-}
-
-interface ToastProps {
-    message: string;
-    type: 'success' | 'error' | 'info';
-    isVisible: boolean;
-    onClose: () => void;
+    schoolName: string;
+    totalScore: number;
+    criteriaSummary?: string;
+    timestamp: string;
+    signatureUrl?: string;
+    judgeName?: string;
 }
 
 // --- Helper Functions ---
@@ -74,6 +57,225 @@ const getAreaInfo = (team: Team): AreaStageInfo | null => {
 
 // --- Sub-Components ---
 
+// 1. Signature Pad Component
+const SignaturePad = ({ onSign }: { onSign: (dataUrl: string | null) => void }) => {
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const [isDrawing, setIsDrawing] = useState(false);
+    const [hasSignature, setHasSignature] = useState(false);
+
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (canvas) {
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+                ctx.strokeStyle = '#000000';
+                ctx.lineWidth = 2;
+                ctx.lineCap = 'round';
+            }
+        }
+    }, []);
+
+    const startDrawing = (e: React.MouseEvent | React.TouchEvent) => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        setIsDrawing(true);
+        setHasSignature(true);
+        const { offsetX, offsetY } = getCoordinates(e, canvas);
+        ctx.beginPath();
+        ctx.moveTo(offsetX, offsetY);
+    };
+
+    const draw = (e: React.MouseEvent | React.TouchEvent) => {
+        if (!isDrawing) return;
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        const { offsetX, offsetY } = getCoordinates(e, canvas);
+        ctx.lineTo(offsetX, offsetY);
+        ctx.stroke();
+    };
+
+    const endDrawing = () => {
+        setIsDrawing(false);
+        if (canvasRef.current) {
+            onSign(canvasRef.current.toDataURL());
+        }
+    };
+
+    const getCoordinates = (e: React.MouseEvent | React.TouchEvent, canvas: HTMLCanvasElement) => {
+        let clientX, clientY;
+        if ('touches' in e) {
+            clientX = e.touches[0].clientX;
+            clientY = e.touches[0].clientY;
+        } else {
+            clientX = (e as React.MouseEvent).clientX;
+            clientY = (e as React.MouseEvent).clientY;
+        }
+        const rect = canvas.getBoundingClientRect();
+        return {
+            offsetX: clientX - rect.left,
+            offsetY: clientY - rect.top
+        };
+    };
+
+    const clearSignature = () => {
+        const canvas = canvasRef.current;
+        if (canvas) {
+            const ctx = canvas.getContext('2d');
+            if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+            setHasSignature(false);
+            onSign(null);
+        }
+    };
+
+    return (
+        <div className="border border-gray-300 rounded-xl overflow-hidden bg-white relative">
+            <canvas
+                ref={canvasRef}
+                className="w-full h-32 touch-none cursor-crosshair bg-gray-50"
+                onMouseDown={startDrawing}
+                onMouseMove={draw}
+                onMouseUp={endDrawing}
+                onMouseLeave={endDrawing}
+                onTouchStart={startDrawing}
+                onTouchMove={draw}
+                onTouchEnd={endDrawing}
+            />
+            <div className="absolute bottom-2 right-2 flex gap-2">
+                {hasSignature && (
+                    <button onClick={clearSignature} className="p-1 bg-gray-200 text-gray-600 rounded hover:bg-red-100 hover:text-red-500 transition-colors text-xs flex items-center">
+                        <Eraser className="w-3 h-3 mr-1" /> ล้าง
+                    </button>
+                )}
+            </div>
+            {!hasSignature && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-gray-300 text-sm">
+                    เซ็นชื่อกรรมการที่นี่ (Signature)
+                </div>
+            )}
+        </div>
+    );
+};
+
+// 2. Custom Numeric Keypad
+const NumericKeypad = ({ 
+    isOpen, 
+    onClose, 
+    onInput, 
+    onDelete, 
+    onNext, 
+    onPrev,
+    value 
+}: { 
+    isOpen: boolean, 
+    onClose: () => void, 
+    onInput: (char: string) => void, 
+    onDelete: () => void, 
+    onNext?: () => void,
+    onPrev?: () => void,
+    value: string
+}) => {
+    if (!isOpen) return null;
+
+    const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0'];
+
+    return (
+        <div className="fixed bottom-0 left-0 right-0 bg-gray-100 border-t border-gray-200 shadow-[0_-4px_10px_rgba(0,0,0,0.1)] z-[100] animate-in slide-in-from-bottom duration-300">
+            {/* Toolbar */}
+            <div className="flex justify-between items-center px-4 py-2 bg-gray-200 border-b border-gray-300">
+                <div className="flex gap-2">
+                    <button onClick={onPrev} className="p-2 bg-white rounded shadow-sm active:bg-gray-100"><ChevronLeft className="w-5 h-5"/></button>
+                    <button onClick={onNext} className="p-2 bg-white rounded shadow-sm active:bg-gray-100"><ChevronRight className="w-5 h-5"/></button>
+                </div>
+                <div className="text-lg font-bold text-gray-800 bg-white px-4 py-1 rounded shadow-inner min-w-[80px] text-center">
+                    {value || '0'}
+                </div>
+                <button onClick={onClose} className="px-4 py-1.5 bg-blue-600 text-white rounded font-bold shadow-sm active:bg-blue-700">เสร็จสิ้น</button>
+            </div>
+            {/* Keypad Grid */}
+            <div className="grid grid-cols-4 gap-2 p-2 pb-6 safe-area-bottom">
+                {keys.map(k => (
+                    <button 
+                        key={k} 
+                        onClick={() => onInput(k)}
+                        className="bg-white rounded-lg shadow-sm p-4 text-2xl font-bold text-gray-800 active:bg-blue-50 active:scale-95 transition-all"
+                    >
+                        {k}
+                    </button>
+                ))}
+                <button 
+                    onClick={onDelete}
+                    className="bg-red-50 rounded-lg shadow-sm p-4 text-red-600 active:bg-red-100 active:scale-95 transition-all flex items-center justify-center"
+                >
+                    <Delete className="w-8 h-8" />
+                </button>
+            </div>
+        </div>
+    );
+};
+
+// 3. Receipt Slip Modal
+const ReceiptModal = ({ slip, onClose }: { slip: SubmittedSlip, onClose: () => void }) => {
+    return (
+        <div className="fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-4 backdrop-blur-sm animate-in zoom-in duration-300">
+            <div className="bg-white w-full max-w-sm rounded-none sm:rounded-2xl overflow-hidden shadow-2xl relative">
+                <div className="bg-blue-600 h-2"></div>
+                <div className="p-6 text-center space-y-4">
+                    <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-2">
+                        <CheckCircle className="w-10 h-10 text-green-600" />
+                    </div>
+                    <h2 className="text-xl font-bold text-gray-800">บันทึกคะแนนสำเร็จ</h2>
+                    <p className="text-gray-500 text-xs">Submission Receipt</p>
+                    
+                    <div className="bg-gray-50 p-4 rounded-xl border border-dashed border-gray-300 text-left space-y-3">
+                        <div className="flex justify-between text-sm">
+                            <span className="text-gray-500">ทีม:</span>
+                            <span className="font-bold text-gray-800">{slip.teamName}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                            <span className="text-gray-500">โรงเรียน:</span>
+                            <span className="font-medium text-gray-800 truncate max-w-[150px]">{slip.schoolName}</span>
+                        </div>
+                        <div className="border-t border-gray-200 my-2"></div>
+                        <div className="flex justify-between items-end">
+                            <span className="text-gray-500 font-bold">คะแนนรวม:</span>
+                            <span className="text-3xl font-black text-blue-600">{slip.totalScore}</span>
+                        </div>
+                        {slip.criteriaSummary && (
+                            <div className="text-[10px] text-gray-400 mt-1">
+                                {slip.criteriaSummary}
+                            </div>
+                        )}
+                        <div className="text-[10px] text-gray-400 text-right mt-2">
+                            {new Date(slip.timestamp).toLocaleString('th-TH')}
+                        </div>
+                    </div>
+
+                    {slip.signatureUrl && (
+                        <div className="text-center mt-4">
+                            <div className="text-xs text-gray-400 mb-1">ลายเซ็นกรรมการ</div>
+                            <img src={slip.signatureUrl} alt="Signature" className="h-12 mx-auto mix-blend-multiply opacity-80" />
+                            {slip.judgeName && <div className="text-xs font-bold text-gray-600 mt-1">({slip.judgeName})</div>}
+                        </div>
+                    )}
+                </div>
+                <div className="p-4 bg-gray-50 flex gap-3">
+                    <button onClick={onClose} className="flex-1 py-3 bg-white border border-gray-300 rounded-xl text-gray-700 font-bold hover:bg-gray-100">ปิด</button>
+                    {/* In a real app, verify `navigator.share` support or implement html2canvas */}
+                    <button className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 shadow-md">บันทึกรูป</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const LoadingOverlay: React.FC<{ isVisible: boolean }> = ({ isVisible }) => {
     if (!isVisible) return null;
     return (
@@ -87,138 +289,6 @@ const LoadingOverlay: React.FC<{ isVisible: boolean }> = ({ isVisible }) => {
     );
 };
 
-const Toast: React.FC<ToastProps> = ({ message, type, isVisible, onClose }) => {
-    useEffect(() => {
-        if (isVisible) {
-            const timer = setTimeout(onClose, 3000);
-            return () => clearTimeout(timer);
-        }
-    }, [isVisible, onClose]);
-
-    if (!isVisible) return null;
-
-    const bgClass = type === 'success' ? 'bg-green-600' : type === 'error' ? 'bg-red-600' : 'bg-blue-600';
-    const icon = type === 'success' ? <CheckCircle className="w-5 h-5" /> : type === 'error' ? <AlertCircle className="w-5 h-5" /> : <Trophy className="w-5 h-5" />;
-
-    return (
-        <div className={`fixed top-4 right-4 z-[100] flex items-center p-4 mb-4 text-white rounded-lg shadow-lg ${bgClass} animate-in slide-in-from-top-5 duration-300`}>
-            <div className="mr-3">{icon}</div>
-            <div className="text-sm font-medium">{message}</div>
-            <button onClick={onClose} className="ml-4 p-1 hover:bg-white/20 rounded-full transition-colors">
-                <X className="w-4 h-4" />
-            </button>
-        </div>
-    );
-};
-
-const ConfirmModal: React.FC<ConfirmModalProps> = (props) => {
-    if (!props.isOpen) return null;
-
-    return (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-            <div className={`bg-white rounded-xl shadow-xl w-full p-6 space-y-4 flex flex-col max-h-[90vh] ${props.type === 'batch' ? 'max-w-4xl' : 'max-w-sm'}`}>
-                <div className="flex items-center text-amber-500 mb-2 shrink-0">
-                    <AlertTriangle className="w-6 h-6 mr-2" />
-                    <h3 className="text-lg font-bold text-gray-800">ยืนยันการบันทึก ({props.viewScope === 'area' ? 'ระดับเขต' : 'ระดับกลุ่ม'})</h3>
-                </div>
-                
-                {props.type === 'single' ? (
-                    <div className="overflow-y-auto">
-                        <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 mb-4 text-center">
-                            <p className="text-xs text-indigo-600 font-bold uppercase tracking-wider mb-1">โรงเรียน (School)</p>
-                            <h2 className="text-xl font-black text-gray-900 leading-tight mb-1">{props.schoolName || '-'}</h2>
-                            <p className="text-sm text-gray-500 font-medium">ทีม: {props.teamName}</p>
-                        </div>
-                        
-                        <div className="bg-gray-50 p-4 rounded-lg border border-gray-100 space-y-2 text-sm mt-2">
-                            <div className="flex justify-between items-center border-b border-gray-200 pb-2 mb-2">
-                                <span className="text-gray-500 font-medium">คะแนนที่ได้:</span>
-                                <span className="font-black text-blue-600 text-3xl">{props.newScore === '-1' ? '-1 (ไม่มา)' : props.newScore}</span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span className="text-gray-500">เหรียญรางวัล:</span>
-                                <span className="font-medium text-gray-900">{props.newMedal || calculateMedal(props.newScore || '0', '')}</span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span className="text-gray-500">ลำดับที่:</span>
-                                <span className="font-medium text-gray-900">{props.newRank || '-'}</span>
-                            </div>
-                            {props.viewScope === 'cluster' && (
-                                <div className="flex justify-between">
-                                    <span className="text-gray-500">ตัวแทน (Q):</span>
-                                    <span className={`font-medium ${props.newFlag === 'TRUE' ? 'text-green-600' : 'text-gray-400'}`}>
-                                        {props.newFlag === 'TRUE' ? 'ใช่' : 'ไม่ใช่'}
-                                    </span>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                ) : (
-                    <div className="flex flex-col h-full overflow-hidden">
-                         <div className="flex items-center justify-between mb-2 shrink-0">
-                            <div>
-                                <span className="text-gray-800 font-bold text-lg">รายการทั้งหมด</span>
-                                <p className="text-xs text-gray-500">ตรวจสอบความถูกต้องก่อนบันทึก (ไฮไลต์สีฟ้าคือรายการที่มีการแก้ไข)</p>
-                            </div>
-                            <div className="text-right">
-                                <div className="text-2xl font-bold text-blue-600">{props.count} <span className="text-sm font-normal text-gray-500">แก้ไข</span></div>
-                                <div className="text-xs text-gray-400">จากทั้งหมด {props.totalCount} ทีม</div>
-                            </div>
-                         </div>
-                         
-                         <div className="flex-1 overflow-y-auto border border-gray-200 rounded-lg">
-                             <table className="min-w-full divide-y divide-gray-200 text-sm relative">
-                                 <thead className="bg-gray-50 sticky top-0 shadow-sm z-10">
-                                     <tr>
-                                         <th className="px-3 py-2 text-left font-medium text-gray-500 bg-gray-50">โรงเรียน / ทีม</th>
-                                         <th className="px-3 py-2 text-center font-medium text-gray-500 bg-gray-50 w-24">คะแนน</th>
-                                         <th className="px-3 py-2 text-center font-medium text-gray-500 bg-gray-50 w-24">Rank</th>
-                                         <th className="px-3 py-2 text-center font-medium text-gray-500 bg-gray-50 w-32">Medal</th>
-                                         {props.viewScope === 'cluster' && <th className="px-3 py-2 text-center font-medium text-gray-500 bg-gray-50 w-20">Q</th>}
-                                     </tr>
-                                 </thead>
-                                 <tbody className="divide-y divide-gray-200 bg-white">
-                                     {props.batchItems?.map((item) => {
-                                         const displayMedal = calculateMedal(item.score, item.medal);
-                                         return (
-                                             <tr key={item.id} className={item.isModified ? 'bg-blue-50/70' : ''}>
-                                                 <td className="px-3 py-2 text-gray-900">
-                                                     <div className="font-bold text-indigo-700">{item.schoolName}</div>
-                                                     <div className="text-xs text-gray-500">{item.teamName}</div>
-                                                     {item.isModified && <span className="text-[10px] text-blue-600 flex items-center mt-0.5"><Edit2 className="w-3 h-3 mr-0.5"/> Modified</span>}
-                                                 </td>
-                                                 <td className="px-3 py-2 text-center">
-                                                     <span className={`font-bold ${item.isModified ? 'text-blue-700' : 'text-gray-700'}`}>{item.score === '-1' ? '-1' : (item.score || '-')}</span>
-                                                 </td>
-                                                 <td className="px-3 py-2 text-center text-gray-600">{item.rank || '-'}</td>
-                                                 <td className="px-3 py-2 text-center text-gray-600 text-[10px]">{displayMedal}</td>
-                                                 {props.viewScope === 'cluster' && (
-                                                     <td className="px-3 py-2 text-center">
-                                                        {String(item.flag).toUpperCase() === 'TRUE' ? (
-                                                            <div className="flex justify-center"><Check className="w-4 h-4 text-green-600" /></div>
-                                                        ) : <span className="text-gray-300">-</span>}
-                                                     </td>
-                                                 )}
-                                             </tr>
-                                         );
-                                     })}
-                                 </tbody>
-                             </table>
-                         </div>
-                    </div>
-                )}
-
-                <div className="flex gap-3 pt-2 shrink-0">
-                    <button onClick={props.onCancel} className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">ยกเลิก</button>
-                    <button onClick={props.onConfirm} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors">ยืนยันบันทึก</button>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-// --- Main Component ---
-
 const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdate }) => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -230,22 +300,71 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
   const isGroupAdmin = role === 'group_admin';
   const canScoreArea = ['admin', 'area', 'score'].includes(role || '');
   
-  // Default scope based on role, but allow toggle
   const [viewScope, setViewScope] = useState<'cluster' | 'area'>(isAdminOrArea ? 'area' : 'cluster');
   const [searchTerm, setSearchTerm] = useState('');
   
-  // Edit State
+  // Data State
   const [edits, setEdits] = useState<Record<string, { score: string, rank: string, medal: string, flag: string, isDirty: boolean }>>({});
-  const [toast, setToast] = useState<{ message: string, type: 'success'|'error'|'info', isVisible: boolean }>({ message: '', type: 'info', isVisible: false });
   const [isLoading, setIsLoading] = useState(false);
   const [confirmState, setConfirmState] = useState<{ isOpen: boolean, type: 'single' | 'batch', teamId: string | null }>({ isOpen: false, type: 'single', teamId: null });
   
-  // New Modal States
-  const [showAutoRankConfirm, setShowAutoRankConfirm] = useState(false);
-  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  // New Features State
+  const [activeTeamId, setActiveTeamId] = useState<string | null>(null); // For focused team (Mobile Focus Mode)
+  const [criteriaMode, setCriteriaMode] = useState(false);
+  const [criteriaScores, setCriteriaScores] = useState<Record<string, ScoringCriteria[]>>({});
+  const [signatures, setSignatures] = useState<Record<string, string>>({}); // Stores base64 signature per team
+  const [comments, setComments] = useState<Record<string, string>>({});
+  
+  // Receipt State
+  const [lastSlip, setLastSlip] = useState<SubmittedSlip | null>(null);
+  const [history, setHistory] = useState<SubmittedSlip[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
 
-  // Refs for keyboard navigation
-  const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  // Keypad State
+  const [keypadConfig, setKeypadConfig] = useState<{ isOpen: boolean, targetId: string, field: string, criteriaId?: string } | null>(null);
+
+  // Voice Recognition
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
+
+  useEffect(() => {
+      if ('webkitSpeechRecognition' in window) {
+          // @ts-ignore
+          const recognition = new window.webkitSpeechRecognition();
+          recognition.continuous = false;
+          recognition.lang = 'th-TH';
+          recognition.interimResults = false;
+          
+          recognition.onresult = (event: any) => {
+              const transcript = event.results[0][0].transcript;
+              if (activeTeamId) {
+                  setComments(prev => ({
+                      ...prev,
+                      [activeTeamId]: (prev[activeTeamId] || '') + ' ' + transcript
+                  }));
+              }
+              setIsListening(false);
+          };
+          
+          recognition.onerror = () => setIsListening(false);
+          recognition.onend = () => setIsListening(false);
+          
+          recognitionRef.current = recognition;
+      }
+  }, [activeTeamId]);
+
+  const toggleListening = () => {
+      if (!recognitionRef.current) {
+          alert('เบราว์เซอร์นี้ไม่รองรับการพิมพ์ด้วยเสียง');
+          return;
+      }
+      if (isListening) {
+          recognitionRef.current.stop();
+      } else {
+          recognitionRef.current.start();
+          setIsListening(true);
+      }
+  };
 
   const activity = useMemo(() => 
     data.activities.find(a => a.id === activityId), 
@@ -255,12 +374,10 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
       if (!activityId) return [];
       let list = data.teams.filter(t => t.activityId === activityId);
 
-      // Area view filtering
       if (viewScope === 'area') {
           list = list.filter(t => t.stageStatus === 'Area' || String(t.flag).toUpperCase() === 'TRUE');
       }
 
-      // Group Admin filtering
       if (isGroupAdmin && viewScope === 'cluster') {
           const userSchool = data.schools.find(s => s.SchoolID === user?.SchoolID);
           if (userSchool) {
@@ -276,7 +393,6 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
           list = list.filter(t => t.teamName.toLowerCase().includes(lower) || t.schoolId.toLowerCase().includes(lower));
       }
 
-      // SORTING: Sort by School Name (Thai Alphabetical) matches Score Sheet Order
       return list.sort((a, b) => {
           const schoolA = data.schools.find(s => s.SchoolID === a.schoolId || s.SchoolName === a.schoolId)?.SchoolName || a.schoolId;
           const schoolB = data.schools.find(s => s.SchoolID === b.schoolId || s.SchoolName === b.schoolId)?.SchoolName || b.schoolId;
@@ -284,8 +400,17 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
       });
   }, [data.teams, activityId, viewScope, isGroupAdmin, user, searchTerm, data.schools]);
 
-  const showToast = (message: string, type: 'success' | 'error' | 'info') => {
-      setToast({ message, type, isVisible: true });
+  // Initializing Criteria for a team if not exists
+  const getCriteria = (teamId: string) => {
+      if (!criteriaScores[teamId]) {
+          return [
+              { id: 'c1', label: 'ความถูกต้อง (Accuracy)', score: '', max: 30 },
+              { id: 'c2', label: 'ความคิดสร้างสรรค์ (Creativity)', score: '', max: 30 },
+              { id: 'c3', label: 'เทคนิคการนำเสนอ (Technique)', score: '', max: 20 },
+              { id: 'c4', label: 'การตอบคำถาม (Q&A)', score: '', max: 20 },
+          ];
+      }
+      return criteriaScores[teamId];
   };
 
   const handleInputChange = (teamId: string, field: 'score' | 'rank' | 'medal' | 'flag', value: string) => {
@@ -322,20 +447,76 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
       });
   };
 
-  const initiateSave = (teamId: string) => {
-      const edit = edits[teamId];
-      if(edit) {
-        const score = parseFloat(edit.score);
-        if(!isNaN(score) && score !== -1 && (score < 0 || score > 100)) {
-            showToast('คะแนนต้องอยู่ระหว่าง 0 - 100 หรือ -1 เท่านั้น', 'error');
-            return;
-        }
-      }
-      setConfirmState({ isOpen: true, type: 'single', teamId });
+  const handleCriteriaChange = (teamId: string, cId: string, value: string) => {
+      const current = getCriteria(teamId);
+      const updated = current.map(c => c.id === cId ? { ...c, score: value } : c);
+      
+      setCriteriaScores(prev => ({ ...prev, [teamId]: updated }));
+
+      // Auto-sum to Main Score
+      let total = 0;
+      updated.forEach(c => {
+          const val = parseFloat(c.score);
+          if (!isNaN(val)) total += val;
+      });
+      
+      handleInputChange(teamId, 'score', String(total));
   };
 
-  const initiateBatchSave = () => {
-      setConfirmState({ isOpen: true, type: 'batch', teamId: null });
+  const openKeypad = (teamId: string, field: string, criteriaId?: string) => {
+      setActiveTeamId(teamId); // Set Focus Mode
+      let val = '';
+      if (criteriaId) {
+          val = getCriteria(teamId).find(c => c.id === criteriaId)?.score || '';
+      } else {
+          val = edits[teamId]?.score || '';
+      }
+      setKeypadConfig({ isOpen: true, targetId: teamId, field, criteriaId });
+  };
+
+  const handleKeypadInput = (char: string) => {
+      if (!keypadConfig) return;
+      const { targetId, field, criteriaId } = keypadConfig;
+      
+      let currentVal = '';
+      if (criteriaId) {
+          currentVal = getCriteria(targetId).find(c => c.id === criteriaId)?.score || '';
+      } else {
+          // If field is 'score', get from edits
+          if (field === 'score') currentVal = edits[targetId]?.score || '';
+          // Rank not supported in criteria mode keypad usually, but generic enough
+      }
+
+      // Prevent multiple dots
+      if (char === '.' && currentVal.includes('.')) return;
+      
+      const newVal = currentVal + char;
+      
+      if (criteriaId) {
+          handleCriteriaChange(targetId, criteriaId, newVal);
+      } else if (field === 'score') {
+          handleInputChange(targetId, 'score', newVal);
+      }
+  };
+
+  const handleKeypadDelete = () => {
+      if (!keypadConfig) return;
+      const { targetId, field, criteriaId } = keypadConfig;
+      
+      let currentVal = '';
+      if (criteriaId) {
+          currentVal = getCriteria(targetId).find(c => c.id === criteriaId)?.score || '';
+      } else if (field === 'score') {
+          currentVal = edits[targetId]?.score || '';
+      }
+
+      const newVal = currentVal.slice(0, -1);
+
+      if (criteriaId) {
+          handleCriteriaChange(targetId, criteriaId, newVal);
+      } else if (field === 'score') {
+          handleInputChange(targetId, 'score', newVal);
+      }
   };
 
   const performUpdate = async (teamId: string, edit: any) => {
@@ -347,307 +528,116 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
             return await updateAreaResult(teamId, finalScore, finalRank, finalMedal);
         } else {
             const finalFlag = edit.flag === 'undefined' ? '' : edit.flag;
-            // Auto Promote Logic
             const shouldPromote = String(finalRank) === '1' && String(finalFlag).toUpperCase() === 'TRUE';
             const stage = shouldPromote ? 'Area' : '';
-            
             return await updateTeamResult(teamId, finalScore, finalRank, finalMedal, finalFlag, stage);
         }
   };
 
-  const handleConfirmSave = async () => {
-      if (confirmState.type === 'single') {
-        const teamId = confirmState.teamId;
-        if (!teamId) return;
-        setConfirmState({ isOpen: false, type: 'single', teamId: null });
-        
-        const edit = edits[teamId];
-        if (!edit || !edit.isDirty) return;
+  const handleSave = async (teamId: string) => {
+      const edit = edits[teamId];
+      if (!edit) return;
 
-        setIsLoading(true);
-        const success = await performUpdate(teamId, edit);
-        setIsLoading(false);
+      setIsLoading(true);
+      const success = await performUpdate(teamId, edit);
+      setIsLoading(false);
 
-        if (success) {
-            onDataUpdate(); 
-            setEdits(prev => {
-                const { [teamId]: _, ...rest } = prev;
-                return rest;
-            });
-            showToast('บันทึกสำเร็จ', 'success');
-        } else {
-            showToast('บันทึกไม่สำเร็จ', 'error');
-        }
-
-      } else {
-        setConfirmState({ isOpen: false, type: 'batch', teamId: null });
-        setIsLoading(true);
-
-        const dirtyIds = Object.keys(edits).filter(id => edits[id].isDirty && teams.some(t => t.teamId === id));
-        let successCount = 0;
-
-        for (const id of dirtyIds) {
-            const edit = edits[id];
-            const result = await performUpdate(id, edit);
-            if (result) successCount++;
-        }
-
-        setIsLoading(false);
-        onDataUpdate(); 
-        
-        setEdits(prev => {
-             const newEdits = { ...prev };
-             dirtyIds.forEach(id => delete newEdits[id]);
-             return newEdits;
-        });
-
-        if (successCount === dirtyIds.length) {
-            showToast(`บันทึก ${successCount} รายการเรียบร้อยแล้ว`, 'success');
-        } else {
-             showToast(`บันทึกสำเร็จ ${successCount} จาก ${dirtyIds.length} รายการ`, 'info');
-        }
-      }
-  };
-
-  const executeAutoRank = () => {
-      setShowAutoRankConfirm(false);
-      
-      const teamsWithScores = teams.map(t => {
-          const edit = edits[t.teamId];
-          let score = 0;
-          if (edit?.score) score = parseFloat(edit.score);
-          else if (viewScope === 'area') score = (getAreaInfo(t)?.score || 0);
-          else score = t.score;
-          return { ...t, sortScore: isNaN(score) ? 0 : score };
-      });
-
-      teamsWithScores.sort((a, b) => b.sortScore - a.sortScore);
-
-      const newEdits: typeof edits = {};
-      let currentRank = 1;
-
-      teamsWithScores.forEach((t, i) => {
-          if (i > 0 && t.sortScore < teamsWithScores[i-1].sortScore) currentRank = i + 1;
+      if (success) {
+          const team = teams.find(t => t.teamId === teamId);
+          const school = data.schools.find(s => s.SchoolID === team?.schoolId || s.SchoolName === team?.schoolId);
           
-          if (t.sortScore > 0) {
-              const rankStr = String(currentRank);
-              const prevEdit = edits[t.teamId];
-              let currentSavedRank = viewScope === 'area' ? (getAreaInfo(t)?.rank || '') : t.rank;
-              
-              if (prevEdit?.rank !== rankStr && currentSavedRank !== rankStr) {
-                  let baseScore = viewScope === 'area' ? (getAreaInfo(t)?.score || 0) : t.score;
-                  let baseMedal = viewScope === 'area' ? (getAreaInfo(t)?.medal || '') : t.medalOverride;
-                  let baseFlag = String(t.flag || '');
+          const criteriaList = criteriaScores[teamId];
+          const criteriaSummary = criteriaList ? criteriaList.map(c => `${c.label}: ${c.score || 0}`).join(', ') : '';
 
-                  newEdits[t.teamId] = {
-                      score: prevEdit?.score ?? String(baseScore > 0 || baseScore === -1 ? baseScore : ''),
-                      rank: rankStr,
-                      medal: prevEdit?.medal ?? String(baseMedal || ''),
-                      flag: prevEdit?.flag ?? baseFlag,
-                      isDirty: true
-                  };
-              }
-          }
-      });
-      setEdits(prev => ({ ...prev, ...newEdits }));
-      showToast('คำนวณลำดับเรียบร้อยแล้ว', 'info');
-  };
+          // Create Slip
+          const slip: SubmittedSlip = {
+              id: Date.now().toString(),
+              teamName: team?.teamName || '',
+              schoolName: school?.SchoolName || team?.schoolId || '',
+              totalScore: parseFloat(edit.score) || 0,
+              criteriaSummary: criteriaMode ? criteriaSummary : undefined,
+              timestamp: new Date().toISOString(),
+              signatureUrl: signatures[teamId],
+              judgeName: user?.name || 'Unknown Judge'
+          };
 
-  const handleReset = () => {
-      setShowResetConfirm(false);
-      setEdits({});
-      showToast('ล้างข้อมูลที่แก้ไขแล้ว', 'info');
-  };
+          setLastSlip(slip);
+          setHistory(prev => [slip, ...prev]);
+          
+          // Clear edit state for this team
+          setEdits(prev => {
+              const { [teamId]: _, ...rest } = prev;
+              return rest;
+          });
+          
+          // Clear signature & criteria local state if needed, but keeping them might be good for review
+          // setSignatures(prev => { const {[teamId]:_, ...rest} = prev; return rest; });
 
-  // --- Share Handlers ---
-  const handleShare = async (team: Team) => {
-      const activityName = activity?.name || '';
-      const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
-      const schoolName = school?.SchoolName || team.schoolId;
-
-      let score = 0;
-      let medal = '';
-      let rank = '';
-      if (viewScope === 'area') {
-          const info = getAreaInfo(team);
-          score = info?.score || 0;
-          medal = info?.medal || calculateMedal(String(score), '');
-          rank = info?.rank || '';
+          onDataUpdate();
       } else {
-          score = team.score;
-          medal = team.medalOverride || calculateMedal(String(score), '');
-          rank = team.rank;
-      }
-
-      try {
-          // Use standard shareScoreResult (supports flex message)
-          const result = await shareScoreResult(team.teamName, schoolName, activityName, score, medal, rank, team.teamId);
-          if (result.success && result.method === 'copy') {
-              showToast('คัดลอกผลคะแนนแล้ว', 'success');
-          }
-      } catch (err) {
-          showToast('ไม่สามารถแชร์ได้', 'error');
+          alert('บันทึกไม่สำเร็จ');
       }
   };
 
-  const handleShareTop3 = async () => {
-    if (!activity) return;
-    
-    const winners = teams
-        .map(t => {
-            let score = 0;
-            let rank = '';
-            let medal = '';
-            if (viewScope === 'area') {
-                const info = getAreaInfo(t);
-                score = info?.score || 0;
-                rank = info?.rank || '';
-                medal = info?.medal || calculateMedal(String(score), '');
-            } else {
-                score = t.score;
-                rank = t.rank;
-                medal = t.medalOverride || calculateMedal(String(score), '');
-            }
-            return {
-                rank: parseInt(rank) || 0,
-                teamName: t.teamName,
-                schoolName: data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId)?.SchoolName || t.schoolId,
-                score: String(score),
-                medal: medal
-            };
-        })
-        .filter(w => w.rank >= 1 && w.rank <= 3)
-        .sort((a, b) => a.rank - b.rank);
-
-    if (winners.length === 0) {
-        showToast('ยังไม่มีข้อมูลลำดับที่ 1-3', 'error');
-        return;
-    }
-
-    try {
-        const result = await shareTop3Result(activity.name, winners);
-        if (result.success && result.method === 'copy') {
-            showToast('คัดลอกสรุปผลรางวัลแล้ว', 'success');
-        }
-    } catch (e) {
-        showToast('ไม่สามารถแชร์ได้', 'error');
-    }
+  // Helper to get keypad display value
+  const getKeypadValue = () => {
+      if (!keypadConfig) return '';
+      if (keypadConfig.criteriaId) {
+          return getCriteria(keypadConfig.targetId).find(c => c.id === keypadConfig.criteriaId)?.score || '';
+      }
+      return edits[keypadConfig.targetId]?.score || '';
   };
-
-  const dirtyCount = teams.filter(t => edits[t.teamId]?.isDirty).length;
-
-  // Prepare batch confirmation data
-  // Note: 'teams' is already sorted by School Name via useMemo
-  const batchConfirmData = useMemo<BatchItem[]>(() => {
-    return teams.map(t => {
-        const edit = edits[t.teamId];
-        const school = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
-        
-        let currentScore = 0;
-        let currentRank = "";
-        let currentMedal = "";
-        let currentFlag = "";
-
-        if (viewScope === 'area') {
-            const info = getAreaInfo(t);
-            currentScore = info?.score || 0;
-            currentRank = info?.rank || "";
-            currentMedal = info?.medal || "";
-        } else {
-            currentScore = t.score;
-            currentRank = t.rank;
-            currentMedal = t.medalOverride;
-            currentFlag = t.flag;
-        }
-
-        return {
-            id: t.teamId,
-            teamName: t.teamName,
-            schoolName: school?.SchoolName || t.schoolId,
-            score: edit?.score ?? (currentScore !== 0 ? String(currentScore) : ''),
-            rank: edit?.rank ?? currentRank ?? '',
-            medal: edit?.medal ?? currentMedal ?? '',
-            flag: edit?.flag ?? currentFlag ?? '',
-            isModified: edit?.isDirty ?? false
-        };
-    });
-  }, [teams, edits, viewScope, data.schools]);
-
-  const singleConfirmData = useMemo(() => {
-      if (confirmState.type !== 'single' || !confirmState.teamId) return null;
-      const team = teams.find(t => t.teamId === confirmState.teamId);
-      if (!team) return null;
-      
-      const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
-      const edit = edits[team.teamId];
-      
-      return {
-          teamName: team.teamName,
-          schoolName: school?.SchoolName || team.schoolId,
-          newScore: edit?.score,
-          newRank: edit?.rank,
-          newMedal: edit?.medal,
-          newFlag: edit?.flag
-      };
-  }, [confirmState, teams, edits, data.schools]);
 
   if (!user) {
       return (
           <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-gray-50 text-center">
               <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
               <h2 className="text-xl font-bold text-gray-800">กรุณาเข้าสู่ระบบ</h2>
-              <p className="text-gray-500 mb-6">คุณต้องเข้าสู่ระบบเพื่อบันทึกคะแนน</p>
-              <button onClick={() => navigate('/')} className="bg-blue-600 text-white px-6 py-2 rounded-lg">กลับหน้าหลัก</button>
+              <button onClick={() => navigate('/')} className="bg-blue-600 text-white px-6 py-2 rounded-lg mt-4">กลับหน้าหลัก</button>
           </div>
       );
   }
 
-  const disabledInput = viewScope === 'area' && !canScoreArea;
+  const activeTeam = teams.find(t => t.teamId === activeTeamId);
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20 font-kanit animate-in fade-in duration-500 relative">
         <LoadingOverlay isVisible={isLoading} />
-        <Toast message={toast.message} type={toast.type} isVisible={toast.isVisible} onClose={() => setToast(prev => ({...prev, isVisible: false}))} />
-
-        {/* Confirmation Modal */}
-        <ConfirmModal 
-            isOpen={confirmState.isOpen}
-            type={confirmState.type}
-            count={dirtyCount}
-            totalCount={teams.length}
-            teamName={singleConfirmData?.teamName}
-            schoolName={singleConfirmData?.schoolName}
-            newScore={singleConfirmData?.newScore}
-            newRank={singleConfirmData?.newRank}
-            newMedal={singleConfirmData?.newMedal}
-            newFlag={singleConfirmData?.newFlag}
-            batchItems={batchConfirmData}
-            viewScope={viewScope}
-            onConfirm={handleConfirmSave}
-            onCancel={() => setConfirmState({ isOpen: false, type: 'single', teamId: null })}
+        
+        {lastSlip && <ReceiptModal slip={lastSlip} onClose={() => setLastSlip(null)} />}
+        
+        <KeypadOverlay 
+            isOpen={keypadConfig?.isOpen || false} 
+            onClose={() => setKeypadConfig(null)}
+            onInput={handleKeypadInput}
+            onDelete={handleKeypadDelete}
+            value={getKeypadValue()}
+            // Simple prev/next logic for criteria could be added here
         />
 
-        {/* Auto Rank Alert Modal */}
-        <ConfirmationModal
-            isOpen={showAutoRankConfirm}
-            title="คำนวณลำดับคะแนนอัตโนมัติ"
-            description="ระบบจะเรียงลำดับ (Rank 1, 2, 3...) ตามคะแนนจากมากไปน้อย ข้อมูลลำดับเดิมที่กรอกไว้จะถูกทับ"
-            confirmLabel="คำนวณทันที"
-            confirmColor="blue"
-            onConfirm={executeAutoRank}
-            onCancel={() => setShowAutoRankConfirm(false)}
-        />
-
-        {/* Reset Alert Modal */}
-        <ConfirmationModal
-            isOpen={showResetConfirm}
-            title="ล้างข้อมูลที่แก้ไข"
-            description="คุณต้องการรีเซ็ตข้อมูลคะแนนที่กำลังแก้ไขทั้งหมดในหน้านี้ใช่หรือไม่? (ข้อมูลที่บันทึกไปแล้วจะไม่หาย)"
-            confirmLabel="รีเซ็ต"
-            confirmColor="red"
-            onConfirm={handleReset}
-            onCancel={() => setShowResetConfirm(false)}
-        />
+        {/* History Modal */}
+        {showHistory && (
+            <div className="fixed inset-0 bg-black/60 z-[200] flex justify-end">
+                <div className="w-full max-w-md bg-white h-full overflow-y-auto animate-in slide-in-from-right duration-300">
+                    <div className="p-4 border-b flex justify-between items-center bg-gray-50">
+                        <h3 className="font-bold flex items-center"><History className="w-5 h-5 mr-2"/> ประวัติการให้คะแนน (Session)</h3>
+                        <button onClick={() => setShowHistory(false)}><X className="w-6 h-6"/></button>
+                    </div>
+                    <div className="p-4 space-y-4">
+                        {history.length === 0 ? <p className="text-center text-gray-400 py-10">ยังไม่มีประวัติในรอบนี้</p> : history.map(slip => (
+                            <div key={slip.id} onClick={() => setLastSlip(slip)} className="border rounded-xl p-3 shadow-sm hover:bg-gray-50 cursor-pointer">
+                                <div className="flex justify-between font-bold text-gray-800">
+                                    <span>{slip.teamName}</span>
+                                    <span className="text-blue-600">{slip.totalScore}</span>
+                                </div>
+                                <div className="text-xs text-gray-500 mt-1">{slip.schoolName}</div>
+                                <div className="text-[10px] text-gray-400 mt-2 text-right">{new Date(slip.timestamp).toLocaleTimeString()}</div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        )}
 
         {/* Header */}
         <div className="bg-white border-b border-gray-200 sticky top-0 z-20 shadow-sm">
@@ -656,220 +646,121 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
                     <ChevronLeft className="w-6 h-6" />
                 </button>
                 <div className="text-center flex-1 mx-2">
-                    <div className="text-[10px] text-blue-600 font-bold uppercase tracking-wider">Score Input</div>
+                    <div className="text-[10px] text-blue-600 font-bold uppercase tracking-wider">Scoring Mode</div>
                     <div className="text-sm font-bold text-gray-800 line-clamp-1">{activity?.name || 'Loading...'}</div>
                 </div>
-                {dirtyCount > 0 && (
-                    <button 
-                        onClick={initiateBatchSave}
-                        className="bg-blue-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center shadow-md animate-pulse"
-                    >
-                        <ListChecks className="w-4 h-4 mr-1" /> Save All ({dirtyCount})
-                    </button>
-                )}
+                <button onClick={() => setShowHistory(true)} className="p-2 -mr-2 text-gray-500 hover:bg-gray-100 rounded-full relative">
+                    <History className="w-6 h-6" />
+                    {history.length > 0 && <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>}
+                </button>
             </div>
             
-            {/* Scope Toggle & Tools */}
-            <div className="px-4 pb-3 flex justify-between items-center gap-2">
-                <div className="bg-gray-100 p-1 rounded-xl flex flex-1">
-                    <button 
-                        onClick={() => setViewScope('cluster')}
-                        className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center ${viewScope === 'cluster' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'}`}
-                    >
-                        <LayoutGrid className="w-3 h-3 mr-1.5" /> กลุ่มฯ
-                    </button>
-                    <button 
-                        onClick={() => setViewScope('area')}
-                        className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center ${viewScope === 'area' ? 'bg-white text-purple-600 shadow-sm' : 'text-gray-500'}`}
-                    >
-                        <Trophy className="w-3 h-3 mr-1.5" /> เขตฯ
-                    </button>
-                </div>
-                
-                <div className="flex gap-2">
-                    <button onClick={() => setShowAutoRankConfirm(true)} className="bg-white border border-purple-200 text-purple-600 p-2 rounded-lg shadow-sm" title="Auto Rank">
-                        <Wand2 className="w-4 h-4" />
-                    </button>
-                    {Object.keys(edits).length > 0 && (
-                        <button onClick={() => setShowResetConfirm(true)} className="bg-white border border-red-200 text-red-500 p-2 rounded-lg shadow-sm" title="Reset Edits">
-                            <RotateCcw className="w-4 h-4" />
-                        </button>
-                    )}
-                    <button onClick={handleShareTop3} className="bg-white border border-green-200 text-green-600 p-2 rounded-lg shadow-sm" title="Share Top 3">
-                        <Share2 className="w-4 h-4" />
-                    </button>
-                </div>
+            <div className="px-4 pb-3 flex items-center gap-2 overflow-x-auto no-scrollbar">
+                <button 
+                    onClick={() => setCriteriaMode(!criteriaMode)}
+                    className={`flex items-center px-3 py-1.5 rounded-full text-xs font-bold transition-all border whitespace-nowrap ${criteriaMode ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-indigo-600 border-indigo-200'}`}
+                >
+                    <ListChecks className="w-3 h-3 mr-1.5" />
+                    {criteriaMode ? 'แบบละเอียด (Criteria)' : 'แบบยอดรวม (Total)'}
+                </button>
             </div>
         </div>
 
-        {/* Info Bar */}
-        <div className="px-4 py-3 bg-blue-50 border-b border-blue-100 flex justify-between items-center text-xs text-blue-800">
-            <div className="flex items-center">
-                <Info className="w-3 h-3 mr-1.5" /> 
-                <span>{teams.length} ทีมที่ต้องบันทึก (เรียงตามโรงเรียน ก-ฮ)</span>
-            </div>
-        </div>
-
-        {/* Search */}
-        <div className="p-4">
-            <div className="relative">
-                <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
-                <input 
-                    type="text" 
-                    className="w-full bg-white border border-gray-200 rounded-xl pl-9 pr-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                    placeholder="ค้นหาชื่อทีม หรือ โรงเรียน..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                />
-            </div>
-        </div>
-
-        {/* Teams List Cards */}
-        <div className="px-4 space-y-3 pb-10">
+        {/* Teams List */}
+        <div className="px-4 space-y-4 pb-24 pt-4">
             {teams.map((team, idx) => {
-                const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
                 const edit = edits[team.teamId];
-                
-                let currentScore = 0;
-                let currentRank = "";
-                let currentMedal = "";
-                let currentFlag = "";
-
-                if (viewScope === 'area') {
-                    const info = getAreaInfo(team);
-                    currentScore = info?.score || 0;
-                    currentRank = info?.rank || "";
-                    currentMedal = info?.medal || "";
-                } else {
-                    currentScore = team.score;
-                    currentRank = team.rank;
-                    currentMedal = team.medalOverride;
-                    currentFlag = team.flag;
-                }
-
-                const displayScore = edit?.score ?? (currentScore !== 0 ? String(currentScore) : '');
-                const displayRank = edit?.rank ?? currentRank ?? '';
-                const displayMedal = edit?.medal ?? currentMedal ?? '';
-                const displayFlag = edit?.flag ?? currentFlag ?? '';
+                const rawScore = edit?.score ?? (viewScope === 'area' ? getAreaInfo(team)?.score : team.score);
+                const scoreVal = parseFloat(String(rawScore));
+                const displayScore = (!isNaN(scoreVal) && (scoreVal > 0 || scoreVal === -1)) ? rawScore : '';
                 const isDirty = edit?.isDirty;
-                const isSaving = false;
+                const criteria = getCriteria(team.teamId);
 
-                const calculatedMedal = calculateMedal(displayScore, displayMedal);
-                const scoreNum = parseFloat(displayScore);
-                const isAbsent = scoreNum === -1;
+                // Focus Mode Style
+                const isActive = activeTeamId === team.teamId;
 
                 return (
-                    <div key={team.teamId} className={`bg-white rounded-xl border shadow-sm overflow-hidden transition-all ${isDirty ? 'border-blue-300 ring-1 ring-blue-100' : 'border-gray-200'}`}>
-                        {/* Header */}
+                    <div 
+                        key={team.teamId} 
+                        id={`team-${team.teamId}`}
+                        className={`bg-white rounded-2xl border shadow-sm overflow-hidden transition-all duration-300 ${isActive ? 'ring-2 ring-blue-500 shadow-xl scale-[1.01] z-10' : 'border-gray-200'}`}
+                        onClick={() => setActiveTeamId(team.teamId)}
+                    >
                         <div className="bg-gray-50 px-4 py-3 border-b border-gray-100 flex justify-between items-start">
-                            <div className="min-w-0 flex items-center">
-                                <div className="font-mono text-xs text-gray-400 mr-2">#{idx + 1}</div>
-                                <div className="text-sm font-medium text-gray-600 line-clamp-1">{team.teamName}</div>
+                            <div className="min-w-0">
+                                <div className="text-xs text-gray-400 font-mono mb-0.5">#{idx + 1}</div>
+                                <div className="font-bold text-gray-900 text-lg leading-tight">{team.teamName}</div>
+                                <div className="text-xs text-gray-500 mt-1">{data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId)?.SchoolName || team.schoolId}</div>
                             </div>
+                            {displayScore && !isDirty && <div className="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-bold">Recorded</div>}
                         </div>
 
-                        {/* Input Body */}
-                        <div className="p-4">
-                            {/* School Name Highlight */}
-                            <div className="bg-indigo-50 px-3 py-2 rounded-lg border border-indigo-100 mb-3">
-                                <div className="text-[10px] text-indigo-500 font-bold uppercase tracking-wider mb-0.5">โรงเรียน (School)</div>
-                                <div className="text-sm font-bold text-indigo-900 line-clamp-1">{school?.SchoolName || team.schoolId}</div>
-                            </div>
-
-                            {/* Score Row - Big & Centered */}
-                            <div className="mb-4 text-center">
-                                <label className="block text-[10px] text-gray-400 font-bold uppercase mb-1">คะแนน (Score)</label>
-                                <input 
-                                    ref={(el) => { inputRefs.current[team.teamId] = el; }}
-                                    type="number" 
-                                    inputMode="decimal"
-                                    step="0.01"
-                                    className={`w-full text-center text-4xl font-black py-3 rounded-xl border-2 focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all ${isAbsent ? 'bg-gray-100 text-gray-400' : 'bg-white text-gray-900 border-gray-200'} ${isDirty ? 'border-blue-400 bg-blue-50/20' : ''} ${disabledInput ? 'cursor-not-allowed bg-gray-50' : ''}`}
-                                    value={displayScore}
-                                    placeholder="0"
-                                    onChange={(e) => handleInputChange(team.teamId, 'score', e.target.value)}
-                                    disabled={disabledInput}
-                                />
-                                <div className="text-[9px] text-gray-400 mt-1">-1 = ไม่มาแข่ง</div>
-                            </div>
-
-                            {/* Secondary Inputs - Grid */}
-                            <div className="grid grid-cols-2 gap-3 mb-2">
-                                <div>
-                                    <label className="block text-[10px] text-gray-400 font-bold uppercase mb-1">รางวัล (Medal)</label>
-                                    <div className="relative">
-                                        <select 
-                                            className={`w-full text-xs font-medium py-2 pl-2 pr-6 rounded-lg border bg-white focus:ring-2 focus:ring-blue-500 outline-none appearance-none ${isAbsent ? 'text-gray-400 bg-gray-50' : 'text-gray-700 border-gray-300'} ${disabledInput ? 'cursor-not-allowed bg-gray-50' : ''}`}
-                                            value={displayMedal}
-                                            onChange={(e) => handleInputChange(team.teamId, 'medal', e.target.value)}
-                                            disabled={isAbsent || disabledInput}
-                                        >
-                                            <option value="">Auto: {calculatedMedal || '-'}</option>
-                                            <option value="Gold">Gold</option>
-                                            <option value="Silver">Silver</option>
-                                            <option value="Bronze">Bronze</option>
-                                            <option value="Participant">Participant</option>
-                                        </select>
-                                        <div className="absolute right-2 top-2.5 pointer-events-none text-gray-400">▼</div>
+                        <div className="p-4 space-y-4">
+                            {/* Scoring Inputs */}
+                            {criteriaMode ? (
+                                <div className="space-y-3">
+                                    {criteria.map(c => (
+                                        <div key={c.id} className="flex items-center gap-3">
+                                            <div className="flex-1 text-xs text-gray-600 font-medium">{c.label} <span className="text-gray-400">({c.max})</span></div>
+                                            <div 
+                                                onClick={(e) => { e.stopPropagation(); openKeypad(team.teamId, 'score', c.id); }}
+                                                className={`w-20 h-10 border rounded-lg flex items-center justify-center font-bold text-lg bg-gray-50 cursor-pointer ${isActive ? 'border-blue-400 bg-white' : 'border-gray-300'}`}
+                                            >
+                                                {c.score}
+                                            </div>
+                                        </div>
+                                    ))}
+                                    <div className="flex justify-between items-center pt-2 border-t border-gray-100">
+                                        <span className="font-bold text-gray-700">Total Score</span>
+                                        <span className="text-2xl font-black text-blue-600">{displayScore || 0}</span>
                                     </div>
                                 </div>
-                                
-                                <div>
-                                    <label className="block text-[10px] text-gray-400 font-bold uppercase mb-1">ลำดับ (Rank)</label>
-                                    <input 
-                                        type="number"
-                                        className={`w-full text-center text-sm font-bold py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 outline-none ${isAbsent ? 'bg-gray-100' : 'bg-white border-gray-300'} ${disabledInput ? 'cursor-not-allowed bg-gray-50' : ''}`}
-                                        value={displayRank}
-                                        onChange={(e) => handleInputChange(team.teamId, 'rank', e.target.value)}
-                                        placeholder="-"
-                                        disabled={isAbsent || disabledInput}
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Extra Toggles (Cluster only) */}
-                            {viewScope === 'cluster' && (
-                                <div className="flex items-center justify-center mt-3 pt-3 border-t border-gray-100">
-                                    <label className="flex items-center cursor-pointer">
-                                        <input 
-                                            type="checkbox"
-                                            className="w-5 h-5 accent-green-600 cursor-pointer mr-2"
-                                            checked={String(displayFlag).toUpperCase() === 'TRUE'}
-                                            onChange={(e) => handleInputChange(team.teamId, 'flag', e.target.checked ? 'TRUE' : '')}
-                                            disabled={isAbsent || disabledInput}
-                                        />
-                                        <span className="text-xs font-bold text-gray-600">ตัวแทน (Representative)</span>
-                                    </label>
+                            ) : (
+                                <div 
+                                    onClick={(e) => { e.stopPropagation(); openKeypad(team.teamId, 'score'); }}
+                                    className={`w-full h-16 border-2 rounded-xl flex items-center justify-center text-4xl font-black cursor-pointer transition-colors ${isActive ? 'border-blue-500 bg-blue-50/10 text-blue-900' : 'border-gray-200 bg-gray-50 text-gray-400'}`}
+                                >
+                                    {displayScore || <span className="text-gray-300 text-2xl font-normal">แตะเพื่อกรอกคะแนน</span>}
                                 </div>
                             )}
-                        </div>
 
-                        {/* Actions Footer */}
-                        <div className="bg-gray-50 p-2 flex gap-2">
-                            {isDirty && !disabledInput ? (
-                                <button 
-                                    onClick={() => initiateSave(team.teamId)}
-                                    disabled={isSaving}
-                                    className="flex-1 bg-blue-600 text-white font-bold text-xs py-2.5 rounded-lg flex items-center justify-center active:bg-blue-700 transition-colors shadow-sm"
-                                >
-                                    {isSaving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
-                                    บันทึก
-                                </button>
-                            ) : (
-                                (currentScore > 0 || currentScore === -1) && (
-                                    <div className="flex-1 flex gap-2">
-                                        <div className="flex-1 bg-green-50 text-green-700 font-bold text-xs py-2 rounded-lg flex items-center justify-center border border-green-200">
-                                            <CheckCircle className="w-3 h-3 mr-1.5" /> บันทึกแล้ว
-                                        </div>
-                                        <button 
-                                            onClick={() => handleShare(team)}
-                                            className="p-2 bg-white text-green-600 border border-green-200 rounded-lg flex items-center justify-center hover:bg-green-50 shadow-sm"
-                                            title="แชร์ผลทาง LINE"
-                                        >
-                                            <Share2 className="w-4 h-4" />
-                                        </button>
+                            {/* Signature & Comments (Only show when active or has data) */}
+                            {(isActive || isDirty) && (
+                                <div className="animate-in fade-in slide-in-from-top-2 space-y-4 pt-2 border-t border-gray-100">
+                                    {/* Signature */}
+                                    <div>
+                                        <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">ลายเซ็น (Signature)</label>
+                                        <SignaturePad onSign={(data) => setSignatures(prev => ({ ...prev, [team.teamId]: data || '' }))} />
                                     </div>
-                                )
+
+                                    {/* Voice Comment */}
+                                    <div>
+                                        <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">ข้อเสนอแนะ (Comments)</label>
+                                        <div className="relative">
+                                            <textarea 
+                                                className="w-full border border-gray-300 rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none pr-10 min-h-[80px]" 
+                                                placeholder="พิมพ์หรือกดไมค์เพื่อพูด..."
+                                                value={comments[team.teamId] || ''}
+                                                onChange={(e) => setComments(prev => ({ ...prev, [team.teamId]: e.target.value }))}
+                                            />
+                                            <button 
+                                                onClick={toggleListening}
+                                                className={`absolute right-2 bottom-2 p-2 rounded-full transition-all ${isListening && activeTeamId === team.teamId ? 'bg-red-500 text-white animate-pulse' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                                            >
+                                                {isListening && activeTeamId === team.teamId ? <MicOff className="w-4 h-4"/> : <Mic className="w-4 h-4"/>}
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* Save Button */}
+                                    <button 
+                                        onClick={(e) => { e.stopPropagation(); handleSave(team.teamId); }}
+                                        disabled={!displayScore}
+                                        className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl shadow-lg active:scale-95 transition-all flex items-center justify-center disabled:opacity-50 disabled:scale-100"
+                                    >
+                                        <Save className="w-5 h-5 mr-2" /> บันทึกผลคะแนน
+                                    </button>
+                                </div>
                             )}
                         </div>
                     </div>
@@ -877,14 +768,17 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
             })}
             
             {teams.length === 0 && (
-                <div className="text-center py-12 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl">
-                    <Calculator className="w-12 h-12 mx-auto mb-2 opacity-20" />
-                    <p>ไม่พบทีมในรายการนี้</p>
+                <div className="text-center py-20 text-gray-400 opacity-50">
+                    <Calculator className="w-16 h-16 mx-auto mb-4" />
+                    <p>เลือกรายการแข่งขันเพื่อเริ่มให้คะแนน</p>
                 </div>
             )}
         </div>
     </div>
   );
 };
+
+// Internal wrapper for Keypad to break dependency cycle if needed, but defined above is fine.
+const KeypadOverlay = NumericKeypad;
 
 export default ScoreInputView;
