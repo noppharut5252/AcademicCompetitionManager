@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { AppData, User, Team, Judge, PrintConfig } from '../types';
-import { Printer, FileText, ClipboardList, Users, Mail, Trophy, LayoutGrid, Filter, Search, ChevronRight, School, UserCheck, CheckSquare, Square, Layers, Download, Settings, X, Save, CheckCircle, Loader2, Hash, Tag, UserRound, AlertTriangle, PrinterCheck, Lock, Check, FolderOpen, Type, MoveHorizontal, ArrowUpFromLine, ArrowDownToLine, ArrowLeftFromLine, ArrowRightFromLine, QrCode as QrIcon } from 'lucide-react';
+import { Printer, FileText, ClipboardList, Users, Mail, Trophy, LayoutGrid, Filter, Search, ChevronRight, School, UserCheck, CheckSquare, Square, Layers, Download, Settings, X, Save, CheckCircle, Loader2, Hash, Tag, UserRound, AlertTriangle, PrinterCheck, Lock, Check, FolderOpen, Type, MoveHorizontal, ArrowUpFromLine, ArrowDownToLine, ArrowLeftFromLine, ArrowRightFromLine, QrCode as QrIcon, FileBadge, CalendarClock } from 'lucide-react';
 import SearchableSelect from './SearchableSelect';
 import { getPrintConfig, savePrintConfig } from '../services/api';
 import QRCode from 'qrcode';
@@ -11,8 +11,8 @@ interface PrintDocumentsViewProps {
   user?: User | null;
 }
 
-// Added 'full-set' to types
-type DocType = 'judge-signin' | 'competitor-signin' | 'score-sheet' | 'score-sheet-individual' | 'envelope' | 'full-set';
+// Updated DocType to include 'result-announcement'
+type DocType = 'judge-signin' | 'competitor-signin' | 'score-sheet' | 'score-sheet-individual' | 'envelope' | 'full-set' | 'result-announcement';
 
 const DOC_NAMES: Record<DocType, string> = {
     'judge-signin': 'ใบลงชื่อกรรมการ',
@@ -20,7 +20,8 @@ const DOC_NAMES: Record<DocType, string> = {
     'score-sheet': 'แบบบันทึกคะแนนรวม',
     'score-sheet-individual': 'แบบบันทึกคะแนนรายบุคคล',
     'envelope': 'ใบปะหน้าซองเอกสาร',
-    'full-set': 'เอกสารจัดชุดครบจบ (แนวนอน)'
+    'full-set': 'เอกสารจัดชุดครบจบ (แนวนอน)',
+    'result-announcement': 'ใบประกาศผลการแข่งขัน (Official Result)'
 };
 
 const DEFAULT_PRINT_CONFIG: PrintConfig = {
@@ -260,6 +261,9 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
   const userSchool = data.schools.find(s => s.SchoolID === user?.SchoolID);
   const userClusterID = userSchool?.SchoolCluster;
 
+  // STRICT PERMISSION: Only Admin, Area, or GroupAdmin can see/use this
+  const canAccess = isAdminOrArea || isGroupAdmin;
+
   const [viewScope, setViewScope] = useState<'cluster' | 'area'>(isAdminOrArea ? 'area' : 'cluster');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [clusterFilter, setClusterFilter] = useState<string>(isGroupAdmin ? (userClusterID || '') : '');
@@ -289,6 +293,17 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
           if (userClusterID) setClusterFilter(userClusterID);
       }
   }, [user, isAdminOrArea, userClusterID]);
+
+  // Access Denial for non-admins
+  if (!canAccess) {
+      return (
+          <div className="flex flex-col items-center justify-center h-64 text-gray-500">
+              <Lock className="w-16 h-16 mb-4 text-gray-300" />
+              <h2 className="text-xl font-bold text-gray-700">จำกัดสิทธิ์การเข้าถึง</h2>
+              <p className="text-sm">เฉพาะผู้ดูแลระบบ (Admin/Area) และประธานกลุ่มฯ เท่านั้น</p>
+          </div>
+      );
+  }
 
   const getTeamsForActivity = useCallback((activityId: string) => {
       const allTeams = data.teams || [];
@@ -454,6 +469,9 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                 .checklist-title { font-size: 16px; font-weight: bold; text-align: center; border-bottom: 1px solid #ddd; padding-bottom: 10px; margin-bottom: 15px; }
                 .checklist-item { font-size: 14px; margin-bottom: 12px; display: flex; align-items: center; }
                 .box-check { width: 16px; height: 16px; border: 1px solid #000; display: inline-block; margin-right: 10px; }
+                .result-rank-1 { background-color: #fef9c3; } 
+                .result-rank-2 { background-color: #f3f4f6; } 
+                .result-rank-3 { background-color: #fff7ed; }
                 .no-print { position: fixed; top: 20px; right: 20px; z-index: 1000; }
                 .btn-print { background: #2563eb; color: white; padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-family: ${fontFamily}; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
                 @media print { .no-print { display: none; } }
@@ -465,6 +483,7 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
             </div>
     `;
 
+    // ... (Existing render functions: CoverPage, JudgeSignin, CompetitorSignin, ScoreSheet) ...
     const renderCoverPage = (act: any, teamCount: number, judgeCount: number, clusterLabel: string, venueInfo: any, schedule: any) => {
         return `
           <div class="page">
@@ -527,7 +546,7 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                           <th rowspan="2" style="width: 40px;">ที่</th>
                           <th rowspan="2" style="width: 200px;">ชื่อ - สกุล</th>
                           <th rowspan="2">ตำแหน่ง / โรงเรียน</th>
-                          <th colspan="2">ลงเวลามา</th>
+                          <th colspan="2">ลงเวลามาปฏิบัติหน้าที่</th>
                           <th colspan="2">ลงเวลากลับ</th>
                           <th rowspan="2">หมายเหตุ</th>
                       </tr>
@@ -624,7 +643,6 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
         const judgesList = judges.length > 0 ? judges : Array.from({ length: config.scoreColsCount || 3 });
         const colsCount = judgesList.length;
         
-        // --- QR Code Generation ---
         const baseUrl = window.location.href.split('#')[0];
         const scoreUrl = `${baseUrl}#/score-input?activityId=${act.id}`;
         let qrCodeImg = '';
@@ -683,6 +701,124 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                         ลงชื่อ..........................................................<br/>
                         ( ${chairName} )<br/>
                         ประธานกรรมการตัดสิน
+                    </div>
+                </div>
+            </div>
+        `;
+    };
+
+    // --- NEW: Render Result Announcement (Official) ---
+    const renderResultAnnouncement = async (act: any, teams: Team[], judges: Judge[], venueInfo: any, schedule: any) => {
+        // Sort teams by Rank (Asc) -> Score (Desc)
+        // Data in `teams` is already sorted by getTeamsForActivity (Sorts by School Name). We need to resort by Rank/Score.
+        // Assuming team.rank and team.score or Area info is available.
+        const sortedTeams = [...teams].sort((a, b) => {
+            let rankA, rankB, scoreA, scoreB, medalA, medalB;
+            if (viewScope === 'area') {
+                const infoA = JSON.parse(a.stageInfo || '{}');
+                const infoB = JSON.parse(b.stageInfo || '{}');
+                rankA = parseFloat(infoA.rank || '999');
+                rankB = parseFloat(infoB.rank || '999');
+                scoreA = parseFloat(infoA.score || '0');
+                scoreB = parseFloat(infoB.score || '0');
+                medalA = infoA.medal || '';
+                medalB = infoB.medal || '';
+            } else {
+                rankA = parseFloat(a.rank || '999');
+                rankB = parseFloat(b.rank || '999');
+                scoreA = a.score || 0;
+                scoreB = b.score || 0;
+                medalA = a.medalOverride || '';
+                medalB = b.medalOverride || '';
+            }
+            
+            // Prioritize Medal Group (Gold > Silver > Bronze) if rank is not set
+            const getMedalWeight = (m: string) => m.includes('Gold') ? 3 : m.includes('Silver') ? 2 : m.includes('Bronze') ? 1 : 0;
+            const weightA = getMedalWeight(medalA);
+            const weightB = getMedalWeight(medalB);
+
+            if (rankA !== rankB) return rankA - rankB;
+            if (weightA !== weightB) return weightB - weightA;
+            return scoreB - scoreA;
+        });
+
+        // QR Code for Public Result
+        const baseUrl = window.location.href.split('#')[0];
+        const publicUrl = `${baseUrl}#/results?activityId=${act.id}`; // Direct to results view
+        let qrCodeImg = '';
+        try {
+            qrCodeImg = await QRCode.toDataURL(publicUrl, { margin: 0, width: 100 });
+        } catch (e) { console.error("QR Gen Error", e); }
+
+        return `
+            <div class="page">
+                <div class="header">
+                    <h1>ประกาศผลการแข่งขัน</h1>
+                    <h2>${headerTitle}</h2>
+                    <h3>ระดับ${viewScope === 'area' ? 'เขตพื้นที่การศึกษา' : `กลุ่มเครือข่าย (${(data.clusters.find(c => c.ClusterID === clusterFilter)?.ClusterName || '')})`}</h3>
+                </div>
+                <div class="activity-info">
+                    <strong>กิจกรรม:</strong> ${act.name}<br/>
+                    <strong>หมวดหมู่:</strong> ${act.category}<br/>
+                    ${config.includeVenueDate && schedule ? `<strong>วันที่แข่งขัน:</strong> ${schedule.date}` : ''}
+                </div>
+                
+                <table style="margin-top: 15px;">
+                    <thead>
+                        <tr>
+                            <th style="width: 50px;">ลำดับ</th>
+                            <th style="width: 60px;">รางวัล</th>
+                            <th style="width: 80px;">เหรียญ</th>
+                            <th>ชื่อทีม / โรงเรียน</th>
+                            <th style="width: 80px;">คะแนนรวม</th>
+                            <th style="width: 100px;">หมายเหตุ</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${sortedTeams.map((t, idx) => {
+                            const schoolName = (data.schools || []).find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId)?.SchoolName || t.schoolId;
+                            let score = 0, rank = '', medal = '';
+                            if (viewScope === 'area') {
+                                const info = JSON.parse(t.stageInfo || '{}');
+                                score = info.score; rank = info.rank; medal = info.medal;
+                            } else {
+                                score = t.score; rank = t.rank; medal = t.medalOverride;
+                                // Auto calc medal if missing but scored
+                                if (!medal && score >= 80) medal = 'Gold';
+                                else if (!medal && score >= 70) medal = 'Silver';
+                                else if (!medal && score >= 60) medal = 'Bronze';
+                            }
+
+                            const medalLabel = medal?.includes('Gold') ? 'เหรียญทอง' : medal?.includes('Silver') ? 'เหรียญเงิน' : medal?.includes('Bronze') ? 'เหรียญทองแดง' : 'เข้าร่วม';
+                            const rowClass = rank === '1' ? 'result-rank-1' : rank === '2' ? 'result-rank-2' : rank === '3' ? 'result-rank-3' : '';
+
+                            return `
+                                <tr class="${rowClass}">
+                                    <td class="text-center"><strong>${rank || '-'}</strong></td>
+                                    <td class="text-center">${rank ? 'ที่ ' + rank : '-'}</td>
+                                    <td class="text-center">${medalLabel}</td>
+                                    <td>
+                                        <strong>${t.teamName}</strong><br/>
+                                        <small>${schoolName}</small>
+                                    </td>
+                                    <td class="text-center font-bold">${score || '-'}</td>
+                                    <td class="text-center">${rank === '1' ? 'ชนะเลิศ' : ''}</td>
+                                </tr>
+                            `;
+                        }).join('')}
+                        ${sortedTeams.length === 0 ? '<tr><td colspan="6" class="text-center">ยังไม่มีข้อมูลผลการแข่งขัน</td></tr>' : ''}
+                    </tbody>
+                </table>
+
+                <div style="margin-top: 30px; display: flex; justify-content: space-between; align-items: flex-end; page-break-inside: avoid;">
+                    <div style="text-align: center;">
+                        <img src="${qrCodeImg}" style="width: 80px; height: 80px;" /><br/>
+                        <span style="font-size: 10px;">สแกนเพื่อดูผลออนไลน์</span>
+                    </div>
+                    <div class="signature-box" style="text-align: center;">
+                        ลงชื่อ..........................................................<br/>
+                        (..........................................................)<br/>
+                        ตำแหน่ง..........................................................
                     </div>
                 </div>
             </div>
@@ -860,6 +996,9 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                     </div>
                 </div>
             `;
+        } else if (type === 'result-announcement') {
+            // NEW: Result Announcement
+            htmlContent += await renderResultAnnouncement(act, teams, judges, venueInfo, schedule);
         }
     }
 
@@ -887,6 +1026,18 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
       printWindow.document.close();
       setIsGenerating(false);
   };
+
+  // Permission Check for Main UI
+  // Only Admin, Area, GroupAdmin can see content
+  if (!isAdminOrArea && !isGroupAdmin) {
+      return (
+          <div className="flex flex-col items-center justify-center min-h-[50vh] text-center p-6 text-gray-500">
+              <Lock className="w-16 h-16 mb-4 text-gray-300" />
+              <h2 className="text-xl font-bold text-gray-700">จำกัดสิทธิ์การเข้าถึง</h2>
+              <p className="text-sm">เฉพาะผู้ดูแลระบบ (Admin/Area) และประธานกลุ่มฯ เท่านั้นที่สามารถจัดการเอกสารการพิมพ์ได้</p>
+          </div>
+      );
+  }
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20 relative">
@@ -922,15 +1073,6 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
           </div>
       )}
 
-      {isGuest && (
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center gap-3 text-amber-800 shadow-sm animate-pulse">
-            <Lock className="w-5 h-5 shrink-0" />
-            <div className="text-sm">
-                <p className="font-bold">โหมดผู้เยี่ยมชม (Read-only)</p>
-                <p>คุณสามารถดูรายการได้ แต่การสั่งพิมพ์เอกสารจำเป็นต้อง <b>Login</b> เข้าสู่ระบบด้วยบัญชีโรงเรียนหรือเขตพื้นที่</p>
-            </div>
-        </div>
-      )}
       {bulkConfirm.isOpen && (
           <div className="fixed inset-0 bg-black/60 z-[300] flex items-center justify-center p-4 backdrop-blur-sm animate-in zoom-in duration-300">
               <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col">
@@ -975,15 +1117,13 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
             <p className="text-gray-500 text-sm mt-1">พิมพ์ใบลงชื่อ แบบบันทึกคะแนนรายคน/รวม และใบปะหน้าซองกิจกรรม</p>
         </div>
         <div className="flex gap-2 w-full md:w-auto">
-            {!isGuest && (
-                <button 
-                    onClick={() => setShowConfigModal(true)}
-                    className="flex items-center px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium border border-gray-200"
-                >
-                    <Settings className="w-4 h-4 mr-2" />
-                    ตั้งค่าการพิมพ์
-                </button>
-            )}
+            <button 
+                onClick={() => setShowConfigModal(true)}
+                className="flex items-center px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium border border-gray-200"
+            >
+                <Settings className="w-4 h-4 mr-2" />
+                ตั้งค่าการพิมพ์
+            </button>
         </div>
       </div>
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-6">
@@ -1047,6 +1187,8 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
             ))}
         </div>
       </div>
+      
+      {/* Selection Summary Bar */}
       <div className={`p-5 rounded-2xl border flex flex-col lg:flex-row items-center justify-between gap-4 transition-all sticky top-2 z-20 ${viewScope === 'area' ? 'bg-purple-50 border-purple-100 shadow-lg shadow-purple-100/50' : 'bg-blue-50 border-blue-100 shadow-lg shadow-blue-100/50'}`}>
           <div className="flex items-center gap-3 shrink-0">
               <div className={`text-white font-black px-4 py-1.5 rounded-full shadow-md text-sm transition-all ${selectionCount > 0 ? 'bg-green-600 animate-pulse' : (viewScope === 'area' ? 'bg-purple-600' : 'bg-blue-600')}`}>
@@ -1061,51 +1203,50 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                 </span>
               </div>
           </div>
+          
+          {/* Action Buttons - Grouped */}
           <div className="flex flex-wrap gap-2 justify-center lg:justify-end flex-1">
+              
+              {/* Group 1: Pre-Event */}
+              <div className="flex gap-1 p-1 bg-white/50 rounded-lg border border-gray-200/50">
+                  <button onClick={() => handleSmartPrint('judge-signin')} className="px-3 py-2 bg-white hover:bg-blue-50 text-blue-700 rounded-md text-xs font-bold border border-blue-100 shadow-sm flex items-center" title="ใบลงชื่อกรรมการ">
+                      <UserCheck className="w-4 h-4 mr-1" /> กรรมการ
+                  </button>
+                  <button onClick={() => handleSmartPrint('competitor-signin')} className="px-3 py-2 bg-white hover:bg-blue-50 text-blue-700 rounded-md text-xs font-bold border border-blue-100 shadow-sm flex items-center" title="ใบลงชื่อผู้แข่งขัน">
+                      <Users className="w-4 h-4 mr-1" /> ผู้แข่งขัน
+                  </button>
+                  <button onClick={() => handleSmartPrint('envelope')} className="px-3 py-2 bg-white hover:bg-blue-50 text-blue-700 rounded-md text-xs font-bold border border-blue-100 shadow-sm flex items-center" title="ใบปะหน้าซอง">
+                      <Mail className="w-4 h-4 mr-1" /> หน้าซอง
+                  </button>
+              </div>
+
+              {/* Group 2: During Event */}
+              <div className="flex gap-1 p-1 bg-white/50 rounded-lg border border-gray-200/50">
+                  <button onClick={() => handleSmartPrint('score-sheet-individual')} className="px-3 py-2 bg-white hover:bg-orange-50 text-orange-700 rounded-md text-xs font-bold border border-orange-100 shadow-sm flex items-center" title="แบบบันทึกคะแนน (รายบุคคล)">
+                      <UserRound className="w-4 h-4 mr-1" /> คะแนนรายคน
+                  </button>
+                  <button onClick={() => handleSmartPrint('score-sheet')} className="px-3 py-2 bg-white hover:bg-orange-50 text-orange-700 rounded-md text-xs font-bold border border-orange-100 shadow-sm flex items-center" title="แบบบันทึกคะแนน (รวม)">
+                      <ClipboardList className="w-4 h-4 mr-1" /> คะแนนรวม
+                  </button>
+              </div>
+
+              {/* Group 3: Post-Event */}
+              <div className="flex gap-1 p-1 bg-white/50 rounded-lg border border-gray-200/50">
+                  <button onClick={() => handleSmartPrint('result-announcement')} className="px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-md text-xs font-bold shadow-sm flex items-center" title="ใบประกาศผล (Official)">
+                      <FileBadge className="w-4 h-4 mr-1" /> ประกาศผล
+                  </button>
+              </div>
+
+              {/* Full Set */}
               <button 
                 onClick={() => handleSmartPrint('full-set')}
-                disabled={isGuest}
-                className="bg-emerald-600 hover:enabled:bg-emerald-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold border border-emerald-600 transition-all flex items-center shadow-md disabled:opacity-50"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold border border-emerald-600 transition-all flex items-center shadow-md ml-2"
               >
-                  <FolderOpen className="w-4 h-4 mr-2" /> พิมพ์แบบจัดชุด (Full Set)
-              </button>
-              <button 
-                onClick={() => handleSmartPrint('judge-signin')}
-                disabled={isGuest}
-                className="bg-white hover:enabled:bg-blue-600 hover:enabled:text-white px-4 py-2.5 rounded-xl text-xs font-bold border border-blue-200 text-blue-700 transition-all flex items-center shadow-sm disabled:opacity-50"
-              >
-                  <UserCheck className="w-4 h-4 mr-2" /> ใบเซ็นกรรมการ
-              </button>
-              <button 
-                onClick={() => handleSmartPrint('competitor-signin')}
-                disabled={isGuest}
-                className="bg-white hover:enabled:bg-blue-600 hover:enabled:text-white px-4 py-2.5 rounded-xl text-xs font-bold border border-blue-200 text-blue-700 transition-all flex items-center shadow-sm disabled:opacity-50"
-              >
-                  <Users className="w-4 h-4 mr-2" /> ใบเซ็นผู้แข่ง
-              </button>
-              <button 
-                onClick={() => handleSmartPrint('score-sheet-individual')}
-                disabled={isGuest}
-                className="bg-white hover:enabled:bg-blue-600 hover:enabled:text-white px-4 py-2.5 rounded-xl text-xs font-bold border border-blue-200 text-blue-700 transition-all flex items-center shadow-sm disabled:opacity-50"
-              >
-                  <UserRound className="w-4 h-4 mr-2" /> ใบให้คะแนนรายคน
-              </button>
-              <button 
-                onClick={() => handleSmartPrint('score-sheet')}
-                disabled={isGuest}
-                className="bg-white hover:enabled:bg-blue-600 hover:enabled:text-white px-4 py-2.5 rounded-xl text-xs font-bold border border-blue-200 text-blue-700 transition-all flex items-center shadow-sm disabled:opacity-50"
-              >
-                  <ClipboardList className="w-4 h-4 mr-2" /> ใบให้คะแนนรวม
-              </button>
-              <button 
-                onClick={() => handleSmartPrint('envelope')}
-                disabled={isGuest}
-                className="bg-white hover:enabled:bg-blue-600 hover:enabled:text-white px-4 py-2.5 rounded-xl text-xs font-bold border border-blue-200 text-blue-700 transition-all flex items-center shadow-sm disabled:opacity-50"
-              >
-                  <Mail className="w-4 h-4 mr-2" /> ปะหน้าซอง
+                  <FolderOpen className="w-4 h-4 mr-2" /> Full Set
               </button>
           </div>
       </div>
+
       <div className="md:hidden space-y-4">
           <div className="flex items-center justify-between px-2">
                 <button onClick={toggleAllSelection} className="flex items-center text-sm font-bold text-gray-600">
@@ -1147,10 +1288,12 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                           </button>
                           
                           <button onClick={() => handlePrintAction('full-set', [act.id])} className="text-xs bg-emerald-100 border border-emerald-200 text-emerald-700 py-1.5 rounded hover:bg-emerald-200 font-bold col-span-2">พิมพ์แบบจัดชุด (Full Set)</button>
+                          
+                          {/* Grouped for Mobile */}
                           <button onClick={() => handlePrintAction('judge-signin', [act.id])} className="text-xs bg-white border border-gray-200 text-gray-600 py-1.5 rounded hover:bg-gray-50">ใบเซ็นกรรมการ</button>
                           <button onClick={() => handlePrintAction('competitor-signin', [act.id])} className="text-xs bg-white border border-gray-200 text-gray-600 py-1.5 rounded hover:bg-gray-50">ใบเซ็นผู้แข่ง</button>
                           <button onClick={() => handlePrintAction('score-sheet', [act.id])} className="text-xs bg-white border border-gray-200 text-gray-600 py-1.5 rounded hover:bg-gray-50">ใบคะแนนรวม</button>
-                          <button onClick={() => handlePrintAction('envelope', [act.id])} className="text-xs bg-white border border-gray-200 text-gray-600 py-1.5 rounded hover:bg-gray-50">หน้าซอง</button>
+                          <button onClick={() => handlePrintAction('result-announcement', [act.id])} className="text-xs bg-purple-50 border border-purple-200 text-purple-700 py-1.5 rounded hover:bg-purple-100 font-bold">ใบประกาศผล</button>
                       </div>
                   </div>
               )
@@ -1170,7 +1313,7 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                           <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">หมวดหมู่</th>
                           <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider w-24">ทีม</th>
                           <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider w-24">กรรมการ</th>
-                          <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider w-56">พิมพ์รายกิจกรรม</th>
+                          <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider w-64">พิมพ์รายกิจกรรม</th>
                       </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -1216,12 +1359,10 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                                               <QrIcon className="w-5 h-5" />
                                           </button>
                                           
-                                          <button onClick={() => handlePrintAction('full-set', [act.id])} disabled={isGuest} className="p-2 text-emerald-600 hover:enabled:bg-emerald-100 rounded-lg transition-colors border border-transparent hover:enabled:border-emerald-200 disabled:opacity-30" title="พิมพ์แบบจัดชุด (Full Set)"><FolderOpen className="w-5 h-5" /></button>
-                                          <button onClick={() => handlePrintAction('judge-signin', [act.id])} disabled={isGuest} className="p-2 text-blue-600 hover:enabled:bg-blue-100 rounded-lg transition-colors border border-transparent hover:enabled:border-blue-200 disabled:opacity-30" title="พิมพ์ใบเซ็นชื่อกรรมการ"><UserCheck className="w-5 h-5" /></button>
-                                          <button onClick={() => handlePrintAction('competitor-signin', [act.id])} disabled={isGuest} className="p-2 text-indigo-600 hover:enabled:bg-indigo-100 rounded-lg transition-colors border border-transparent hover:enabled:border-indigo-200 disabled:opacity-30" title="พิมพ์ใบเซ็นชื่อผู้แข่ง"><Users className="w-5 h-5" /></button>
-                                          <button onClick={() => handlePrintAction('score-sheet-individual', [act.id])} disabled={isGuest} className="p-2 text-blue-800 hover:enabled:bg-blue-100 rounded-lg transition-colors border border-transparent hover:enabled:border-blue-200 disabled:opacity-30" title="พิมพ์ใบให้คะแนนรายบุคคล"><UserRound className="w-5 h-5" /></button>
-                                          <button onClick={() => handlePrintAction('score-sheet', [act.id])} disabled={isGuest} className="p-2 text-emerald-600 hover:enabled:bg-emerald-100 rounded-lg transition-colors border border-transparent hover:enabled:border-emerald-200 disabled:opacity-30" title="พิมพ์แบบบันทึกคะแนนรวม"><ClipboardList className="w-5 h-5" /></button>
-                                          <button onClick={() => handlePrintAction('envelope', [act.id])} disabled={isGuest} className="p-2 text-orange-600 hover:enabled:bg-orange-100 rounded-lg transition-colors border border-transparent hover:enabled:border-orange-200 disabled:opacity-30" title="พิมพ์ใบปะหน้าซองกิจกรรม"><Mail className="w-5 h-5" /></button>
+                                          <button onClick={() => handlePrintAction('full-set', [act.id])} className="p-2 text-emerald-600 hover:enabled:bg-emerald-100 rounded-lg transition-colors border border-transparent hover:enabled:border-emerald-200" title="พิมพ์แบบจัดชุด (Full Set)"><FolderOpen className="w-5 h-5" /></button>
+                                          <button onClick={() => handlePrintAction('judge-signin', [act.id])} className="p-2 text-blue-600 hover:enabled:bg-blue-100 rounded-lg transition-colors border border-transparent hover:enabled:border-blue-200" title="พิมพ์ใบเซ็นชื่อกรรมการ"><UserCheck className="w-5 h-5" /></button>
+                                          <button onClick={() => handlePrintAction('score-sheet', [act.id])} className="p-2 text-orange-600 hover:enabled:bg-orange-100 rounded-lg transition-colors border border-transparent hover:enabled:border-orange-200" title="พิมพ์แบบบันทึกคะแนนรวม"><ClipboardList className="w-5 h-5" /></button>
+                                          <button onClick={() => handlePrintAction('result-announcement', [act.id])} className="p-2 text-purple-700 hover:enabled:bg-purple-100 rounded-lg transition-colors border border-transparent hover:enabled:border-purple-200 font-bold" title="พิมพ์ใบประกาศผล"><FileBadge className="w-5 h-5" /></button>
                                       </div>
                                   </td>
                               </tr>
