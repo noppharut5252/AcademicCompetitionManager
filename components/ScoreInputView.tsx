@@ -2,10 +2,9 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { AppData, User, Team, AreaStageInfo } from '../types';
 import { updateTeamResult, updateAreaResult } from '../services/api';
-import { shareScoreResult, shareTop3Result } from '../services/liff';
-import { Save, Filter, AlertCircle, CheckCircle, Lock, Trophy, Search, ChevronRight, ChevronLeft, Share2, AlertTriangle, Calculator, X, Copy, PieChart, Check, ChevronDown, Flag, History, Loader2, ListChecks, Edit2, Crown, LayoutGrid, AlertOctagon, Wand2, Eye, EyeOff, ArrowDownWideNarrow, GraduationCap, Printer, School, FileBadge, UserX, ClipboardCheck, BarChart3, ClipboardList, Info, RotateCcw, PenTool, Mic, MicOff, Eraser, Receipt, GripHorizontal, Delete, ArrowRight } from 'lucide-react';
+import { shareScoreResult } from '../services/liff';
+import { Save, AlertCircle, CheckCircle, Trophy, ChevronRight, ChevronLeft, Share2, Calculator, X, History, Loader2, ListChecks, Wand2, Hash, RotateCcw, Delete } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import SearchableSelect from './SearchableSelect';
 import ConfirmationModal from './ConfirmationModal';
 
 // --- Types & Interfaces ---
@@ -28,10 +27,9 @@ interface SubmittedSlip {
     teamName: string;
     schoolName: string;
     totalScore: number;
-    criteriaSummary?: string;
+    rank: string;
+    medal: string;
     timestamp: string;
-    signatureUrl?: string;
-    judgeName?: string;
 }
 
 // --- Helper Functions ---
@@ -57,114 +55,7 @@ const getAreaInfo = (team: Team): AreaStageInfo | null => {
 
 // --- Sub-Components ---
 
-// 1. Signature Pad Component
-const SignaturePad = ({ onSign }: { onSign: (dataUrl: string | null) => void }) => {
-    const canvasRef = useRef<HTMLCanvasElement>(null);
-    const [isDrawing, setIsDrawing] = useState(false);
-    const [hasSignature, setHasSignature] = useState(false);
-
-    useEffect(() => {
-        const canvas = canvasRef.current;
-        if (canvas) {
-            canvas.width = canvas.offsetWidth;
-            canvas.height = canvas.offsetHeight;
-            const ctx = canvas.getContext('2d');
-            if (ctx) {
-                ctx.strokeStyle = '#000000';
-                ctx.lineWidth = 2;
-                ctx.lineCap = 'round';
-            }
-        }
-    }, []);
-
-    const startDrawing = (e: React.MouseEvent | React.TouchEvent) => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-
-        setIsDrawing(true);
-        setHasSignature(true);
-        const { offsetX, offsetY } = getCoordinates(e, canvas);
-        ctx.beginPath();
-        ctx.moveTo(offsetX, offsetY);
-    };
-
-    const draw = (e: React.MouseEvent | React.TouchEvent) => {
-        if (!isDrawing) return;
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-
-        const { offsetX, offsetY } = getCoordinates(e, canvas);
-        ctx.lineTo(offsetX, offsetY);
-        ctx.stroke();
-    };
-
-    const endDrawing = () => {
-        setIsDrawing(false);
-        if (canvasRef.current) {
-            onSign(canvasRef.current.toDataURL());
-        }
-    };
-
-    const getCoordinates = (e: React.MouseEvent | React.TouchEvent, canvas: HTMLCanvasElement) => {
-        let clientX, clientY;
-        if ('touches' in e) {
-            clientX = e.touches[0].clientX;
-            clientY = e.touches[0].clientY;
-        } else {
-            clientX = (e as React.MouseEvent).clientX;
-            clientY = (e as React.MouseEvent).clientY;
-        }
-        const rect = canvas.getBoundingClientRect();
-        return {
-            offsetX: clientX - rect.left,
-            offsetY: clientY - rect.top
-        };
-    };
-
-    const clearSignature = () => {
-        const canvas = canvasRef.current;
-        if (canvas) {
-            const ctx = canvas.getContext('2d');
-            if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
-            setHasSignature(false);
-            onSign(null);
-        }
-    };
-
-    return (
-        <div className="border border-gray-300 rounded-xl overflow-hidden bg-white relative">
-            <canvas
-                ref={canvasRef}
-                className="w-full h-32 touch-none cursor-crosshair bg-gray-50"
-                onMouseDown={startDrawing}
-                onMouseMove={draw}
-                onMouseUp={endDrawing}
-                onMouseLeave={endDrawing}
-                onTouchStart={startDrawing}
-                onTouchMove={draw}
-                onTouchEnd={endDrawing}
-            />
-            <div className="absolute bottom-2 right-2 flex gap-2">
-                {hasSignature && (
-                    <button onClick={clearSignature} className="p-1 bg-gray-200 text-gray-600 rounded hover:bg-red-100 hover:text-red-500 transition-colors text-xs flex items-center">
-                        <Eraser className="w-3 h-3 mr-1" /> ล้าง
-                    </button>
-                )}
-            </div>
-            {!hasSignature && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-gray-300 text-sm">
-                    เซ็นชื่อกรรมการที่นี่ (Signature)
-                </div>
-            )}
-        </div>
-    );
-};
-
-// 2. Custom Numeric Keypad
+// 1. Custom Numeric Keypad
 const NumericKeypad = ({ 
     isOpen, 
     onClose, 
@@ -172,7 +63,8 @@ const NumericKeypad = ({
     onDelete, 
     onNext, 
     onPrev,
-    value 
+    value,
+    label
 }: { 
     isOpen: boolean, 
     onClose: () => void, 
@@ -180,7 +72,8 @@ const NumericKeypad = ({
     onDelete: () => void, 
     onNext?: () => void,
     onPrev?: () => void,
-    value: string
+    value: string,
+    label?: string
 }) => {
     if (!isOpen) return null;
 
@@ -194,8 +87,11 @@ const NumericKeypad = ({
                     <button onClick={onPrev} className="p-2 bg-white rounded shadow-sm active:bg-gray-100"><ChevronLeft className="w-5 h-5"/></button>
                     <button onClick={onNext} className="p-2 bg-white rounded shadow-sm active:bg-gray-100"><ChevronRight className="w-5 h-5"/></button>
                 </div>
-                <div className="text-lg font-bold text-gray-800 bg-white px-4 py-1 rounded shadow-inner min-w-[80px] text-center">
-                    {value || '0'}
+                <div className="flex flex-col items-center">
+                    <span className="text-[10px] text-gray-500 font-bold uppercase">{label || 'Input'}</span>
+                    <div className="text-lg font-bold text-gray-800 bg-white px-4 py-0.5 rounded shadow-inner min-w-[80px] text-center">
+                        {value || '-'}
+                    </div>
                 </div>
                 <button onClick={onClose} className="px-4 py-1.5 bg-blue-600 text-white rounded font-bold shadow-sm active:bg-blue-700">เสร็จสิ้น</button>
             </div>
@@ -216,61 +112,6 @@ const NumericKeypad = ({
                 >
                     <Delete className="w-8 h-8" />
                 </button>
-            </div>
-        </div>
-    );
-};
-
-// 3. Receipt Slip Modal
-const ReceiptModal = ({ slip, onClose }: { slip: SubmittedSlip, onClose: () => void }) => {
-    return (
-        <div className="fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-4 backdrop-blur-sm animate-in zoom-in duration-300">
-            <div className="bg-white w-full max-w-sm rounded-none sm:rounded-2xl overflow-hidden shadow-2xl relative">
-                <div className="bg-blue-600 h-2"></div>
-                <div className="p-6 text-center space-y-4">
-                    <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-2">
-                        <CheckCircle className="w-10 h-10 text-green-600" />
-                    </div>
-                    <h2 className="text-xl font-bold text-gray-800">บันทึกคะแนนสำเร็จ</h2>
-                    <p className="text-gray-500 text-xs">Submission Receipt</p>
-                    
-                    <div className="bg-gray-50 p-4 rounded-xl border border-dashed border-gray-300 text-left space-y-3">
-                        <div className="flex justify-between text-sm">
-                            <span className="text-gray-500">ทีม:</span>
-                            <span className="font-bold text-gray-800">{slip.teamName}</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                            <span className="text-gray-500">โรงเรียน:</span>
-                            <span className="font-medium text-gray-800 truncate max-w-[150px]">{slip.schoolName}</span>
-                        </div>
-                        <div className="border-t border-gray-200 my-2"></div>
-                        <div className="flex justify-between items-end">
-                            <span className="text-gray-500 font-bold">คะแนนรวม:</span>
-                            <span className="text-3xl font-black text-blue-600">{slip.totalScore}</span>
-                        </div>
-                        {slip.criteriaSummary && (
-                            <div className="text-[10px] text-gray-400 mt-1">
-                                {slip.criteriaSummary}
-                            </div>
-                        )}
-                        <div className="text-[10px] text-gray-400 text-right mt-2">
-                            {new Date(slip.timestamp).toLocaleString('th-TH')}
-                        </div>
-                    </div>
-
-                    {slip.signatureUrl && (
-                        <div className="text-center mt-4">
-                            <div className="text-xs text-gray-400 mb-1">ลายเซ็นกรรมการ</div>
-                            <img src={slip.signatureUrl} alt="Signature" className="h-12 mx-auto mix-blend-multiply opacity-80" />
-                            {slip.judgeName && <div className="text-xs font-bold text-gray-600 mt-1">({slip.judgeName})</div>}
-                        </div>
-                    )}
-                </div>
-                <div className="p-4 bg-gray-50 flex gap-3">
-                    <button onClick={onClose} className="flex-1 py-3 bg-white border border-gray-300 rounded-xl text-gray-700 font-bold hover:bg-gray-100">ปิด</button>
-                    {/* In a real app, verify `navigator.share` support or implement html2canvas */}
-                    <button className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 shadow-md">บันทึกรูป</button>
-                </div>
             </div>
         </div>
     );
@@ -298,7 +139,6 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
   const role = user?.level?.toLowerCase();
   const isAdminOrArea = role === 'admin' || role === 'area';
   const isGroupAdmin = role === 'group_admin';
-  const canScoreArea = ['admin', 'area', 'score'].includes(role || '');
   
   const [viewScope, setViewScope] = useState<'cluster' | 'area'>(isAdminOrArea ? 'area' : 'cluster');
   const [searchTerm, setSearchTerm] = useState('');
@@ -306,65 +146,26 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
   // Data State
   const [edits, setEdits] = useState<Record<string, { score: string, rank: string, medal: string, flag: string, isDirty: boolean }>>({});
   const [isLoading, setIsLoading] = useState(false);
-  const [confirmState, setConfirmState] = useState<{ isOpen: boolean, type: 'single' | 'batch', teamId: string | null }>({ isOpen: false, type: 'single', teamId: null });
   
-  // New Features State
-  const [activeTeamId, setActiveTeamId] = useState<string | null>(null); // For focused team (Mobile Focus Mode)
+  // Confirm Modal State
+  const [confirmState, setConfirmState] = useState<{ 
+      isOpen: boolean, 
+      type: 'single' | 'batch', 
+      teamId: string | null,
+      items: { name: string, oldScore: string, newScore: string, oldRank: string, newRank: string }[] 
+  }>({ isOpen: false, type: 'single', teamId: null, items: [] });
+  
+  // Feature State
+  const [activeTeamId, setActiveTeamId] = useState<string | null>(null); // For focused team
   const [criteriaMode, setCriteriaMode] = useState(false);
   const [criteriaScores, setCriteriaScores] = useState<Record<string, ScoringCriteria[]>>({});
-  const [signatures, setSignatures] = useState<Record<string, string>>({}); // Stores base64 signature per team
-  const [comments, setComments] = useState<Record<string, string>>({});
   
-  // Receipt State
-  const [lastSlip, setLastSlip] = useState<SubmittedSlip | null>(null);
+  // Receipt State (History)
   const [history, setHistory] = useState<SubmittedSlip[]>([]);
   const [showHistory, setShowHistory] = useState(false);
 
   // Keypad State
-  const [keypadConfig, setKeypadConfig] = useState<{ isOpen: boolean, targetId: string, field: string, criteriaId?: string } | null>(null);
-
-  // Voice Recognition
-  const [isListening, setIsListening] = useState(false);
-  const recognitionRef = useRef<any>(null);
-
-  useEffect(() => {
-      if ('webkitSpeechRecognition' in window) {
-          // @ts-ignore
-          const recognition = new window.webkitSpeechRecognition();
-          recognition.continuous = false;
-          recognition.lang = 'th-TH';
-          recognition.interimResults = false;
-          
-          recognition.onresult = (event: any) => {
-              const transcript = event.results[0][0].transcript;
-              if (activeTeamId) {
-                  setComments(prev => ({
-                      ...prev,
-                      [activeTeamId]: (prev[activeTeamId] || '') + ' ' + transcript
-                  }));
-              }
-              setIsListening(false);
-          };
-          
-          recognition.onerror = () => setIsListening(false);
-          recognition.onend = () => setIsListening(false);
-          
-          recognitionRef.current = recognition;
-      }
-  }, [activeTeamId]);
-
-  const toggleListening = () => {
-      if (!recognitionRef.current) {
-          alert('เบราว์เซอร์นี้ไม่รองรับการพิมพ์ด้วยเสียง');
-          return;
-      }
-      if (isListening) {
-          recognitionRef.current.stop();
-      } else {
-          recognitionRef.current.start();
-          setIsListening(true);
-      }
-  };
+  const [keypadConfig, setKeypadConfig] = useState<{ isOpen: boolean, targetId: string, field: 'score' | 'rank', criteriaId?: string } | null>(null);
 
   const activity = useMemo(() => 
     data.activities.find(a => a.id === activityId), 
@@ -393,21 +194,31 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
           list = list.filter(t => t.teamName.toLowerCase().includes(lower) || t.schoolId.toLowerCase().includes(lower));
       }
 
+      // Sort by Rank ASC (if available) then Score DESC
       return list.sort((a, b) => {
-          const schoolA = data.schools.find(s => s.SchoolID === a.schoolId || s.SchoolName === a.schoolId)?.SchoolName || a.schoolId;
-          const schoolB = data.schools.find(s => s.SchoolID === b.schoolId || s.SchoolName === b.schoolId)?.SchoolName || b.schoolId;
-          return schoolA.localeCompare(schoolB, 'th');
+          const editA = edits[a.teamId];
+          const editB = edits[b.teamId];
+          
+          const rankA = parseFloat(editA?.rank || (viewScope === 'area' ? getAreaInfo(a)?.rank : a.rank) || '999');
+          const rankB = parseFloat(editB?.rank || (viewScope === 'area' ? getAreaInfo(b)?.rank : b.rank) || '999');
+          
+          if (rankA !== rankB) return rankA - rankB;
+
+          const scoreA = parseFloat(editA?.score || (viewScope === 'area' ? String(getAreaInfo(a)?.score) : String(a.score)) || '0');
+          const scoreB = parseFloat(editB?.score || (viewScope === 'area' ? String(getAreaInfo(b)?.score) : String(b.score)) || '0');
+          
+          return scoreB - scoreA;
       });
-  }, [data.teams, activityId, viewScope, isGroupAdmin, user, searchTerm, data.schools]);
+  }, [data.teams, activityId, viewScope, isGroupAdmin, user, searchTerm, data.schools, edits]);
 
   // Initializing Criteria for a team if not exists
   const getCriteria = (teamId: string) => {
       if (!criteriaScores[teamId]) {
           return [
-              { id: 'c1', label: 'ความถูกต้อง (Accuracy)', score: '', max: 30 },
-              { id: 'c2', label: 'ความคิดสร้างสรรค์ (Creativity)', score: '', max: 30 },
-              { id: 'c3', label: 'เทคนิคการนำเสนอ (Technique)', score: '', max: 20 },
-              { id: 'c4', label: 'การตอบคำถาม (Q&A)', score: '', max: 20 },
+              { id: 'c1', label: 'ความถูกต้อง', score: '', max: 30 },
+              { id: 'c2', label: 'ความคิดสร้างสรรค์', score: '', max: 30 },
+              { id: 'c3', label: 'เทคนิคการนำเสนอ', score: '', max: 20 },
+              { id: 'c4', label: 'การตอบคำถาม', score: '', max: 20 },
           ];
       }
       return criteriaScores[teamId];
@@ -463,14 +274,8 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
       handleInputChange(teamId, 'score', String(total));
   };
 
-  const openKeypad = (teamId: string, field: string, criteriaId?: string) => {
+  const openKeypad = (teamId: string, field: 'score' | 'rank', criteriaId?: string) => {
       setActiveTeamId(teamId); // Set Focus Mode
-      let val = '';
-      if (criteriaId) {
-          val = getCriteria(teamId).find(c => c.id === criteriaId)?.score || '';
-      } else {
-          val = edits[teamId]?.score || '';
-      }
       setKeypadConfig({ isOpen: true, targetId: teamId, field, criteriaId });
   };
 
@@ -482,9 +287,7 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
       if (criteriaId) {
           currentVal = getCriteria(targetId).find(c => c.id === criteriaId)?.score || '';
       } else {
-          // If field is 'score', get from edits
-          if (field === 'score') currentVal = edits[targetId]?.score || '';
-          // Rank not supported in criteria mode keypad usually, but generic enough
+          currentVal = edits[targetId]?.[field] || '';
       }
 
       // Prevent multiple dots
@@ -494,8 +297,8 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
       
       if (criteriaId) {
           handleCriteriaChange(targetId, criteriaId, newVal);
-      } else if (field === 'score') {
-          handleInputChange(targetId, 'score', newVal);
+      } else {
+          handleInputChange(targetId, field, newVal);
       }
   };
 
@@ -506,23 +309,106 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
       let currentVal = '';
       if (criteriaId) {
           currentVal = getCriteria(targetId).find(c => c.id === criteriaId)?.score || '';
-      } else if (field === 'score') {
-          currentVal = edits[targetId]?.score || '';
+      } else {
+          currentVal = edits[targetId]?.[field] || '';
       }
 
       const newVal = currentVal.slice(0, -1);
 
       if (criteriaId) {
           handleCriteriaChange(targetId, criteriaId, newVal);
-      } else if (field === 'score') {
-          handleInputChange(targetId, 'score', newVal);
+      } else {
+          handleInputChange(targetId, field, newVal);
       }
   };
+
+  // --- Auto Rank Logic ---
+  const handleAutoRank = () => {
+      // Sort all currently visible teams by their score (edit priority > db)
+      const sorted = [...teams].sort((a, b) => {
+          const scoreA = parseFloat(edits[a.teamId]?.score || (viewScope === 'area' ? String(getAreaInfo(a)?.score) : String(a.score)) || '0');
+          const scoreB = parseFloat(edits[b.teamId]?.score || (viewScope === 'area' ? String(getAreaInfo(b)?.score) : String(b.score)) || '0');
+          return scoreB - scoreA; // Descending
+      });
+
+      const newEdits = { ...edits };
+      let currentRank = 1;
+      
+      sorted.forEach((t, index) => {
+          // If score is valid (not 0 or -1), assign rank
+          const score = parseFloat(newEdits[t.teamId]?.score || (viewScope === 'area' ? String(getAreaInfo(t)?.score) : String(t.score)) || '0');
+          
+          if (score > 0) {
+              // Handle Tie: if score equals previous, rank stays same
+              if (index > 0) {
+                  const prevT = sorted[index - 1];
+                  const prevScore = parseFloat(newEdits[prevT.teamId]?.score || (viewScope === 'area' ? String(getAreaInfo(prevT)?.score) : String(prevT.score)) || '0');
+                  if (score < prevScore) {
+                      currentRank = index + 1;
+                  }
+              }
+              
+              // Only update if rank changed
+              const oldRank = newEdits[t.teamId]?.rank || (viewScope === 'area' ? String(getAreaInfo(t)?.rank) : t.rank) || '';
+              if (String(currentRank) !== oldRank) {
+                  // Initialize edit object if not exists
+                  if (!newEdits[t.teamId]) {
+                      // Need to fill base values to not lose existing score
+                      const baseScore = (viewScope === 'area' ? String(getAreaInfo(t)?.score) : String(t.score));
+                      newEdits[t.teamId] = {
+                          score: baseScore === '0' ? '' : baseScore,
+                          rank: '',
+                          medal: '',
+                          flag: '',
+                          isDirty: true
+                      };
+                  }
+                  newEdits[t.teamId].rank = String(currentRank);
+                  newEdits[t.teamId].isDirty = true;
+              }
+          }
+      });
+      setEdits(newEdits);
+  };
+
+  // Validation Logic
+  const validationWarnings = useMemo(() => {
+      if (!activityId) return [];
+      const warnings: string[] = [];
+      let rank1Count = 0;
+      
+      teams.forEach(t => {
+          const edit = edits[t.teamId];
+          
+          let score: number = 0;
+          let rank = "";
+          
+          if (edit) {
+              score = parseFloat(edit.score);
+              rank = edit.rank;
+          } else if (viewScope === 'area') {
+              const info = getAreaInfo(t);
+              score = Number(info?.score || 0);
+              rank = info?.rank || '';
+          } else {
+              score = Number(t.score);
+              rank = t.rank;
+          }
+
+          if (score > 100) warnings.push(`ทีม ${t.teamName}: คะแนนเกิน 100`);
+          if (rank === '1') rank1Count++;
+      });
+
+      if (rank1Count > 1) warnings.push(`มีทีมได้อันดับ 1 จำนวน ${rank1Count} ทีม (ควรมีเพียง 1 ทีม)`);
+      return warnings;
+  }, [teams, edits, viewScope, activityId]);
+
+  // --- Save Logic ---
 
   const performUpdate = async (teamId: string, edit: any) => {
         const finalScore = parseFloat(edit.score);
         const finalRank = edit.rank === 'undefined' ? '' : edit.rank;
-        const finalMedal = edit.medal === 'undefined' ? '' : edit.medal;
+        const finalMedal = calculateMedal(edit.score, edit.medal);
         
         if (viewScope === 'area') {
             return await updateAreaResult(teamId, finalScore, finalRank, finalMedal);
@@ -534,49 +420,128 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
         }
   };
 
-  const handleSave = async (teamId: string) => {
+  // Prepare Data for Confirmation Modal
+  const initiateSave = (teamId: string) => {
       const edit = edits[teamId];
-      if (!edit) return;
+      if (!edit || !edit.isDirty) return;
+      const team = teams.find(t => t.teamId === teamId);
+      if (!team) return;
 
-      setIsLoading(true);
-      const success = await performUpdate(teamId, edit);
-      setIsLoading(false);
+      const oldScore = viewScope === 'area' ? String(getAreaInfo(team)?.score || 0) : String(team.score);
+      const oldRank = viewScope === 'area' ? String(getAreaInfo(team)?.rank || '') : String(team.rank);
 
-      if (success) {
-          const team = teams.find(t => t.teamId === teamId);
-          const school = data.schools.find(s => s.SchoolID === team?.schoolId || s.SchoolName === team?.schoolId);
-          
-          const criteriaList = criteriaScores[teamId];
-          const criteriaSummary = criteriaList ? criteriaList.map(c => `${c.label}: ${c.score || 0}`).join(', ') : '';
+      setConfirmState({
+          isOpen: true,
+          type: 'single',
+          teamId,
+          items: [{
+              name: team.teamName,
+              oldScore: oldScore === '0' ? '-' : oldScore,
+              newScore: edit.score || '-',
+              oldRank: oldRank || '-',
+              newRank: edit.rank || '-'
+          }]
+      });
+  };
 
-          // Create Slip
-          const slip: SubmittedSlip = {
-              id: Date.now().toString(),
-              teamName: team?.teamName || '',
-              schoolName: school?.SchoolName || team?.schoolId || '',
-              totalScore: parseFloat(edit.score) || 0,
-              criteriaSummary: criteriaMode ? criteriaSummary : undefined,
-              timestamp: new Date().toISOString(),
-              signatureUrl: signatures[teamId],
-              judgeName: user?.name || 'Unknown Judge'
+  const initiateBatchSave = () => {
+      const dirtyIds = Object.keys(edits).filter(id => edits[id].isDirty && teams.some(t => t.teamId === id));
+      if (dirtyIds.length === 0) return;
+
+      const items = dirtyIds.map(id => {
+          const t = teams.find(team => team.teamId === id)!;
+          const edit = edits[id];
+          const oldScore = viewScope === 'area' ? String(getAreaInfo(t)?.score || 0) : String(t.score);
+          const oldRank = viewScope === 'area' ? String(getAreaInfo(t)?.rank || '') : String(t.rank);
+          return {
+              name: t.teamName,
+              oldScore: oldScore === '0' ? '-' : oldScore,
+              newScore: edit.score || '-',
+              oldRank: oldRank || '-',
+              newRank: edit.rank || '-'
           };
+      });
 
-          setLastSlip(slip);
-          setHistory(prev => [slip, ...prev]);
-          
-          // Clear edit state for this team
-          setEdits(prev => {
-              const { [teamId]: _, ...rest } = prev;
-              return rest;
-          });
-          
-          // Clear signature & criteria local state if needed, but keeping them might be good for review
-          // setSignatures(prev => { const {[teamId]:_, ...rest} = prev; return rest; });
+      setConfirmState({
+          isOpen: true,
+          type: 'batch',
+          teamId: null,
+          items
+      });
+  };
 
+  const handleConfirmSave = async () => {
+      setIsLoading(true);
+      setConfirmState(prev => ({ ...prev, isOpen: false }));
+
+      const targetIds = confirmState.type === 'single' && confirmState.teamId 
+          ? [confirmState.teamId] 
+          : Object.keys(edits).filter(id => edits[id].isDirty && teams.some(t => t.teamId === id));
+
+      let successCount = 0;
+
+      for (const id of targetIds) {
+          const edit = edits[id];
+          if (!edit) continue;
+          
+          const success = await performUpdate(id, edit);
+          if (success) {
+              successCount++;
+              
+              // Add to History
+              const team = teams.find(t => t.teamId === id);
+              const school = data.schools.find(s => s.SchoolID === team?.schoolId || s.SchoolName === team?.schoolId);
+              const slip: SubmittedSlip = {
+                  id: Date.now().toString() + id,
+                  teamName: team?.teamName || '',
+                  schoolName: school?.SchoolName || team?.schoolId || '',
+                  totalScore: parseFloat(edit.score) || 0,
+                  rank: edit.rank,
+                  medal: calculateMedal(edit.score, edit.medal),
+                  timestamp: new Date().toISOString()
+              };
+              setHistory(prev => [slip, ...prev]);
+          }
+      }
+
+      setIsLoading(false);
+      
+      // Clear edits for successful saves
+      const newEdits = { ...edits };
+      targetIds.forEach(id => delete newEdits[id]);
+      setEdits(newEdits);
+      
+      if (successCount > 0) {
           onDataUpdate();
       } else {
           alert('บันทึกไม่สำเร็จ');
       }
+  };
+
+  const handleShare = async (team: Team) => {
+        const activityName = activity?.name || '';
+        const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
+        const schoolName = school?.SchoolName || team.schoolId;
+
+        let score = 0;
+        let medal = '';
+        let rank = '';
+        if (viewScope === 'area') {
+            const info = getAreaInfo(team);
+            score = info?.score || 0;
+            medal = info?.medal || calculateMedal(String(score), '');
+            rank = info?.rank || '';
+        } else {
+            score = team.score;
+            medal = team.medalOverride || calculateMedal(String(score), '');
+            rank = team.rank;
+        }
+
+        try {
+            await shareScoreResult(team.teamName, schoolName, activityName, score, medal, rank, team.teamId);
+        } catch (err) {
+            console.error('Share failed');
+        }
   };
 
   // Helper to get keypad display value
@@ -585,8 +550,10 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
       if (keypadConfig.criteriaId) {
           return getCriteria(keypadConfig.targetId).find(c => c.id === keypadConfig.criteriaId)?.score || '';
       }
-      return edits[keypadConfig.targetId]?.score || '';
+      return edits[keypadConfig.targetId]?.[keypadConfig.field] || '';
   };
+
+  const dirtyCount = Object.keys(edits).filter(id => edits[id].isDirty && teams.some(t => t.teamId === id)).length;
 
   if (!user) {
       return (
@@ -598,21 +565,57 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
       );
   }
 
-  const activeTeam = teams.find(t => t.teamId === activeTeamId);
-
   return (
     <div className="min-h-screen bg-gray-50 pb-20 font-kanit animate-in fade-in duration-500 relative">
         <LoadingOverlay isVisible={isLoading} />
         
-        {lastSlip && <ReceiptModal slip={lastSlip} onClose={() => setLastSlip(null)} />}
-        
+        {/* Pre-Save Confirmation Modal */}
+        <ConfirmationModal 
+            isOpen={confirmState.isOpen}
+            title={confirmState.type === 'single' ? 'ยืนยันการบันทึกคะแนน' : `ยืนยันบันทึก ${confirmState.items.length} รายการ`}
+            description="กรุณาตรวจสอบความถูกต้องก่อนยืนยัน"
+            confirmLabel="ยืนยันบันทึก"
+            confirmColor="blue"
+            onConfirm={handleConfirmSave}
+            onCancel={() => setConfirmState(prev => ({ ...prev, isOpen: false }))}
+        >
+            <div className="mt-4 max-h-[50vh] overflow-y-auto border-t border-gray-200">
+                <table className="w-full text-sm text-left">
+                    <thead className="text-xs text-gray-500 uppercase bg-gray-50 sticky top-0">
+                        <tr>
+                            <th className="px-3 py-2">ทีม</th>
+                            <th className="px-3 py-2 text-center">คะแนน</th>
+                            <th className="px-3 py-2 text-center">อันดับ</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                        {confirmState.items.map((item, idx) => (
+                            <tr key={idx}>
+                                <td className="px-3 py-2 font-medium">{item.name}</td>
+                                <td className="px-3 py-2 text-center">
+                                    <span className="text-gray-400 text-xs">{item.oldScore}</span>
+                                    <span className="mx-1">→</span>
+                                    <span className="text-blue-600 font-bold">{item.newScore}</span>
+                                </td>
+                                <td className="px-3 py-2 text-center">
+                                    <span className="text-gray-400 text-xs">{item.oldRank}</span>
+                                    <span className="mx-1">→</span>
+                                    <span className="text-blue-600 font-bold">{item.newRank}</span>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </ConfirmationModal>
+
         <KeypadOverlay 
             isOpen={keypadConfig?.isOpen || false} 
             onClose={() => setKeypadConfig(null)}
             onInput={handleKeypadInput}
             onDelete={handleKeypadDelete}
             value={getKeypadValue()}
-            // Simple prev/next logic for criteria could be added here
+            label={keypadConfig?.field === 'score' ? (keypadConfig.criteriaId ? 'คะแนนย่อย' : 'คะแนนรวม') : 'ลำดับที่'}
         />
 
         {/* History Modal */}
@@ -620,17 +623,21 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
             <div className="fixed inset-0 bg-black/60 z-[200] flex justify-end">
                 <div className="w-full max-w-md bg-white h-full overflow-y-auto animate-in slide-in-from-right duration-300">
                     <div className="p-4 border-b flex justify-between items-center bg-gray-50">
-                        <h3 className="font-bold flex items-center"><History className="w-5 h-5 mr-2"/> ประวัติการให้คะแนน (Session)</h3>
+                        <h3 className="font-bold flex items-center"><History className="w-5 h-5 mr-2"/> ประวัติการบันทึก (Session)</h3>
                         <button onClick={() => setShowHistory(false)}><X className="w-6 h-6"/></button>
                     </div>
                     <div className="p-4 space-y-4">
                         {history.length === 0 ? <p className="text-center text-gray-400 py-10">ยังไม่มีประวัติในรอบนี้</p> : history.map(slip => (
-                            <div key={slip.id} onClick={() => setLastSlip(slip)} className="border rounded-xl p-3 shadow-sm hover:bg-gray-50 cursor-pointer">
+                            <div key={slip.id} className="border rounded-xl p-3 shadow-sm hover:bg-gray-50">
                                 <div className="flex justify-between font-bold text-gray-800">
                                     <span>{slip.teamName}</span>
                                     <span className="text-blue-600">{slip.totalScore}</span>
                                 </div>
-                                <div className="text-xs text-gray-500 mt-1">{slip.schoolName}</div>
+                                <div className="flex justify-between items-center mt-1">
+                                    <span className="text-xs text-gray-500">{slip.schoolName}</span>
+                                    <span className="text-xs font-bold bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">{slip.medal}</span>
+                                </div>
+                                {slip.rank && <div className="text-xs text-purple-600 font-bold mt-1">Rank: {slip.rank}</div>}
                                 <div className="text-[10px] text-gray-400 mt-2 text-right">{new Date(slip.timestamp).toLocaleTimeString()}</div>
                             </div>
                         ))}
@@ -646,16 +653,33 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
                     <ChevronLeft className="w-6 h-6" />
                 </button>
                 <div className="text-center flex-1 mx-2">
-                    <div className="text-[10px] text-blue-600 font-bold uppercase tracking-wider">Scoring Mode</div>
+                    <div className="text-[10px] text-blue-600 font-bold uppercase tracking-wider">Score Input</div>
                     <div className="text-sm font-bold text-gray-800 line-clamp-1">{activity?.name || 'Loading...'}</div>
                 </div>
-                <button onClick={() => setShowHistory(true)} className="p-2 -mr-2 text-gray-500 hover:bg-gray-100 rounded-full relative">
-                    <History className="w-6 h-6" />
-                    {history.length > 0 && <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>}
-                </button>
+                <div className="flex items-center">
+                    {dirtyCount > 0 && (
+                        <button 
+                            onClick={initiateBatchSave}
+                            className="bg-blue-600 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-sm mr-2 animate-pulse"
+                        >
+                            Save All ({dirtyCount})
+                        </button>
+                    )}
+                    <button onClick={() => setShowHistory(true)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-full relative">
+                        <History className="w-6 h-6" />
+                        {history.length > 0 && <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>}
+                    </button>
+                </div>
             </div>
             
             <div className="px-4 pb-3 flex items-center gap-2 overflow-x-auto no-scrollbar">
+                <button 
+                    onClick={handleAutoRank}
+                    className="flex items-center px-3 py-1.5 rounded-full text-xs font-bold bg-purple-50 text-purple-700 border border-purple-200 whitespace-nowrap"
+                >
+                    <Wand2 className="w-3 h-3 mr-1.5" /> Auto Rank
+                </button>
+                <div className="h-6 w-px bg-gray-300 mx-1"></div>
                 <button 
                     onClick={() => setCriteriaMode(!criteriaMode)}
                     className={`flex items-center px-3 py-1.5 rounded-full text-xs font-bold transition-all border whitespace-nowrap ${criteriaMode ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-indigo-600 border-indigo-200'}`}
@@ -666,6 +690,16 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
             </div>
         </div>
 
+        {/* Validation Warnings */}
+        {validationWarnings.length > 0 && (
+            <div className="mx-4 mt-4 bg-orange-50 border-l-4 border-orange-500 p-3 rounded-r shadow-sm">
+                <h4 className="text-orange-800 text-xs font-bold mb-1 flex items-center"><AlertCircle className="w-3 h-3 mr-1"/> ตรวจสอบความถูกต้อง</h4>
+                <ul className="list-disc list-inside text-[10px] text-orange-700 space-y-0.5">
+                    {validationWarnings.map((w, i) => <li key={i}>{w}</li>)}
+                </ul>
+            </div>
+        )}
+
         {/* Teams List */}
         <div className="px-4 space-y-4 pb-24 pt-4">
             {teams.map((team, idx) => {
@@ -673,6 +707,10 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
                 const rawScore = edit?.score ?? (viewScope === 'area' ? getAreaInfo(team)?.score : team.score);
                 const scoreVal = parseFloat(String(rawScore));
                 const displayScore = (!isNaN(scoreVal) && (scoreVal > 0 || scoreVal === -1)) ? rawScore : '';
+                
+                const rawRank = edit?.rank ?? (viewScope === 'area' ? getAreaInfo(team)?.rank : team.rank);
+                const displayRank = rawRank || '';
+
                 const isDirty = edit?.isDirty;
                 const criteria = getCriteria(team.teamId);
 
@@ -692,7 +730,14 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
                                 <div className="font-bold text-gray-900 text-lg leading-tight">{team.teamName}</div>
                                 <div className="text-xs text-gray-500 mt-1">{data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId)?.SchoolName || team.schoolId}</div>
                             </div>
-                            {displayScore && !isDirty && <div className="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-bold">Recorded</div>}
+                            <div className="flex flex-col items-end gap-1">
+                                {displayScore && !isDirty && <div className="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-bold flex items-center"><CheckCircle className="w-3 h-3 mr-1"/> Saved</div>}
+                                {(displayScore > 0 || displayScore === -1) && !isDirty && (
+                                    <button onClick={(e) => { e.stopPropagation(); handleShare(team); }} className="text-blue-500 bg-blue-50 p-1.5 rounded-full">
+                                        <Share2 className="w-4 h-4" />
+                                    </button>
+                                )}
+                            </div>
                         </div>
 
                         <div className="p-4 space-y-4">
@@ -716,51 +761,37 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
                                     </div>
                                 </div>
                             ) : (
-                                <div 
-                                    onClick={(e) => { e.stopPropagation(); openKeypad(team.teamId, 'score'); }}
-                                    className={`w-full h-16 border-2 rounded-xl flex items-center justify-center text-4xl font-black cursor-pointer transition-colors ${isActive ? 'border-blue-500 bg-blue-50/10 text-blue-900' : 'border-gray-200 bg-gray-50 text-gray-400'}`}
-                                >
-                                    {displayScore || <span className="text-gray-300 text-2xl font-normal">แตะเพื่อกรอกคะแนน</span>}
+                                <div className="flex gap-4">
+                                    <div className="flex-1">
+                                        <label className="text-[10px] text-gray-400 uppercase font-bold mb-1 block">คะแนน (Score)</label>
+                                        <div 
+                                            onClick={(e) => { e.stopPropagation(); openKeypad(team.teamId, 'score'); }}
+                                            className={`w-full h-16 border-2 rounded-xl flex items-center justify-center text-4xl font-black cursor-pointer transition-colors ${isActive ? 'border-blue-500 bg-blue-50/10 text-blue-900' : 'border-gray-200 bg-gray-50 text-gray-400'}`}
+                                        >
+                                            {displayScore || <span className="text-gray-300 text-2xl font-normal">-</span>}
+                                        </div>
+                                    </div>
+                                    <div className="w-1/3">
+                                        <label className="text-[10px] text-gray-400 uppercase font-bold mb-1 block">ลำดับ (Rank)</label>
+                                        <div
+                                            onClick={(e) => { e.stopPropagation(); openKeypad(team.teamId, 'rank'); }}
+                                            className="w-full h-16 border rounded-xl flex items-center justify-center text-2xl font-bold bg-white text-gray-800 cursor-pointer border-gray-300"
+                                        >
+                                            {displayRank || <span className="text-gray-300">-</span>}
+                                        </div>
+                                    </div>
                                 </div>
                             )}
 
-                            {/* Signature & Comments (Only show when active or has data) */}
+                            {/* Save Button (Only show when active or dirty) */}
                             {(isActive || isDirty) && (
-                                <div className="animate-in fade-in slide-in-from-top-2 space-y-4 pt-2 border-t border-gray-100">
-                                    {/* Signature */}
-                                    <div>
-                                        <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">ลายเซ็น (Signature)</label>
-                                        <SignaturePad onSign={(data) => setSignatures(prev => ({ ...prev, [team.teamId]: data || '' }))} />
-                                    </div>
-
-                                    {/* Voice Comment */}
-                                    <div>
-                                        <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">ข้อเสนอแนะ (Comments)</label>
-                                        <div className="relative">
-                                            <textarea 
-                                                className="w-full border border-gray-300 rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none pr-10 min-h-[80px]" 
-                                                placeholder="พิมพ์หรือกดไมค์เพื่อพูด..."
-                                                value={comments[team.teamId] || ''}
-                                                onChange={(e) => setComments(prev => ({ ...prev, [team.teamId]: e.target.value }))}
-                                            />
-                                            <button 
-                                                onClick={toggleListening}
-                                                className={`absolute right-2 bottom-2 p-2 rounded-full transition-all ${isListening && activeTeamId === team.teamId ? 'bg-red-500 text-white animate-pulse' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
-                                            >
-                                                {isListening && activeTeamId === team.teamId ? <MicOff className="w-4 h-4"/> : <Mic className="w-4 h-4"/>}
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    {/* Save Button */}
-                                    <button 
-                                        onClick={(e) => { e.stopPropagation(); handleSave(team.teamId); }}
-                                        disabled={!displayScore}
-                                        className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl shadow-lg active:scale-95 transition-all flex items-center justify-center disabled:opacity-50 disabled:scale-100"
-                                    >
-                                        <Save className="w-5 h-5 mr-2" /> บันทึกผลคะแนน
-                                    </button>
-                                </div>
+                                <button 
+                                    onClick={(e) => { e.stopPropagation(); initiateSave(team.teamId); }}
+                                    disabled={!displayScore}
+                                    className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl shadow-lg active:scale-95 transition-all flex items-center justify-center disabled:opacity-50 disabled:scale-100 mt-2"
+                                >
+                                    <Save className="w-5 h-5 mr-2" /> บันทึกผลคะแนน
+                                </button>
                             )}
                         </div>
                     </div>
