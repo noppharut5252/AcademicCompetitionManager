@@ -3,11 +3,11 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { AppData, User, Team, AreaStageInfo } from '../types';
 import { updateTeamResult, updateAreaResult, uploadImage, saveScoreSheet, toggleActivityLock } from '../services/api';
 import { shareScoreResult, shareTop3Result } from '../services/liff';
-import { Save, Filter, AlertCircle, CheckCircle, Lock, Unlock, Trophy, Search, ChevronRight, ChevronLeft, Share2, AlertTriangle, Calculator, X, Copy, PieChart, Check, ChevronDown, Flag, History, Loader2, ListChecks, Edit2, Crown, LayoutGrid, AlertOctagon, Wand2, Eye, EyeOff, ArrowDownWideNarrow, GraduationCap, Printer, School, FileBadge, UserX, ClipboardCheck, BarChart3, ClipboardList, Info, RotateCcw, Clock, ChevronUp, Trash2, RefreshCw, Upload, Image as ImageIcon, FileCheck, FileSearch, Delete, User as UserIcon, MessageSquare } from 'lucide-react';
+import { Save, Filter, AlertCircle, CheckCircle, Lock, Unlock, Trophy, Search, ChevronRight, ChevronLeft, Share2, AlertTriangle, Calculator, X, Copy, PieChart, Check, ChevronDown, Flag, History, Loader2, ListChecks, Edit2, Crown, LayoutGrid, AlertOctagon, Wand2, Eye, EyeOff, ArrowDownWideNarrow, GraduationCap, Printer, School, FileBadge, UserX, ClipboardCheck, BarChart3, ClipboardList, Info, RotateCcw, Clock, ChevronUp, Trash2, RefreshCw, Upload, Image as ImageIcon, FileCheck, FileSearch, Delete } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import SearchableSelect from './SearchableSelect';
 import ConfirmationModal from './ConfirmationModal';
-import { resizeImage, formatDeadline } from '../services/utils';
+import { resizeImage } from '../services/utils';
 
 // --- Types & Interfaces ---
 
@@ -60,7 +60,6 @@ interface RecentLog {
     activityName: string;
     score: string;
     time: string;
-    action: string;
 }
 
 // --- Helper Functions ---
@@ -105,76 +104,6 @@ const getAreaInfo = (team: Team): AreaStageInfo | null => {
 };
 
 // --- Sub-Components ---
-
-const HistoryModal = ({ team, isOpen, onClose, logs, viewScope }: { team: Team | null, isOpen: boolean, onClose: () => void, logs: RecentLog[], viewScope: 'cluster' | 'area' }) => {
-    if (!isOpen || !team) return null;
-
-    const areaInfo = getAreaInfo(team);
-    const lastEditedBy = team.lastEditedBy;
-    const lastEditedAt = team.lastEditedAt;
-    const remark = viewScope === 'area' ? team.areaRemark : team.clusterRemark;
-
-    // Filter logs for this team
-    const teamLogs = logs.filter(l => l.teamName === team.teamName);
-
-    return (
-        <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-            <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col">
-                <div className="p-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
-                    <h3 className="font-bold text-gray-800 flex items-center">
-                        <History className="w-5 h-5 mr-2 text-blue-600" />
-                        ประวัติการแก้ไข (Audit Log)
-                    </h3>
-                    <button onClick={onClose} className="p-1 hover:bg-gray-200 rounded-full"><X className="w-5 h-5"/></button>
-                </div>
-                <div className="p-6 space-y-6">
-                    <div>
-                        <div className="text-lg font-bold text-gray-900">{team.teamName}</div>
-                        <div className="text-sm text-gray-500">{team.schoolId}</div>
-                    </div>
-
-                    <div className="space-y-4">
-                        <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
-                            <h4 className="text-xs font-bold text-blue-800 uppercase tracking-wider mb-2 flex items-center">
-                                <Edit2 className="w-3 h-3 mr-1"/> การแก้ไขล่าสุด (Last Edit)
-                            </h4>
-                            <div className="grid grid-cols-2 gap-y-2 text-sm">
-                                <span className="text-gray-500">โดย:</span>
-                                <span className="font-medium text-gray-900 flex items-center"><UserIcon className="w-3 h-3 mr-1"/> {lastEditedBy || '-'}</span>
-                                
-                                <span className="text-gray-500">เมื่อ:</span>
-                                <span className="font-medium text-gray-900">{lastEditedAt ? formatDeadline(lastEditedAt) : '-'}</span>
-                                
-                                <span className="text-gray-500">เหตุผล:</span>
-                                <span className="font-medium text-red-600 bg-white px-2 py-0.5 rounded border border-red-100">
-                                    {remark || 'ไม่มีการระบุ'}
-                                </span>
-                            </div>
-                        </div>
-
-                        <div>
-                            <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">ประวัติใน Session นี้</h4>
-                            {teamLogs.length > 0 ? (
-                                <div className="space-y-2">
-                                    {teamLogs.map((log) => (
-                                        <div key={log.id} className="flex justify-between items-center text-xs p-2 bg-gray-50 rounded border border-gray-100">
-                                            <span className="text-gray-600">{log.action}</span>
-                                            <span className="text-gray-400 font-mono">{log.time}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className="text-center py-4 text-gray-400 text-xs italic border-2 border-dashed border-gray-100 rounded-lg">
-                                    ไม่มีประวัติการแก้ไขใน Session นี้
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-};
 
 const NumericKeypad = ({ 
     isOpen, 
@@ -634,9 +563,6 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
   
   // Add missing state for Reset confirmation (Local Edits)
   const [showResetConfirm, setShowResetConfirm] = useState(false);
-
-  // History Modal State
-  const [viewHistoryTeam, setViewHistoryTeam] = useState<Team | null>(null);
 
   // Feature 4: Excel-like Navigation Refs (Map "teamId-field" to HTMLElement)
   const cellRefs = useRef<Record<string, HTMLElement | null>>({});
@@ -1463,10 +1389,10 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       });
   };
 
-  const addRecentLog = (teamName: string, schoolName: string, activityName: string, score: string, action: string = 'Update') => {
+  const addRecentLog = (teamName: string, schoolName: string, activityName: string, score: string) => {
       const time = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
       const displayScore = score === '-1' ? 'ไม่เข้าร่วม' : score;
-      setRecentLogs(prev => [{ id: Date.now().toString(), teamName, schoolName, activityName, score: displayScore, time, action }, ...prev].slice(0, 50));
+      setRecentLogs(prev => [{ id: Date.now().toString(), teamName, schoolName, activityName, score: displayScore, time }, ...prev].slice(0, 5));
   };
 
   const initiateResetActivity = (activityId: string) => {
@@ -1547,7 +1473,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
             
             const team = data.teams.find(t => t.teamId === teamId);
             const school = data.schools.find(s => s.SchoolID === team?.schoolId || s.SchoolName === team?.schoolId);
-            addRecentLog(team?.teamName || teamId, school?.SchoolName || '', currentActivityName, edit.score, confirmState.type === 'correction' ? 'Correction' : 'Update');
+            addRecentLog(team?.teamName || teamId, school?.SchoolName || '', currentActivityName, edit.score);
             showToast(confirmState.type === 'correction' ? 'แก้ไขข้อมูลสำเร็จ' : 'บันทึกคะแนนเรียบร้อยแล้ว', 'success');
         } else {
             showToast('บันทึกข้อมูลล้มเหลว', 'error');
@@ -1571,7 +1497,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                 successCount++;
                 const team = data.teams.find(t => t.teamId === id);
                 const school = data.schools.find(s => s.SchoolID === team?.schoolId || s.SchoolName === team?.schoolId);
-                addRecentLog(team?.teamName || id, school?.SchoolName || '', currentActivityName, edit.score, 'Batch Save');
+                addRecentLog(team?.teamName || id, school?.SchoolName || '', currentActivityName, edit.score);
             }
             // Update Progress
             setProgress(prev => ({ ...prev, current: prev.current + 1 }));
@@ -1772,29 +1698,18 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
         }
   };
 
-  // Helper to share Top 3 for a specific activity (Used in announced list)
-  const handleShareTop3ForActivity = async (act: any) => {
-        // Need to calculate winners on the fly for this activity
-        let actTeams = allAuthorizedTeams.filter(t => t.activityId === act.id);
+  // Handle Share Top 3 Function - Added missing implementation
+  const handleShareTop3 = async () => {
+        if (!currentActivity) return;
         
-        if (viewScope === 'area') {
-            actTeams = actTeams.filter(t => t.stageStatus === 'Area' || String(t.flag).toUpperCase() === 'TRUE');
-        } else {
-            if (canFilterCluster && selectedClusterFilter) {
-                actTeams = actTeams.filter(t => {
-                    const s = data.schools.find(sc => sc.SchoolID === t.schoolId || sc.SchoolName === t.schoolId);
-                    return s?.SchoolCluster === selectedClusterFilter;
-                });
-            }
-        }
-
-        const winners = actTeams
+        const winners = filteredTeams
             .map(t => {
-                const rawScore = viewScope === 'area' ? String(getAreaInfo(t)?.score || 0) : String(t.score);
-                const rawRank = viewScope === 'area' ? String(getAreaInfo(t)?.rank || '') : String(t.rank);
-                const rawMedal = viewScope === 'area' ? (getAreaInfo(t)?.medal || '') : t.medalOverride;
+                const edit = edits[t.teamId];
+                const rawScore = edit?.score ?? (viewScope === 'area' ? String(getAreaInfo(t)?.score) : String(t.score));
+                const rawRank = edit?.rank ?? (viewScope === 'area' ? String(getAreaInfo(t)?.rank) : String(t.rank));
+                const rawMedal = edit?.medal ?? (viewScope === 'area' ? getAreaInfo(t)?.medal : t.medalOverride);
 
-                const scoreVal = parseFloat(rawScore);
+                const scoreVal = parseFloat(String(rawScore));
                 const medal = rawMedal || calculateMedal(String(scoreVal), '');
                 const school = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
 
@@ -1810,34 +1725,16 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
             .sort((a, b) => a.rank - b.rank);
 
         if (winners.length === 0) {
-            showToast('ยังไม่มีข้อมูลลำดับที่ 1-3 สำหรับรายการนี้', 'info');
+            showToast('ยังไม่มีข้อมูลลำดับที่ 1-3', 'info');
             return;
         }
 
         try {
-            await shareTop3Result(act.name, winners);
+            await shareTop3Result(currentActivity.name, winners);
         } catch (e) {
             console.error(e);
             showToast('ไม่สามารถแชร์ได้', 'error');
         }
-  };
-
-  // Handle Share Top 3 Function - Main Button
-  const handleShareTop3 = async () => {
-        if (!currentActivity) return;
-        handleShareTop3ForActivity(currentActivity);
-  };
-
-  // Function to load activity into form
-  const handleLoadActivity = (act: any) => {
-      setSelectedCategory(act.category);
-      setSelectedActivityId(act.id);
-      showToast(`โหลดข้อมูล: ${act.name}`, 'info');
-      // Scroll to form (optional)
-      const element = document.getElementById('score-form-container');
-      if (element) {
-          element.scrollIntoView({ behavior: 'smooth' });
-      }
   };
 
   // Validation Warnings Logic - Added useMemo
@@ -1871,16 +1768,6 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       if (rank1Count > 1) warnings.push(`มีทีมได้อันดับ 1 จำนวน ${rank1Count} ทีม (ควรมีเพียง 1 ทีม)`);
       return warnings;
   }, [filteredTeams, edits, viewScope, selectedActivityId]);
-
-  // History State
-  const [historyTeam, setHistoryTeam] = useState<Team | null>(null);
-
-  const handleOpenHistory = (teamId: string) => {
-      const team = data.teams.find(t => t.teamId === teamId);
-      if (team) {
-          setHistoryTeam(team);
-      }
-  };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20 relative">
@@ -1978,8 +1865,8 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                       <tbody className="bg-white divide-y divide-gray-50">
                           {announcedActivitiesData.map((act) => (
                               <tr key={act.id} className="hover:bg-indigo-50/30 transition-colors">
-                                  <td className="px-4 py-3 cursor-pointer" onClick={() => handleLoadActivity(act)}>
-                                      <div className="text-sm font-bold text-gray-800 flex items-center hover:text-blue-600 transition-colors">
+                                  <td className="px-4 py-3">
+                                      <div className="text-sm font-bold text-gray-800 flex items-center">
                                           {act.name}
                                           {act.isLocked && <span title="Locked"><Lock className="w-3 h-3 ml-2 text-red-500" /></span>}
                                       </div>
@@ -1994,13 +1881,6 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                   </td>
                                   <td className="px-4 py-3 text-right">
                                       <div className="flex justify-end gap-2">
-                                          <button 
-                                              onClick={() => handleShareTop3ForActivity(act)}
-                                              className="p-1.5 text-amber-600 bg-amber-50 hover:bg-amber-100 rounded border border-amber-200 transition-colors"
-                                              title="แชร์ผล Top 3 ทาง LINE"
-                                          >
-                                              <Share2 className="w-4 h-4" />
-                                          </button>
                                           <button 
                                               onClick={() => handleViewResultList(act.id)}
                                               className="p-1.5 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded border border-blue-200 transition-colors"
@@ -2035,8 +1915,8 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                   {announcedActivitiesData.length > 0 ? (
                       announcedActivitiesData.map((act) => (
                           <div key={act.id} className="bg-white p-4 rounded-xl border border-indigo-100 shadow-sm flex flex-col gap-2">
-                              <div onClick={() => handleLoadActivity(act)} className="cursor-pointer">
-                                  <div className="font-bold text-gray-800 text-sm leading-tight mb-1 flex items-center hover:text-blue-600">
+                              <div>
+                                  <div className="font-bold text-gray-800 text-sm leading-tight mb-1 flex items-center">
                                       {act.name}
                                       {act.isLocked && <Lock className="w-3 h-3 ml-2 text-red-500"/>}
                                   </div>
@@ -2052,12 +1932,6 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                   </span>
                               </div>
                               <div className="flex gap-2 mt-2 pt-2 border-t border-gray-100">
-                                  <button 
-                                      onClick={() => handleShareTop3ForActivity(act)}
-                                      className="flex-1 py-1.5 text-amber-600 bg-amber-50 hover:bg-amber-100 rounded text-xs font-bold flex items-center justify-center border border-amber-200"
-                                  >
-                                      <Share2 className="w-3.5 h-3.5 mr-1.5" /> แชร์ Top 3
-                                  </button>
                                   <button 
                                       onClick={() => handleViewResultList(act.id)}
                                       className="flex-1 py-1.5 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded text-xs font-bold flex items-center justify-center"
@@ -2154,7 +2028,8 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                       <button 
                         key={act.id}
                         onClick={() => {
-                            handleLoadActivity(act);
+                            setSelectedCategory(act.category);
+                            setSelectedActivityId(act.id);
                             setShowPendingActivities(false);
                         }}
                         className="text-left p-3 bg-white border border-amber-200 rounded-xl hover:border-amber-500 hover:shadow-md transition-all group"
@@ -2184,7 +2059,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       )}
 
       {/* Selection Card */}
-      <div id="score-form-container" className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col md:flex-row gap-6 scroll-mt-20">
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col md:flex-row gap-6">
           <div className="flex-1">
               <label className="block text-sm font-medium text-gray-700 mb-2">1. เลือกหมวดหมู่</label>
               <SearchableSelect 
@@ -2551,14 +2426,6 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                           )}
                                           <td className="px-6 py-4 whitespace-nowrap text-right">
                                               <div className="flex items-center justify-end space-x-2">
-                                                  <button 
-                                                      onClick={() => setViewHistoryTeam(team)}
-                                                      className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded transition-colors"
-                                                      title="ดูประวัติการแก้ไข (Audit Log)"
-                                                  >
-                                                      <History className="w-4 h-4" />
-                                                  </button>
-                                                  
                                                   {isActivityLocked ? (
                                                       <button 
                                                         onClick={() => initiateSave(team.teamId)}
@@ -2722,15 +2589,6 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
           confirmColor="red"
           onConfirm={handleResetEdits}
           onCancel={() => setShowResetConfirm(false)}
-      />
-
-      {/* History / Audit Log Modal */}
-      <HistoryModal 
-          team={viewHistoryTeam}
-          isOpen={!!viewHistoryTeam}
-          onClose={() => setViewHistoryTeam(null)}
-          logs={recentLogs}
-          viewScope={viewScope}
       />
     </div>
   );
