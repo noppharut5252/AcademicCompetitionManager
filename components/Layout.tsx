@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { LayoutDashboard, Users, Trophy, School, Settings, LogOut, Award, FileBadge, IdCard, LogIn, UserCircle, Edit3, ScanLine, X, Camera, Search, ChevronRight, LayoutGrid, RotateCcw, Loader2, Zap, MapPin, Gavel, Megaphone, Printer, Hash, MonitorPlay, Menu, PanelLeftClose, PanelLeft } from 'lucide-react';
 import { logoutLiff } from '../services/liff';
-import { User, AppData } from '../types';
+import { User, AppData, AppConfig } from '../types';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import SearchableSelect from './SearchableSelect';
 // @ts-ignore
@@ -334,25 +334,40 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
   const isAdminOrArea = ['admin', 'area'].includes(userRole);
   const canScore = ['admin', 'area', 'group_admin', 'score'].includes(userRole);
   const canManageAnnouncements = ['admin', 'area', 'group_admin'].includes(userRole);
-  
   const canViewPrintDocs = true; 
   
+  // Menu visibility config
+  const config = data?.appConfig || {
+      menu_live: true, menu_teams: true, menu_venues: true, menu_activities: true,
+      menu_score: true, menu_results: true, menu_documents: true, menu_certificates: true,
+      menu_idcards: true, menu_judges: true, menu_announcements: true, menu_schools: true
+  };
+  
+  // Logic: Show menu if (isAdminOrArea) OR (config allows it AND other role checks pass)
+  const showMenu = (key: keyof AppConfig, permission = true) => {
+      if (isAdminOrArea) return true; // Admins see everything
+      return config[key] && permission;
+  };
+
   const menuItems = [
-    { id: 'dashboard', label: 'หน้าหลัก', icon: LayoutDashboard },
-    { id: 'live', label: 'Live Score', icon: MonitorPlay },
-    { id: 'teams', label: 'ทีม', icon: Users },
-    { id: 'venues', label: 'สนาม/วันแข่ง', icon: MapPin },
-    { id: 'activities', label: 'รายการ', icon: Trophy },
-    ...(canScore ? [{ id: 'score', label: 'บันทึกคะแนน', icon: Edit3 }] : []),
-    { id: 'results', label: 'ผลรางวัล', icon: Award },
-    ...(canViewPrintDocs ? [{ id: 'documents', label: 'เอกสารการแข่งขัน', icon: Printer }] : []),
-    { id: 'certificates', label: 'เกียรติบัตร', icon: FileBadge },
-    { id: 'idcards', label: 'บัตร', icon: IdCard },
-    { id: 'judges', label: 'ทำเนียบกรรมการ', icon: Gavel },
-    ...(canManageAnnouncements ? [{ id: 'announcements', label: 'ข่าว/คู่มือ', icon: Megaphone }] : []),
-    { id: 'schools', label: 'โรงเรียน', icon: School },
-    { id: 'settings', label: 'ตั้งค่า', icon: Settings },
+    { id: 'dashboard', label: 'หน้าหลัก', icon: LayoutDashboard, visible: true },
+    { id: 'live', label: 'Live Score', icon: MonitorPlay, visible: showMenu('menu_live') },
+    { id: 'teams', label: 'ทีม', icon: Users, visible: showMenu('menu_teams') },
+    { id: 'venues', label: 'สนาม/วันแข่ง', icon: MapPin, visible: showMenu('menu_venues') },
+    { id: 'activities', label: 'รายการ', icon: Trophy, visible: showMenu('menu_activities') },
+    { id: 'score', label: 'บันทึกคะแนน', icon: Edit3, visible: showMenu('menu_score', canScore) },
+    { id: 'results', label: 'ผลรางวัล', icon: Award, visible: showMenu('menu_results') },
+    { id: 'documents', label: 'เอกสารการแข่งขัน', icon: Printer, visible: showMenu('menu_documents', canViewPrintDocs) },
+    { id: 'certificates', label: 'เกียรติบัตร', icon: FileBadge, visible: showMenu('menu_certificates') },
+    { id: 'idcards', label: 'บัตร', icon: IdCard, visible: showMenu('menu_idcards') },
+    { id: 'judges', label: 'ทำเนียบกรรมการ', icon: Gavel, visible: showMenu('menu_judges') },
+    { id: 'announcements', label: 'ข่าว/คู่มือ', icon: Megaphone, visible: showMenu('menu_announcements', canManageAnnouncements) },
+    { id: 'schools', label: 'โรงเรียน', icon: School, visible: showMenu('menu_schools') },
+    // Settings logic specific: Only Admin/Area see it anyway, but let's keep it visible for them always
+    { id: 'settings', label: 'ตั้งค่า', icon: Settings, visible: isAdminOrArea }, 
   ];
+
+  const visibleMenuItems = menuItems.filter(item => item.visible);
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row font-kanit">
@@ -420,7 +435,7 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
         </div>
 
         <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
-          {menuItems.map((item) => (
+          {visibleMenuItems.map((item) => (
             <button
               key={item.id}
               onClick={() => handleNav(item.id)}
@@ -523,8 +538,11 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
                 <span className="text-[10px] font-medium">หน้าหลัก</span>
             </button>
             
-            {/* 2. ทีม */}
-            <button onClick={() => handleNav('teams')} className={`flex flex-col items-center justify-center space-y-1 ${activeTab === 'teams' ? 'text-blue-600' : 'text-gray-400'}`}>
+            {/* 2. ทีม - Only if visible */}
+            <button 
+                onClick={() => handleNav(showMenu('menu_teams') ? 'teams' : 'dashboard')} 
+                className={`flex flex-col items-center justify-center space-y-1 ${activeTab === 'teams' ? 'text-blue-600' : 'text-gray-400'} ${!showMenu('menu_teams') ? 'opacity-30 pointer-events-none' : ''}`}
+            >
                 <Users className="w-5 h-5" />
                 <span className="text-[10px] font-medium">ทีม</span>
             </button>
@@ -539,8 +557,11 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
                  <span className="text-[10px] font-medium text-gray-400 mt-8">สแกน</span>
             </div>
 
-            {/* 4. ผลรางวัล */}
-            <button onClick={() => handleNav('results')} className={`flex flex-col items-center justify-center space-y-1 ${activeTab === 'results' ? 'text-blue-600' : 'text-gray-400'}`}>
+            {/* 4. ผลรางวัล - Only if visible */}
+            <button 
+                onClick={() => handleNav(showMenu('menu_results') ? 'results' : 'dashboard')} 
+                className={`flex flex-col items-center justify-center space-y-1 ${activeTab === 'results' ? 'text-blue-600' : 'text-gray-400'} ${!showMenu('menu_results') ? 'opacity-30 pointer-events-none' : ''}`}
+            >
                 <Award className="w-5 h-5" />
                 <span className="text-[10px] font-medium">ผลรางวัล</span>
             </button>
@@ -562,7 +583,7 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
                     <button onClick={() => setIsMobileMenuOpen(false)} className="p-1 bg-gray-100 rounded-full"><X className="w-5 h-5 text-gray-500"/></button>
                 </div>
                 <div className="grid grid-cols-3 gap-3">
-                    {menuItems.map(item => (
+                    {visibleMenuItems.map(item => (
                         <button 
                             key={item.id}
                             onClick={() => { handleNav(item.id); setIsMobileMenuOpen(false); }}
