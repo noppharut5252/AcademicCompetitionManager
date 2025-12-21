@@ -252,6 +252,21 @@ export interface JudgeConfig {
   };
 }
 
+export interface AppConfig {
+  menu_live: boolean;
+  menu_teams: boolean;
+  menu_venues: boolean;
+  menu_activities: boolean;
+  menu_score: boolean;
+  menu_results: boolean;
+  menu_documents: boolean;
+  menu_certificates: boolean;
+  menu_idcards: boolean;
+  menu_judges: boolean;
+  menu_announcements: boolean;
+  menu_schools: boolean;
+}
+
 export interface AppData {
   activities: Activity[];
   teams: Team[];
@@ -262,4 +277,5 @@ export interface AppData {
   venues: Venue[];
   judges: Judge[];
   activityStatus?: ActivityStatus[]; // New: Lock status
+  appConfig?: AppConfig; // Global App Configuration
 }
