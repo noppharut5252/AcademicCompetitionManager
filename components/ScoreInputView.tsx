@@ -2,8 +2,8 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { AppData, User, Team, AreaStageInfo } from '../types';
 import { updateTeamResult, updateAreaResult } from '../services/api';
-import { shareScoreResult } from '../services/liff';
-import { Save, AlertCircle, CheckCircle, Trophy, ChevronRight, ChevronLeft, Share2, Calculator, X, History, Loader2, ListChecks, Wand2, Hash, RotateCcw, Delete } from 'lucide-react';
+import { shareScoreResult, shareTop3Result } from '../services/liff';
+import { Save, AlertCircle, CheckCircle, Trophy, ChevronRight, ChevronLeft, Share2, Calculator, X, History, Loader2, ListChecks, Wand2, Hash, RotateCcw, Delete, Crown } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import ConfirmationModal from './ConfirmationModal';
 
@@ -45,6 +45,14 @@ const calculateMedal = (scoreStr: string, manualMedal: string): string => {
     return 'Participant';
 };
 
+const getAutoMedal = (score: number) => {
+    if (score === -1) return 'ไม่เข้าร่วมแข่งขัน';
+    if (score >= 80) return 'Gold';
+    if (score >= 70) return 'Silver';
+    if (score >= 60) return 'Bronze';
+    return 'Participant';
+};
+
 const getAreaInfo = (team: Team): AreaStageInfo | null => {
     try {
         return JSON.parse(team.stageInfo);
@@ -70,7 +78,7 @@ const NumericKeypad = ({
     onClose: () => void, 
     onInput: (char: string) => void, 
     onDelete: () => void, 
-    onNext?: () => void,
+    onNext?: () => void, 
     onPrev?: () => void,
     value: string,
     label?: string
@@ -427,6 +435,7 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
       const team = teams.find(t => t.teamId === teamId);
       if (!team) return;
 
+      const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
       const oldScore = viewScope === 'area' ? String(getAreaInfo(team)?.score || 0) : String(team.score);
       const oldRank = viewScope === 'area' ? String(getAreaInfo(team)?.rank || '') : String(team.rank);
 
@@ -435,7 +444,7 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
           type: 'single',
           teamId,
           items: [{
-              name: team.teamName,
+              name: school?.SchoolName || team.schoolId, // Use School Name as primary label
               oldScore: oldScore === '0' ? '-' : oldScore,
               newScore: edit.score || '-',
               oldRank: oldRank || '-',
@@ -451,10 +460,12 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
       const items = dirtyIds.map(id => {
           const t = teams.find(team => team.teamId === id)!;
           const edit = edits[id];
+          const school = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
           const oldScore = viewScope === 'area' ? String(getAreaInfo(t)?.score || 0) : String(t.score);
           const oldRank = viewScope === 'area' ? String(getAreaInfo(t)?.rank || '') : String(t.rank);
+          
           return {
-              name: t.teamName,
+              name: school?.SchoolName || t.schoolId, // Use School Name as primary label
               oldScore: oldScore === '0' ? '-' : oldScore,
               newScore: edit.score || '-',
               oldRank: oldRank || '-',
@@ -544,6 +555,150 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
         }
   };
 
+  const handleShareTop3 = async () => {
+        if (!activity) return;
+        
+        const winners = teams
+            .map(t => {
+                const edit = edits[t.teamId];
+                const rawScore = edit?.score ?? (viewScope === 'area' ? String(getAreaInfo(t)?.score) : String(t.score));
+                const rawRank = edit?.rank ?? (viewScope === 'area' ? String(getAreaInfo(t)?.rank) : String(t.rank));
+                const rawMedal = edit?.medal ?? (viewScope === 'area' ? getAreaInfo(t)?.medal : t.medalOverride);
+
+                const scoreVal = parseFloat(String(rawScore));
+                const medal = rawMedal || calculateMedal(String(scoreVal), '');
+                const school = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
+
+                return {
+                    rank: parseInt(String(rawRank)) || 999,
+                    teamName: t.teamName,
+                    schoolName: school?.SchoolName || t.schoolId,
+                    score: String(scoreVal > 0 ? scoreVal : 0),
+                    medal: medal
+                };
+            })
+            .filter(w => w.rank >= 1 && w.rank <= 3)
+            .sort((a, b) => a.rank - b.rank);
+
+        if (winners.length === 0) {
+            alert('ยังไม่มีข้อมูลลำดับที่ 1-3');
+            return;
+        }
+
+        try {
+            await shareTop3Result(activity.name, winners);
+        } catch (e) {
+            console.error(e);
+            alert('ไม่สามารถแชร์ได้');
+        }
+  };
+
+  const handlePrintDraft = () => {
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+          alert('Pop-up ถูกบล็อก');
+          return;
+      }
+
+      const date = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
+      const scopeTitle = viewScope === 'cluster' ? `ระดับกลุ่มเครือข่าย` : 'ระดับเขตพื้นที่การศึกษา';
+      const activityName = activity?.name || '';
+
+      const rows = teams.map((t, idx) => {
+          const edit = edits[t.teamId];
+          const school = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
+          
+          let rawScore = edit?.score || (viewScope === 'area' ? (getAreaInfo(t)?.score || 0) : t.score);
+          let rank = edit?.rank || (viewScope === 'area' ? (getAreaInfo(t)?.rank || '') : t.rank);
+          let medal = edit?.medal || (viewScope === 'area' ? (getAreaInfo(t)?.medal || '') : t.medalOverride);
+          
+          // Ensure score is number for logic
+          let score: number;
+          if (typeof rawScore === 'string') {
+              score = parseFloat(rawScore);
+          } else {
+              score = Number(rawScore);
+          }
+          if (isNaN(score)) score = 0;
+
+          const displayScore = score === -1 ? 'ไม่มา' : (score > 0 ? score : '-');
+          
+          // Re-calculate medal display if dirty to ensure accuracy
+          if (edit && !edit.medal && score > 0 && score !== -1) {
+              medal = getAutoMedal(score);
+          } else if (!medal && score > 0) {
+              medal = getAutoMedal(score);
+          }
+
+          return `
+            <tr>
+                <td style="text-align: center;">${idx + 1}</td>
+                <td>${t.teamName}</td>
+                <td>${school?.SchoolName || t.schoolId}</td>
+                <td style="text-align: center; font-weight: bold;">${displayScore}</td>
+                <td style="text-align: center;">${rank || '-'}</td>
+                <td style="text-align: center;">${medal || '-'}</td>
+                ${edit?.isDirty ? '<td style="text-align: center; color: blue;">Draft</td>' : '<td style="text-align: center;">Saved</td>'}
+            </tr>
+          `;
+      }).join('');
+
+      const content = `
+        <html>
+        <head>
+            <title>ใบสรุปคะแนนร่าง - ${activityName}</title>
+            <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap" rel="stylesheet">
+            <style>
+                body { font-family: 'Sarabun', sans-serif; padding: 20px; }
+                h1, h2 { text-align: center; margin: 5px 0; }
+                table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px; }
+                th, td { border: 1px solid #000; padding: 8px; }
+                th { background-color: #f2f2f2; text-align: center; }
+                .draft-mark { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-45deg); font-size: 100px; color: rgba(0,0,0,0.1); pointer-events: none; z-index: -1; }
+                @media print { .no-print { display: none; } }
+            </style>
+        </head>
+        <body>
+            <div class="no-print" style="margin-bottom: 20px; text-align: right;">
+                <button onclick="window.print()" style="padding: 10px 20px; background: #2563eb; color: white; border: none; borderRadius: 5px; cursor: pointer;">พิมพ์เอกสาร</button>
+            </div>
+            <div class="draft-mark">DRAFT</div>
+            <h1>ใบสรุปผลการแข่งขัน (ฉบับร่าง)</h1>
+            <h2>${activityName}</h2>
+            <h2>${scopeTitle}</h2>
+            <div style="text-align: center; margin-top: 10px;">ข้อมูล ณ วันที่ ${date} (รวมข้อมูลที่ยังไม่บันทึก)</div>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 50px;">ที่</th>
+                        <th>ทีม</th>
+                        <th>โรงเรียน</th>
+                        <th style="width: 80px;">คะแนน</th>
+                        <th style="width: 60px;">อันดับ</th>
+                        <th style="width: 100px;">เหรียญ</th>
+                        <th style="width: 60px;">สถานะ</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rows}
+                </tbody>
+            </table>
+            
+            <div style="margin-top: 40px; display: flex; justify-content: flex-end;">
+                <div style="text-align: center; width: 300px;">
+                    <div style="border-bottom: 1px dotted #000; margin-bottom: 10px;"></div>
+                    <div>( ........................................................ )</div>
+                    <div style="margin-top: 5px;">กรรมการตัดสิน</div>
+                </div>
+            </div>
+        </body>
+        </html>
+      `;
+      printWindow.document.write(content);
+      printWindow.document.close();
+  };
+
   // Helper to get keypad display value
   const getKeypadValue = () => {
       if (!keypadConfig) return '';
@@ -583,7 +738,7 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
                 <table className="w-full text-sm text-left">
                     <thead className="text-xs text-gray-500 uppercase bg-gray-50 sticky top-0">
                         <tr>
-                            <th className="px-3 py-2">ทีม</th>
+                            <th className="px-3 py-2">โรงเรียน (ทีม)</th>
                             <th className="px-3 py-2 text-center">คะแนน</th>
                             <th className="px-3 py-2 text-center">อันดับ</th>
                         </tr>
@@ -674,10 +829,22 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
             
             <div className="px-4 pb-3 flex items-center gap-2 overflow-x-auto no-scrollbar">
                 <button 
+                    onClick={handleShareTop3}
+                    className="flex items-center px-3 py-1.5 rounded-full text-xs font-bold bg-yellow-50 text-yellow-700 border border-yellow-200 whitespace-nowrap"
+                >
+                    <Crown className="w-3 h-3 mr-1.5" /> Share Top 3
+                </button>
+                <button 
                     onClick={handleAutoRank}
                     className="flex items-center px-3 py-1.5 rounded-full text-xs font-bold bg-purple-50 text-purple-700 border border-purple-200 whitespace-nowrap"
                 >
                     <Wand2 className="w-3 h-3 mr-1.5" /> Auto Rank
+                </button>
+                <button
+                    onClick={handlePrintDraft}
+                    className="flex items-center px-3 py-1.5 rounded-full text-xs font-bold bg-green-50 text-green-700 border border-green-200 whitespace-nowrap"
+                >
+                    <Share2 className="w-3 h-3 mr-1.5" /> Print Draft
                 </button>
                 <div className="h-6 w-px bg-gray-300 mx-1"></div>
                 <button 
