@@ -4,6 +4,8 @@ import { getMockData } from './mockData';
 
 const API_URL = "https://script.google.com/macros/s/AKfycbyYcf6m-3ypN3aX8F6prN0BLQcz0JyW0gj3Tq8dJyMs54gaTXSv_1uytthNu9H4CmMy/exec";
 
+// ... (Existing exports: fetchData, checkUserPermission, loginStandardUser, linkLineAccount, verifyAndLinkLine, registerUser, updateUser)
+
 export const fetchData = async (): Promise<AppData> => {
   try {
     const response = await fetch(`${API_URL}?action=getData`, {
@@ -139,7 +141,6 @@ export const updateUser = async (user: Partial<User>): Promise<boolean> => {
     }
 }
 
-// FULL VERSION: Added stage parameter to update CompetitionStage column
 export const updateTeamResult = async (teamId: string, score: number, rank: string, medal: string, flag: string = '', stage: string = ''): Promise<boolean> => {
     try {
         const response = await fetch(`${API_URL}?action=updateTeamResult&teamId=${encodeURIComponent(teamId)}&score=${score}&rank=${encodeURIComponent(rank)}&medal=${encodeURIComponent(medal)}&flag=${encodeURIComponent(flag)}&stage=${encodeURIComponent(stage)}`, {
@@ -433,6 +434,24 @@ export const deleteJudge = async (judgeId: string): Promise<boolean> => {
     } catch (e) { return false; }
 };
 
+// NEW: Save Score Sheet
+export const saveScoreSheet = async (payload: { activityId: string, scope: 'area' | 'cluster', fileId: string, fileUrl: string, uploadedBy: string }): Promise<boolean> => {
+    try {
+        const response = await fetch(`${API_URL}?action=saveScoreSheet`, {
+            method: 'POST',
+            mode: 'cors',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify(payload)
+        });
+        if (!response.ok) return false;
+        const result = await response.json();
+        return result.status === 'success';
+    } catch (e) { 
+        console.error("Save Score Sheet failed", e);
+        return false; 
+    }
+};
+
 export const getTeamCountByStatus = (data: AppData) => {
   const counts: Record<string, number> = {};
   data.teams.forEach(team => {
@@ -449,4 +468,3 @@ export const getTeamsByActivity = (data: AppData) => {
   });
   return Object.keys(counts).map(key => ({ name: key, value: counts[key] }));
 };
-
