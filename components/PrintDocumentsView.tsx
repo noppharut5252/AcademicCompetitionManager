@@ -524,11 +524,18 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
               <table>
                   <thead>
                       <tr>
-                          <th style="width: 50px;">ที่</th>
-                          <th style="width: 250px;">ชื่อ - สกุล</th>
-                          <th>ตำแหน่ง / โรงเรียน</th>
-                          <th style="width: 150px;">ลายมือชื่อ</th>
-                          <th>หมายเหตุ</th>
+                          <th rowspan="2" style="width: 40px;">ที่</th>
+                          <th rowspan="2" style="width: 200px;">ชื่อ - สกุล</th>
+                          <th rowspan="2">ตำแหน่ง / โรงเรียน</th>
+                          <th colspan="2">ลงเวลามา</th>
+                          <th colspan="2">ลงเวลากลับ</th>
+                          <th rowspan="2">หมายเหตุ</th>
+                      </tr>
+                      <tr>
+                          <th style="width: 60px;">เวลา</th>
+                          <th style="width: 100px;">ลายมือชื่อ</th>
+                          <th style="width: 60px;">เวลา</th>
+                          <th style="width: 100px;">ลายมือชื่อ</th>
                       </tr>
                   </thead>
                   <tbody>
@@ -539,9 +546,12 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                               <td>${j.role}<br/><small>${j.schoolName}</small></td>
                               <td></td>
                               <td></td>
+                              <td></td>
+                              <td></td>
+                              <td></td>
                           </tr>
                       `).join('')}
-                      ${judges.length === 0 ? '<tr><td colspan="5" class="text-center">ไม่มีข้อมูลกรรมการ</td></tr>' : ''}
+                      ${judges.length === 0 ? '<tr><td colspan="8" class="text-center">ไม่มีข้อมูลกรรมการ</td></tr>' : ''}
                   </tbody>
               </table>
           </div>
@@ -564,12 +574,14 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
             } catch(e) {}
 
             members.forEach(m => {
-                const name = m.name || `${m.prefix || ''}${m.firstname || ''} ${m.lastname || ''}`;
+                const prefix = m.prefix || '';
+                const nameBody = (m.firstname && m.lastname) ? `${m.firstname} ${m.lastname}` : (m.name || '');
                 const schoolName = (data.schools || []).find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId)?.SchoolName || t.schoolId;
                 rows += `
                   <tr>
                       <td class="text-center">${count++}</td>
-                      <td>${name}</td>
+                      <td>${prefix}</td>
+                      <td>${nameBody}</td>
                       <td>${schoolName}</td>
                       <td>${t.teamName}</td>
                       <td></td>
@@ -593,14 +605,15 @@ const PrintDocumentsView: React.FC<PrintDocumentsViewProps> = ({ data, user }) =
                   <thead>
                       <tr>
                           <th style="width: 40px;">ที่</th>
-                          <th style="width: 200px;">ชื่อ - สกุล</th>
+                          <th style="width: 80px;">คำนำหน้า</th>
+                          <th style="width: 180px;">ชื่อ - สกุล</th>
                           <th>โรงเรียน</th>
                           <th>ทีม</th>
-                          <th style="width: 120px;">ลายมือชื่อ</th>
+                          <th style="width: 100px;">ลายมือชื่อ</th>
                       </tr>
                   </thead>
                   <tbody>
-                      ${rows || '<tr><td colspan="5" class="text-center">ไม่มีข้อมูล</td></tr>'}
+                      ${rows || '<tr><td colspan="6" class="text-center">ไม่มีข้อมูล</td></tr>'}
                   </tbody>
               </table>
           </div>
