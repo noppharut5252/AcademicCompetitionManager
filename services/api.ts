@@ -1,5 +1,5 @@
 
-import { AppData, User, Team, CertificateTemplate, Venue, Judge, JudgeConfig, Announcement, Attachment, Comment, PrintConfig } from '../types';
+import { AppData, User, Team, CertificateTemplate, Venue, Judge, JudgeConfig, Announcement, Attachment, Comment, PrintConfig, AppConfig } from '../types';
 import { getMockData } from './mockData';
 
 const API_URL = "https://script.google.com/macros/s/AKfycbyYcf6m-3ypN3aX8F6prN0BLQcz0JyW0gj3Tq8dJyMs54gaTXSv_1uytthNu9H4CmMy/exec";
@@ -31,7 +31,8 @@ export const fetchData = async (): Promise<AppData> => {
       announcements: data.announcements || [],
       venues: data.venues || [],
       judges: data.judges || [],
-      activityStatus: data.activityStatus || []
+      activityStatus: data.activityStatus || [],
+      appConfig: data.appConfig || {}
     };
   } catch (error) {
     console.warn("Fetching from live API failed, falling back to mock data.", error);
@@ -393,6 +394,20 @@ export const saveJudgeConfig = async (config: JudgeConfig): Promise<boolean> => 
             mode: 'cors',
             headers: { 'Content-Type': 'text/plain' },
             body: JSON.stringify({ id: config.id, config: config })
+        });
+        if (!response.ok) return false;
+        const result = await response.json();
+        return result.status === 'success';
+    } catch (e) { return false; }
+};
+
+export const saveAppConfig = async (config: AppConfig): Promise<boolean> => {
+    try {
+        const response = await fetch(`${API_URL}?action=saveAppConfig`, {
+            method: 'POST',
+            mode: 'cors',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify({ config })
         });
         if (!response.ok) return false;
         const result = await response.json();
