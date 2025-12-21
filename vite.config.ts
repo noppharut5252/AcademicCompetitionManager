@@ -5,11 +5,15 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  // กำหนด base path ให้ตรงกับชื่อ Repository บน GitHub Pages
+  base: '/AcademicCompetitionManager/',
   plugins: [
     react(),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
+      // กำหนด scope ของ PWA ให้จำกัดอยู่ในโฟลเดอร์นี้
+      scope: '/AcademicCompetitionManager/',
       manifest: {
         name: 'Academic Competition Manager',
         short_name: 'CompManager',
@@ -18,7 +22,9 @@ export default defineConfig({
         background_color: '#f3f4f6',
         display: 'standalone',
         orientation: 'portrait',
-        start_url: '/',
+        // สำคัญ: กำหนดให้เปิดแอปที่ path นี้เสมอ
+        start_url: '/AcademicCompetitionManager/',
+        scope: '/AcademicCompetitionManager/',
         icons: [
           {
             src: 'https://cdn-icons-png.flaticon.com/512/3135/3135768.png',
@@ -34,9 +40,6 @@ export default defineConfig({
       }
     })
   ],
-  // ใช้ './' เพื่อให้ path ของ assets เป็นแบบ relative (เช่น src="assets/...")
-  // ซึ่งจำเป็นสำหรับ GitHub Pages ที่ไม่ได้รันที่ root domain
-  base: './', 
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
@@ -44,7 +47,6 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      // ช่วยแก้ปัญหาการ import path ในบาง environment
       '@': '/src',
     },
   },
