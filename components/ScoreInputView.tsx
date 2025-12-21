@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { AppData, User, Team, AreaStageInfo } from '../types';
 import { updateTeamResult, updateAreaResult } from '../services/api';
@@ -175,22 +176,22 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
   const [keypadConfig, setKeypadConfig] = useState<{ isOpen: boolean, targetId: string, field: 'score' | 'rank', criteriaId?: string } | null>(null);
 
   const activity = useMemo(() => 
-    data.activities.find(a => a.id === activityId), 
+    (data.activities || []).find(a => a.id === activityId), 
   [data.activities, activityId]);
 
   const teams = useMemo(() => {
       if (!activityId) return [];
-      let list = data.teams.filter(t => t.activityId === activityId);
+      let list = (data.teams || []).filter(t => t.activityId === activityId);
 
       if (viewScope === 'area') {
           list = list.filter(t => t.stageStatus === 'Area' || String(t.flag).toUpperCase() === 'TRUE');
       }
 
       if (isGroupAdmin && viewScope === 'cluster') {
-          const userSchool = data.schools.find(s => s.SchoolID === user?.SchoolID);
+          const userSchool = (data.schools || []).find(s => s.SchoolID === user?.SchoolID);
           if (userSchool) {
               list = list.filter(t => {
-                  const school = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
+                  const school = (data.schools || []).find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
                   return school?.SchoolCluster === userSchool.SchoolCluster;
               });
           }
@@ -233,7 +234,7 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
 
   const handleInputChange = (teamId: string, field: 'score' | 'rank' | 'medal' | 'flag', value: string) => {
       setEdits(prev => {
-          const team = data.teams.find(t => t.teamId === teamId);
+          const team = (data.teams || []).find(t => t.teamId === teamId);
           if (!team) return prev;
 
           let baseScore = '';
@@ -434,7 +435,7 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
       const team = teams.find(t => t.teamId === teamId);
       if (!team) return;
 
-      const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
+      const school = (data.schools || []).find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
       const oldScore = viewScope === 'area' ? String(getAreaInfo(team)?.score || 0) : String(team.score);
       const oldRank = viewScope === 'area' ? String(getAreaInfo(team)?.rank || '') : String(team.rank);
 
@@ -459,7 +460,7 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
       const items = dirtyIds.map(id => {
           const t = teams.find(team => team.teamId === id)!;
           const edit = edits[id];
-          const school = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
+          const school = (data.schools || []).find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
           const oldScore = viewScope === 'area' ? String(getAreaInfo(t)?.score || 0) : String(t.score);
           const oldRank = viewScope === 'area' ? String(getAreaInfo(t)?.rank || '') : String(t.rank);
           
@@ -500,7 +501,7 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
               
               // Add to History
               const team = teams.find(t => t.teamId === id);
-              const school = data.schools.find(s => s.SchoolID === team?.schoolId || s.SchoolName === team?.schoolId);
+              const school = (data.schools || []).find(s => s.SchoolID === team?.schoolId || s.SchoolName === team?.schoolId);
               const slip: SubmittedSlip = {
                   id: Date.now().toString() + id,
                   teamName: team?.teamName || '',
@@ -530,7 +531,7 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
 
   const handleShare = async (team: Team) => {
         const activityName = activity?.name || '';
-        const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
+        const school = (data.schools || []).find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
         const schoolName = school?.SchoolName || team.schoolId;
 
         let score = 0;
@@ -566,7 +567,7 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
 
                 const scoreVal = parseFloat(String(rawScore));
                 const medal = rawMedal || calculateMedal(String(scoreVal), '');
-                const school = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
+                const school = (data.schools || []).find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
 
                 return {
                     rank: parseInt(String(rawRank)) || 999,
@@ -605,7 +606,7 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
 
       const rows = teams.map((t, idx) => {
           const edit = edits[t.teamId];
-          const school = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
+          const school = (data.schools || []).find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
           
           let rawScore = edit?.score || (viewScope === 'area' ? (getAreaInfo(t)?.score || 0) : t.score);
           let rank = edit?.rank || (viewScope === 'area' ? (getAreaInfo(t)?.rank || '') : t.rank);
@@ -763,7 +764,7 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
             </div>
         </ConfirmationModal>
 
-        <KeypadOverlay 
+        <NumericKeypad 
             isOpen={keypadConfig?.isOpen || false} 
             onClose={() => setKeypadConfig(null)}
             onInput={handleKeypadInput}
@@ -894,7 +895,7 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
                             <div className="min-w-0">
                                 <div className="text-xs text-gray-400 font-mono mb-0.5">#{idx + 1}</div>
                                 <div className="font-bold text-gray-900 text-lg leading-tight">{team.teamName}</div>
-                                <div className="text-xs text-gray-500 mt-1">{data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId)?.SchoolName || team.schoolId}</div>
+                                <div className="text-xs text-gray-500 mt-1">{(data.schools || []).find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId)?.SchoolName || team.schoolId}</div>
                             </div>
                             <div className="flex flex-col items-end gap-1">
                                 {displayScore && !isDirty && <div className="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-bold flex items-center"><CheckCircle className="w-3 h-3 mr-1"/> Saved</div>}
@@ -948,34 +949,13 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
                                     </div>
                                 </div>
                             )}
-
-                            {/* Save Button (Only show when active or dirty) */}
-                            {(isActive || isDirty) && (
-                                <button 
-                                    onClick={(e) => { e.stopPropagation(); initiateSave(team.teamId); }}
-                                    disabled={!displayScore}
-                                    className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl shadow-lg active:scale-95 transition-all flex items-center justify-center disabled:opacity-50 disabled:scale-100 mt-2"
-                                >
-                                    <Save className="w-5 h-5 mr-2" /> บันทึกผลคะแนน
-                                </button>
-                            )}
                         </div>
                     </div>
                 );
             })}
-            
-            {teams.length === 0 && (
-                <div className="text-center py-20 text-gray-400 opacity-50">
-                    <Calculator className="w-16 h-16 mx-auto mb-4" />
-                    <p>เลือกรายการแข่งขันเพื่อเริ่มให้คะแนน</p>
-                </div>
-            )}
         </div>
     </div>
   );
 };
-
-// Internal wrapper for Keypad to break dependency cycle if needed, but defined above is fine.
-const KeypadOverlay = NumericKeypad;
 
 export default ScoreInputView;
