@@ -1,12 +1,13 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { AppData, User, Team, AreaStageInfo } from '../types';
-import { updateTeamResult, updateAreaResult } from '../services/api';
+import { updateTeamResult, updateAreaResult, uploadImage, saveScoreSheet } from '../services/api';
 import { shareScoreResult, shareTop3Result } from '../services/liff';
-import { Save, Filter, AlertCircle, CheckCircle, Lock, Trophy, Search, ChevronRight, ChevronLeft, Share2, AlertTriangle, Calculator, X, Copy, PieChart, Check, ChevronDown, Flag, History, Loader2, ListChecks, Edit2, Crown, LayoutGrid, AlertOctagon, Wand2, Eye, EyeOff, ArrowDownWideNarrow, GraduationCap, Printer, School, FileBadge, UserX, ClipboardCheck, BarChart3, ClipboardList, Info, RotateCcw, Clock, ChevronUp, Trash2, RefreshCw } from 'lucide-react';
+import { Save, Filter, AlertCircle, CheckCircle, Lock, Unlock, Trophy, Search, ChevronRight, ChevronLeft, Share2, AlertTriangle, Calculator, X, Copy, PieChart, Check, ChevronDown, Flag, History, Loader2, ListChecks, Edit2, Crown, LayoutGrid, AlertOctagon, Wand2, Eye, EyeOff, ArrowDownWideNarrow, GraduationCap, Printer, School, FileBadge, UserX, ClipboardCheck, BarChart3, ClipboardList, Info, RotateCcw, Clock, ChevronUp, Trash2, RefreshCw, Upload, Image as ImageIcon, FileCheck } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import SearchableSelect from './SearchableSelect';
 import ConfirmationModal from './ConfirmationModal';
+import { resizeImage } from '../services/utils';
 
 // --- Types & Interfaces ---
 
@@ -254,7 +255,7 @@ const ConfirmModal: React.FC<ConfirmModalProps> = (props) => {
                              <table className="min-w-full divide-y divide-gray-200 text-sm relative">
                                  <thead className="bg-gray-50 sticky top-0 shadow-sm z-10">
                                      <tr>
-                                         <th className="px-3 py-2 text-left font-medium text-gray-500 bg-gray-50">ทีม</th>
+                                         <th className="px-3 py-2 text-left font-medium text-gray-500 bg-gray-50">โรงเรียน (ทีม)</th>
                                          <th className="px-3 py-2 text-center font-medium text-gray-500 bg-gray-50 w-24">คะแนน</th>
                                          <th className="px-3 py-2 text-center font-medium text-gray-500 bg-gray-50 w-24">Rank</th>
                                          <th className="px-3 py-2 text-center font-medium text-gray-500 bg-gray-50 w-32">Medal</th>
@@ -267,7 +268,8 @@ const ConfirmModal: React.FC<ConfirmModalProps> = (props) => {
                                          return (
                                              <tr key={item.id} className={item.isModified ? 'bg-blue-50/70' : ''}>
                                                  <td className="px-3 py-2 text-gray-900">
-                                                     <div className="font-medium truncate max-w-[200px]" title={item.teamName}>{item.teamName}</div>
+                                                     <div className="font-medium truncate max-w-[200px]" title={item.schoolName}>{item.schoolName}</div>
+                                                     <div className="text-[10px] text-gray-500 truncate max-w-[200px]">{item.teamName}</div>
                                                      {item.isModified && <span className="text-[10px] text-blue-600 flex items-center"><Edit2 className="w-3 h-3 mr-0.5"/> Modified</span>}
                                                  </td>
                                                  <td className="px-3 py-2 text-center">
@@ -297,7 +299,7 @@ const ConfirmModal: React.FC<ConfirmModalProps> = (props) => {
                         onClick={props.onConfirm} 
                         className={`flex-1 px-4 py-2 text-white rounded-lg font-medium transition-colors ${isReset ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'}`}
                     >
-                        {isReset ? 'ยืนยันการรีเซ็ต' : 'ยืนยันบันทึก'}
+                        {isReset ? 'ยืนยันการรีเซ็ต' : 'ยืนยันและประกาศผล'}
                     </button>
                 </div>
             </div>
@@ -328,6 +330,9 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
   const [showUnscoredOnly, setShowUnscoredOnly] = useState(false);
   const [showPendingActivities, setShowPendingActivities] = useState(false);
 
+  // Feature 1: Lock/Unlock Activity State
+  const [isActivityLocked, setIsActivityLocked] = useState(false);
+
   // Progress Bar & Timer State
   const [progress, setProgress] = useState<{ current: number, total: number }>({ current: 0, total: 0 });
   const [processStartTime, setProcessStartTime] = useState<number | null>(null);
@@ -339,6 +344,10 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
   // For Reset logic
   const [activityToReset, setActivityToReset] = useState<string | null>(null);
 
+  // Score Sheet Upload State
+  const [isUploadingSheet, setIsUploadingSheet] = useState(false);
+  const scoreSheetInputRef = useRef<HTMLInputElement>(null);
+
   // Modal States for Tables
   const [showResultListModal, setShowResultListModal] = useState(false);
   const [viewingResultActivity, setViewingResultActivity] = useState<string | null>(null);
@@ -349,11 +358,14 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
   // Add missing state for Reset confirmation (Local Edits)
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
-  // References for keyboard navigation
-  const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  // Feature 4: Excel-like Navigation Refs (Map "teamId-field" to HTMLElement)
+  const cellRefs = useRef<Record<string, HTMLElement | null>>({});
 
-  // Local Storage Key
+  // Local Storage Key for Edits
   const storageKey = `score_draft_${selectedActivityId}_${viewScope}`;
+  
+  // Local Storage Key for Locks
+  const lockKey = `score_lock_${selectedActivityId}_${viewScope}`;
 
   useEffect(() => {
       const paramActId = searchParams.get('activityId');
@@ -385,8 +397,12 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
           } else {
               setEdits({});
           }
+          
+          // Feature 1: Load Lock State
+          const savedLock = localStorage.getItem(lockKey);
+          setIsActivityLocked(savedLock === 'true');
       }
-  }, [selectedActivityId, viewScope, storageKey]);
+  }, [selectedActivityId, viewScope, storageKey, lockKey]);
 
   // Save Draft to LocalStorage
   useEffect(() => {
@@ -414,6 +430,13 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
         showToast('อัปเดตข้อมูลล่าสุดแล้ว', 'success');
   };
 
+  const toggleActivityLock = () => {
+      const newState = !isActivityLocked;
+      setIsActivityLocked(newState);
+      localStorage.setItem(lockKey, String(newState));
+      showToast(newState ? 'ล็อกกิจกรรมแล้ว (ห้ามแก้ไข)' : 'ปลดล็อกกิจกรรมแล้ว', newState ? 'info' : 'success');
+  };
+
   // 1. Check Permissions
   const role = user?.level?.toLowerCase();
   const allowedRoles = ['admin', 'area', 'group_admin', 'score'];
@@ -424,6 +447,9 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
   
   // Reset Permissions: Admin/Area always, Group Admin only in Cluster View
   const canReset = ['admin', 'area'].includes(role || '') || (role === 'group_admin' && viewScope === 'cluster');
+
+  // Permission for Locking: Admin/Area/GroupAdmin
+  const canLock = ['admin', 'area'].includes(role || '') || (role === 'group_admin' && viewScope === 'cluster');
 
   if (!user || !allowedRoles.includes(role || '')) {
       return (
@@ -654,6 +680,19 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       }); 
   }, [allAuthorizedTeams, selectedActivityId, searchTerm, showUnscoredOnly, edits, selectedClusterFilter, canFilterCluster, data.schools, viewScope]);
 
+  // Feature 2: Tie-Breaker Logic - Rank Counts
+  const rankCounts = useMemo(() => {
+      const counts: Record<string, number> = {};
+      filteredTeams.forEach(t => {
+          const edit = edits[t.teamId];
+          const rank = edit?.rank ?? (viewScope === 'area' ? String(getAreaInfo(t)?.rank || '') : String(t.rank || ''));
+          if (rank) {
+              counts[rank] = (counts[rank] || 0) + 1;
+          }
+      });
+      return counts;
+  }, [filteredTeams, edits, viewScope]);
+
   // Validation Logic
   const validationWarnings = useMemo(() => {
       if (!selectedActivityId) return [];
@@ -805,22 +844,63 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       });
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent, currentIndex: number) => {
+  // Feature 4: Excel-like Navigation
+  const handleKeyDown = (e: React.KeyboardEvent, currentTeamId: string, currentField: string, index: number) => {
+      const isShift = e.shiftKey;
+      const columns = viewScope === 'cluster' ? ['score', 'medal', 'rank', 'flag'] : ['score', 'medal', 'rank'];
+      const colIndex = columns.indexOf(currentField);
+      
+      let nextTeamId = currentTeamId;
+      let nextField = currentField;
+      let shouldFocus = false;
+
       if (e.key === 'Enter' || e.key === 'ArrowDown') {
           e.preventDefault();
-          const nextIndex = currentIndex + 1;
+          const nextIndex = index + 1;
           if (nextIndex < filteredTeams.length) {
-              const nextTeamId = filteredTeams[nextIndex].teamId;
-              const nextInput = inputRefs.current[nextTeamId];
-              if (nextInput) nextInput.focus();
+              nextTeamId = filteredTeams[nextIndex].teamId;
+              shouldFocus = true;
           }
       } else if (e.key === 'ArrowUp') {
           e.preventDefault();
-          const prevIndex = currentIndex - 1;
+          const prevIndex = index - 1;
           if (prevIndex >= 0) {
-              const prevTeamId = filteredTeams[prevIndex].teamId;
-              const currentInput = inputRefs.current[prevTeamId];
-              if (currentInput) currentInput.focus();
+              nextTeamId = filteredTeams[prevIndex].teamId;
+              shouldFocus = true;
+          }
+      } else if (e.key === 'ArrowRight' && !isShift) {
+          // If in text input and cursor not at end, don't move
+          const target = e.target as HTMLInputElement;
+          if (target.type === 'text' || target.type === 'number') {
+              if (target.selectionStart !== target.value.length) return;
+          }
+          
+          if (colIndex < columns.length - 1) {
+              e.preventDefault();
+              nextField = columns[colIndex + 1];
+              shouldFocus = true;
+          }
+      } else if (e.key === 'ArrowLeft' && !isShift) {
+          const target = e.target as HTMLInputElement;
+          if (target.type === 'text' || target.type === 'number') {
+              if (target.selectionStart !== 0) return;
+          }
+
+          if (colIndex > 0) {
+              e.preventDefault();
+              nextField = columns[colIndex - 1];
+              shouldFocus = true;
+          }
+      }
+
+      if (shouldFocus) {
+          const refKey = `${nextTeamId}-${nextField}`;
+          const el = cellRefs.current[refKey];
+          if (el) {
+              el.focus();
+              if (el instanceof HTMLInputElement) {
+                  el.select();
+              }
           }
       }
   };
@@ -1208,7 +1288,10 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
         setEdits(newEdits);
 
         if (successCount === dirtyIds.length) {
-            showToast(`บันทึกข้อมูลทั้งหมด ${successCount} รายการเรียบร้อยแล้ว`, 'success');
+            // Auto Lock Feature: If batch save successful, lock activity
+            setIsActivityLocked(true);
+            localStorage.setItem(lockKey, 'true');
+            showToast(`บันทึกและประกาศผลสำเร็จ (${successCount} รายการ)`, 'success');
         } else {
              showToast(`บันทึกสำเร็จ ${successCount} จาก ${dirtyIds.length} รายการ`, 'info');
         }
@@ -1268,6 +1351,52 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
   const handleViewResultList = (activityId: string) => {
       setViewingResultActivity(activityId);
       setShowResultListModal(true);
+  };
+
+  const handleScoreSheetUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      if (!selectedActivityId) {
+          showToast('กรุณาเลือกกิจกรรมก่อน', 'error');
+          return;
+      }
+
+      setIsUploadingSheet(true);
+      try {
+          const base64 = await resizeImage(file, 1200, 1600, 0.8);
+          const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+          const filename = `ScoreSheet_${selectedActivityId}_${viewScope}_${timestamp}.jpg`;
+          
+          // 1. Upload Image
+          const res = await uploadImage(base64, filename);
+          
+          if (res.status === 'success' && res.fileId) {
+              // 2. Save Metadata
+              const saveRes = await saveScoreSheet({
+                  activityId: selectedActivityId,
+                  scope: viewScope,
+                  fileId: res.fileId,
+                  fileUrl: res.fileUrl || '',
+                  uploadedBy: user?.name || user?.username || 'Unknown'
+              });
+
+              if (saveRes) {
+                  showToast('อัปโหลดใบคะแนนเรียบร้อยแล้ว', 'success');
+                  // Optional: Refresh data to show indicator
+                  onDataUpdate();
+              } else {
+                  showToast('บันทึกข้อมูลไม่สำเร็จ', 'error');
+              }
+          } else {
+              showToast('อัปโหลดไฟล์ไม่สำเร็จ: ' + res.message, 'error');
+          }
+      } catch (err) {
+          console.error(err);
+          showToast('เกิดข้อผิดพลาดในการอัปโหลด', 'error');
+      } finally {
+          setIsUploadingSheet(false);
+          if (scoreSheetInputRef.current) scoreSheetInputRef.current.value = '';
+      }
   };
 
   const activityResultList = useMemo(() => {
@@ -1368,16 +1497,16 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                           {viewScope === 'area' ? 'เฉพาะรอบเขตพื้นที่' : 'เฉพาะกลุ่มเครือข่ายของท่าน'}
                       </span>
                   </h3>
-                  <div className="flex gap-2 w-full md:w-auto">
+                  <div className="flex flex-col md:flex-row gap-2 w-full md:w-auto mt-2 md:mt-0">
                         <button 
                             onClick={handleRefresh}
-                            className="bg-white border border-indigo-200 text-indigo-700 text-xs rounded px-3 py-1.5 hover:bg-indigo-50 transition-colors flex items-center"
+                            className="bg-white border border-indigo-200 text-indigo-700 text-xs rounded px-3 py-1.5 hover:bg-indigo-50 transition-colors flex items-center justify-center md:justify-start"
                             title="อัปเดตข้อมูลล่าสุด"
                         >
                             <RefreshCw className="w-3.5 h-3.5 mr-1" /> Refresh
                         </button>
                         <select 
-                            className="bg-white border border-indigo-200 text-indigo-700 text-xs rounded px-2 py-1 focus:outline-none flex-1 md:flex-none"
+                            className="bg-white border border-indigo-200 text-indigo-700 text-xs rounded px-2 py-1 focus:outline-none w-full md:w-auto"
                             value={announcedCategoryFilter}
                             onChange={(e) => setAnnouncedCategoryFilter(e.target.value)}
                         >
@@ -1386,7 +1515,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                         </select>
                         <input 
                             type="text" 
-                            className="bg-white border border-indigo-200 text-xs rounded px-2 py-1 focus:outline-none flex-1 md:w-48"
+                            className="bg-white border border-indigo-200 text-xs rounded px-2 py-1 focus:outline-none w-full md:w-48"
                             placeholder="ค้นหากิจกรรม..."
                             value={announcedSearch}
                             onChange={(e) => setAnnouncedSearch(e.target.value)}
@@ -1498,7 +1627,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
           </div>
       )}
 
-      {/* Completion Dashboard - Adjusted to respect viewScope teams only */}
+      {/* Completion Dashboard */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4 group">
                 <div className="p-3 bg-green-50 text-green-600 rounded-2xl group-hover:scale-110 transition-transform">
@@ -1525,11 +1654,6 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                         {completionStats.totalPendingTeams > 0 && (
                             <div className="text-[10px] text-red-500 font-bold flex items-center">
                                 <Calculator className="w-3 h-3 mr-1" /> ค้างคะแนน {completionStats.totalPendingTeams} ทีม
-                            </div>
-                        )}
-                        {viewScope === 'cluster' && (
-                             <div className="text-[10px] text-amber-600 font-bold flex items-center">
-                                <Trophy className="w-3 h-3 mr-1" /> ขาดตัวแทน {completionStats.pendingList.filter(a => a.reason.missingRep).length} รายการ
                             </div>
                         )}
                     </div>
@@ -1654,9 +1778,21 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                   </div>
                   <h3 className="text-lg font-bold text-gray-900">{parseLevels(currentActivity.levels)}</h3>
               </div>
-              <div className="text-sm text-gray-600 bg-white/50 px-3 py-2 rounded-lg border border-blue-100">
-                  <span className="block text-xs text-gray-400 mb-0.5">ประเภท</span>
-                  <span className="font-medium text-blue-800">{currentActivity.mode === 'Team' ? 'ทีม' : 'เดี่ยว'} ({currentActivity.reqStudents} คน)</span>
+              <div className="flex items-center gap-3">
+                  {canLock && (
+                      <button 
+                          onClick={toggleActivityLock}
+                          className={`flex items-center px-4 py-2 rounded-lg text-xs font-bold transition-all border shadow-sm ${isActivityLocked ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
+                          title={isActivityLocked ? "ปลดล็อกการกรอกคะแนน" : "ล็อกการกรอกคะแนน"}
+                      >
+                          {isActivityLocked ? <Lock className="w-4 h-4 mr-1.5" /> : <Unlock className="w-4 h-4 mr-1.5" />}
+                          {isActivityLocked ? 'LOCKED' : 'UNLOCKED'}
+                      </button>
+                  )}
+                  <div className="text-sm text-gray-600 bg-white/50 px-3 py-2 rounded-lg border border-blue-100">
+                      <span className="block text-xs text-gray-400 mb-0.5">ประเภท</span>
+                      <span className="font-medium text-blue-800">{currentActivity.mode === 'Team' ? 'ทีม' : 'เดี่ยว'} ({currentActivity.reqStudents} คน)</span>
+                  </div>
               </div>
           </div>
       )}
@@ -1698,6 +1834,26 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                             {showUnscoredOnly ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                             <span className="hidden sm:inline">คัดกรอง: ยังไม่ตัดสิน</span>
                          </button>
+                         
+                         {/* Upload Score Sheet Button */}
+                         <div className="relative">
+                             <input 
+                                type="file" 
+                                ref={scoreSheetInputRef} 
+                                className="hidden" 
+                                accept="image/*" 
+                                onChange={handleScoreSheetUpload} 
+                             />
+                             <button 
+                                onClick={() => scoreSheetInputRef.current?.click()}
+                                disabled={isUploadingSheet || isActivityLocked}
+                                className={`p-2 border rounded-lg transition-colors whitespace-nowrap flex items-center ${isActivityLocked ? 'bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200' : 'bg-white text-purple-600 border-purple-200 hover:bg-purple-50'}`}
+                                title="แนบใบคะแนนรวม"
+                             >
+                                 {isUploadingSheet ? <Loader2 className="w-4 h-4 animate-spin"/> : <FileCheck className="w-4 h-4" />}
+                             </button>
+                         </div>
+
                          <button 
                             onClick={handleShareTop3}
                             className="p-2 bg-amber-50 text-amber-600 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors whitespace-nowrap flex items-center"
@@ -1753,14 +1909,15 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                      <div className="flex justify-end gap-2">
                                         <button 
                                             onClick={() => setShowAutoRankConfirm(true)}
-                                            className="inline-flex items-center px-2 py-1 bg-purple-50 text-purple-600 border border-purple-200 rounded text-xs hover:bg-purple-100 transition-colors shadow-sm"
+                                            className="inline-flex items-center px-2 py-1 bg-purple-50 text-purple-600 border border-purple-200 rounded text-xs hover:bg-purple-100 transition-colors shadow-sm disabled:opacity-50"
                                             title="คำนวณลำดับอัตโนมัติ"
+                                            disabled={isActivityLocked}
                                         >
                                             <Wand2 className="w-3 h-3 mr-1" /> Auto Rank
                                         </button>
 
                                         {/* Clear Draft Button */}
-                                        {Object.keys(edits).length > 0 && (
+                                        {Object.keys(edits).length > 0 && !isActivityLocked && (
                                             <button 
                                                 onClick={handleClearDraft}
                                                 className="inline-flex items-center px-2 py-1 bg-gray-100 text-gray-600 border border-gray-200 rounded text-xs hover:bg-gray-200 transition-colors"
@@ -1775,12 +1932,14 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                                 <button 
                                                     onClick={() => setShowResetConfirm(true)}
                                                     className="inline-flex items-center px-2 py-1 bg-red-50 text-red-600 border border-red-200 rounded text-xs hover:bg-red-100 transition-colors"
+                                                    disabled={isActivityLocked}
                                                 >
                                                     <RotateCcw className="w-3 h-3 mr-1" /> Reset
                                                 </button>
                                                 <button 
                                                     onClick={initiateBatchSave}
-                                                    className="inline-flex items-center px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 transition-colors shadow-sm animate-pulse"
+                                                    className="inline-flex items-center px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 transition-colors shadow-sm animate-pulse disabled:opacity-50 disabled:animate-none"
+                                                    disabled={isActivityLocked}
                                                 >
                                                     <ListChecks className="w-3 h-3 mr-1" /> Save All ({dirtyCount})
                                                 </button>
@@ -1825,9 +1984,12 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                   const scorePercent = isNaN(numScore) ? 0 : Math.min(100, Math.max(0, numScore));
                                   const scoreColor = numScore === -1 ? 'bg-gray-400' : (numScore >= 80 ? 'bg-green-500' : numScore >= 70 ? 'bg-blue-500' : numScore >= 60 ? 'bg-orange-400' : 'bg-red-400');
 
-                                  const disabledInput = viewScope === 'area' && !canScoreArea;
+                                  const disabledInput = (viewScope === 'area' && !canScoreArea) || isActivityLocked;
                                   const isUnscored = currentScore === 0 && (!edit?.score || parseFloat(edit.score) === 0);
                                   const isAbsent = numScore === -1;
+                                  
+                                  // Feature 2: Check for Duplicate Rank
+                                  const isDuplicateRank = displayRank && rankCounts[displayRank] > 1;
 
                                   return (
                                       <tr key={team.teamId} className={`transition-colors ${isDirty ? "bg-blue-50/50" : (isAbsent ? "bg-gray-50 opacity-80" : (isUnscored ? "bg-red-50/20 border-l-4 border-l-red-300" : (currentScore > 0 ? "bg-green-50/20" : "")))}`}>
@@ -1842,12 +2004,12 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                           <td className="px-6 py-4 whitespace-nowrap relative">
                                               <div className="relative">
                                                   <input 
-                                                    ref={(el) => { inputRefs.current[team.teamId] = el; }}
+                                                    ref={(el) => { cellRefs.current[`${team.teamId}-score`] = el; }}
                                                     type="number" step="0.01" min="-1" max="100"
                                                     className={`w-full border rounded px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none ${isDirty ? 'border-blue-400 bg-white font-bold' : 'border-gray-300'} ${disabledInput ? 'bg-gray-100 cursor-not-allowed' : ''} ${isAbsent ? 'text-gray-400' : ''}`}
                                                     value={displayScore}
                                                     onChange={(e) => handleInputChange(team.teamId, 'score', e.target.value)}
-                                                    onKeyDown={(e) => handleKeyDown(e, idx)}
+                                                    onKeyDown={(e) => handleKeyDown(e, team.teamId, 'score', idx)}
                                                     placeholder="0.00"
                                                     disabled={disabledInput}
                                                   />
@@ -1859,9 +2021,11 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                           </td>
                                           <td className="px-6 py-4 whitespace-nowrap relative">
                                               <select 
+                                                ref={(el) => { cellRefs.current[`${team.teamId}-medal`] = el as any; }}
                                                 className={`w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none ${disabledInput ? 'bg-gray-100 cursor-not-allowed' : ''} ${isAbsent ? 'bg-gray-50 text-gray-500' : ''}`}
                                                 value={displayMedal}
                                                 onChange={(e) => handleInputChange(team.teamId, 'medal', e.target.value)}
+                                                onKeyDown={(e) => handleKeyDown(e, team.teamId, 'medal', idx)}
                                                 disabled={disabledInput || isAbsent}
                                               >
                                                   <option value="">- Auto -</option>
@@ -1877,24 +2041,36 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
                                                   </span>
                                               )}
                                           </td>
-                                          <td className="px-6 py-4 whitespace-nowrap">
+                                          <td className="px-6 py-4 whitespace-nowrap relative">
                                                <input 
+                                                ref={(el) => { cellRefs.current[`${team.teamId}-rank`] = el; }}
                                                 type="text" 
-                                                className={`w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none text-center ${disabledInput || isAbsent ? 'bg-gray-100 cursor-not-allowed text-gray-300' : ''}`}
+                                                className={`w-full border rounded px-2 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none text-center 
+                                                    ${disabledInput || isAbsent ? 'bg-gray-100 cursor-not-allowed text-gray-300' : ''}
+                                                    ${isDuplicateRank ? 'border-red-500 bg-red-50 text-red-700 font-bold' : 'border-gray-300'}
+                                                `}
                                                 value={isAbsent ? '' : displayRank}
                                                 onChange={(e) => handleInputChange(team.teamId, 'rank', e.target.value)}
+                                                onKeyDown={(e) => handleKeyDown(e, team.teamId, 'rank', idx)}
                                                 placeholder="-"
                                                 disabled={disabledInput || isAbsent}
                                               />
+                                              {isDuplicateRank && (
+                                                  <span className="absolute -top-2 -right-1 text-red-500" title="ลำดับซ้ำกัน (Duplicate Rank)">
+                                                      <AlertTriangle className="w-4 h-4 fill-white" />
+                                                  </span>
+                                              )}
                                           </td>
                                           {viewScope === 'cluster' && (
                                               <td className="px-6 py-4 whitespace-nowrap text-center">
                                                   <input 
+                                                    ref={(el) => { cellRefs.current[`${team.teamId}-flag`] = el as any; }}
                                                     type="checkbox"
-                                                    disabled={isAbsent}
+                                                    disabled={isAbsent || disabledInput}
                                                     className="w-5 h-5 accent-blue-600 cursor-pointer disabled:opacity-30"
                                                     checked={String(displayFlag).toUpperCase() === 'TRUE'}
                                                     onChange={(e) => handleInputChange(team.teamId, 'flag', e.target.checked ? 'TRUE' : '')}
+                                                    onKeyDown={(e) => handleKeyDown(e, team.teamId, 'flag', idx)}
                                                   />
                                               </td>
                                           )}
