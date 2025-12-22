@@ -7,7 +7,7 @@ import StatCard from './StatCard';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { addAnnouncement, toggleLikeAnnouncement, addComment } from '../services/api';
 import { formatDeadline } from '../services/utils';
-import { shareAnnouncement } from '../services/liff';
+import { shareAnnouncement, shareTop3Result, shareScoreResult } from '../services/liff';
 import SearchableSelect from './SearchableSelect';
 
 interface DashboardProps {
@@ -86,6 +86,26 @@ const ActivityResultsModal = ({ activityId, data, onClose, viewLevel }: { activi
         });
     }, [data.teams, activityId, viewLevel]);
 
+    const handleShareTeam = async (team: any) => {
+        const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
+        const schoolName = school?.SchoolName || team.schoolId;
+        const activityName = activity?.name || '';
+        
+        try {
+            await shareScoreResult(
+                team.teamName,
+                schoolName,
+                activityName,
+                team.displayScore,
+                team.displayMedal,
+                team.displayRank,
+                team.teamId
+            );
+        } catch (error) {
+            console.error("Share failed", error);
+        }
+    };
+
     return (
         <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
             <div className="bg-white rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
@@ -103,13 +123,14 @@ const ActivityResultsModal = ({ activityId, data, onClose, viewLevel }: { activi
                 </div>
                 <div className="flex-1 overflow-y-auto p-0">
                     <table className="min-w-full text-sm">
-                        <thead className="bg-gray-50 sticky top-0 shadow-sm">
+                        <thead className="bg-gray-50 sticky top-0 shadow-sm z-10">
                             <tr>
                                 <th className="px-4 py-3 text-center w-16">อันดับ</th>
                                 <th className="px-4 py-3 text-left">ทีม</th>
-                                <th className="px-4 py-3 text-left">โรงเรียน</th>
+                                <th className="px-4 py-3 text-left hidden sm:table-cell">โรงเรียน</th>
                                 <th className="px-4 py-3 text-center w-24">คะแนน</th>
                                 <th className="px-4 py-3 text-left">รางวัล</th>
+                                <th className="px-4 py-3 text-center w-16">แชร์</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
@@ -123,19 +144,31 @@ const ActivityResultsModal = ({ activityId, data, onClose, viewLevel }: { activi
                                     <td className="px-4 py-3 text-center font-bold text-gray-500">
                                         {t.displayRank || '-'}
                                     </td>
-                                    <td className="px-4 py-3 font-medium text-gray-900">{t.teamName}</td>
-                                    <td className="px-4 py-3 text-gray-600">{school?.SchoolName || t.schoolId}</td>
+                                    <td className="px-4 py-3">
+                                        <div className="font-medium text-gray-900">{t.teamName}</div>
+                                        <div className="text-xs text-gray-500 sm:hidden">{school?.SchoolName || t.schoolId}</div>
+                                    </td>
+                                    <td className="px-4 py-3 text-gray-600 hidden sm:table-cell">{school?.SchoolName || t.schoolId}</td>
                                     <td className="px-4 py-3 text-center font-bold text-blue-600">{t.displayScore === -1 ? '-' : t.displayScore}</td>
                                     <td className="px-4 py-3">
-                                        <span className={`px-2 py-1 rounded border text-xs font-bold ${medalColor}`}>
+                                        <span className={`px-2 py-1 rounded border text-xs font-bold ${medalColor} whitespace-nowrap`}>
                                             {t.displayMedal || 'เข้าร่วม'}
                                         </span>
+                                    </td>
+                                    <td className="px-4 py-3 text-center">
+                                        <button 
+                                            onClick={() => handleShareTeam(t)}
+                                            className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-full transition-colors"
+                                            title="แชร์ผล"
+                                        >
+                                            <Share2 className="w-4 h-4" />
+                                        </button>
                                     </td>
                                 </tr>
                                 );
                             })}
                             {teams.length === 0 && (
-                                <tr><td colSpan={5} className="py-12 text-center text-gray-400">ยังไม่มีข้อมูลผลการแข่งขัน</td></tr>
+                                <tr><td colSpan={6} className="py-12 text-center text-gray-400">ยังไม่มีข้อมูลผลการแข่งขัน</td></tr>
                             )}
                         </tbody>
                     </table>
@@ -146,6 +179,7 @@ const ActivityResultsModal = ({ activityId, data, onClose, viewLevel }: { activi
 }
 
 const AnnouncementDetailModal = ({ item, user, onClose, onUpdate }: { item: Announcement, user?: User | null, onClose: () => void, onUpdate?: (updatedItem: Announcement) => void }) => {
+    // ... (unchanged)
     const coverAttachment = item.attachments?.find(att => att.type.includes('image'));
     const coverImage = coverAttachment ? getAttachmentImageUrl(coverAttachment) : null;
     const videoEmbedUrl = item.link ? getVideoEmbedUrl(item.link) : null;
@@ -433,6 +467,45 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
       return { list: filtered, categories };
   }, [data.activities, data.teams, data.activityStatus, viewLevel, announcedCategory, announcedSearch]);
 
+  const handleShareTop3 = async (act: any) => {
+        let teams = data.teams.filter(t => t.activityId === act.id);
+        
+        if (viewLevel === 'area') {
+            teams = teams.filter(t => t.stageStatus === 'Area' || String(t.flag).toUpperCase() === 'TRUE');
+        }
+
+        const winners = teams.map(t => {
+            let score = 0, rank = '', medal = '';
+            if (viewLevel === 'area') {
+                const info = getAreaInfo(t);
+                score = info?.score || 0;
+                rank = info?.rank || '';
+                medal = info?.medal || '';
+            } else {
+                score = t.score;
+                rank = t.rank;
+                medal = t.medalOverride || (score >= 80 ? 'Gold' : score >= 70 ? 'Silver' : score >= 60 ? 'Bronze' : 'Participant');
+            }
+            return {
+                rank: parseInt(rank) || 999,
+                teamName: t.teamName,
+                schoolName: data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId)?.SchoolName || t.schoolId,
+                score: String(score),
+                medal: medal
+            };
+        }).filter(w => w.rank >= 1 && w.rank <= 3).sort((a, b) => a.rank - b.rank);
+
+        if (winners.length > 0) {
+            try {
+                await shareTop3Result(act.name, winners);
+            } catch(e) {
+                console.error("Share failed", e);
+            }
+        } else {
+            alert('ยังไม่มีข้อมูลลำดับที่ 1-3');
+        }
+  };
+
   // --- Data Filtering & Processing for Stats ---
   const scopeTeams = useMemo(() => {
       if (viewLevel === 'area') {
@@ -578,7 +651,8 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
               </div>
           </div>
 
-          <div className="overflow-x-auto">
+          {/* Desktop Table View */}
+          <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-sm">
                   <thead className="bg-gray-50 text-gray-500 font-medium">
                       <tr>
@@ -586,7 +660,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
                           <th className="px-6 py-3 text-left">หมวดหมู่</th>
                           <th className="px-6 py-3 text-center">ทีมทั้งหมด</th>
                           <th className="px-6 py-3 text-center">บันทึกแล้ว</th>
-                          <th className="px-6 py-3 text-right">ดูผล</th>
+                          <th className="px-6 py-3 text-right">ดำเนินการ</th>
                       </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -600,12 +674,21 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
                                   <td className="px-6 py-3 text-center text-gray-500">{act.totalTeams}</td>
                                   <td className="px-6 py-3 text-center font-bold text-green-600">{act.scoredTeams}</td>
                                   <td className="px-6 py-3 text-right">
-                                      <button 
-                                          onClick={() => setResultsModalActivityId(act.id)}
-                                          className="text-xs bg-purple-50 text-purple-700 px-3 py-1.5 rounded-lg border border-purple-100 hover:bg-purple-100 font-bold inline-flex items-center"
-                                      >
-                                          <Eye className="w-3 h-3 mr-1.5" /> ดูผล
-                                      </button>
+                                      <div className="flex justify-end gap-2">
+                                          <button 
+                                              onClick={() => handleShareTop3(act)}
+                                              className="text-xs bg-amber-50 text-amber-700 px-3 py-1.5 rounded-lg border border-amber-100 hover:bg-amber-100 font-bold inline-flex items-center"
+                                              title="Share Top 3"
+                                          >
+                                              <Share2 className="w-3 h-3 mr-1.5" /> Share Top 3
+                                          </button>
+                                          <button 
+                                              onClick={() => setResultsModalActivityId(act.id)}
+                                              className="text-xs bg-purple-50 text-purple-700 px-3 py-1.5 rounded-lg border border-purple-100 hover:bg-purple-100 font-bold inline-flex items-center"
+                                          >
+                                              <Eye className="w-3 h-3 mr-1.5" /> ดูผล
+                                          </button>
+                                      </div>
                                   </td>
                               </tr>
                           ))
@@ -618,6 +701,44 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
                       )}
                   </tbody>
               </table>
+          </div>
+
+          {/* Mobile Card View */}
+          <div className="md:hidden p-4 space-y-3 bg-gray-50">
+              {announcedActivities.list.length > 0 ? (
+                  announcedActivities.list.slice(0, 10).map((act) => (
+                      <div key={act.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+                          <div className="flex justify-between items-start mb-2">
+                              <h3 className="font-bold text-gray-900 text-sm line-clamp-2 leading-tight">{act.name}</h3>
+                              <span className="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded ml-2 whitespace-nowrap">{act.category}</span>
+                          </div>
+                          
+                          <div className="flex gap-4 text-xs text-gray-500 mb-4 border-t border-gray-100 pt-2">
+                              <div>ทีมทั้งหมด: <span className="font-bold">{act.totalTeams}</span></div>
+                              <div>บันทึกแล้ว: <span className="font-bold text-green-600">{act.scoredTeams}</span></div>
+                          </div>
+
+                          <div className="flex gap-2">
+                              <button 
+                                  onClick={() => handleShareTop3(act)}
+                                  className="flex-1 text-xs bg-amber-50 text-amber-700 py-2 rounded-lg border border-amber-200 hover:bg-amber-100 font-bold flex items-center justify-center"
+                              >
+                                  <Share2 className="w-3.5 h-3.5 mr-1.5" /> Share Top 3
+                              </button>
+                              <button 
+                                  onClick={() => setResultsModalActivityId(act.id)}
+                                  className="flex-1 text-xs bg-purple-50 text-purple-700 py-2 rounded-lg border border-purple-200 hover:bg-purple-100 font-bold flex items-center justify-center"
+                              >
+                                  <Eye className="w-3.5 h-3.5 mr-1.5" /> ดูผล
+                              </button>
+                          </div>
+                      </div>
+                  ))
+              ) : (
+                  <div className="text-center py-8 text-gray-400 italic">
+                      ไม่พบรายการแข่งขันที่ประกาศผล
+                  </div>
+              )}
           </div>
           
           {announcedActivities.list.length > 10 && (
