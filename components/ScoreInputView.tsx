@@ -586,6 +586,7 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
         }
 
         try {
+            // Fix: Pass activity.name as the first parameter (2 args expected by definition)
             await shareTop3Result(activity.name, winners);
         } catch (e) {
             console.error(e);
