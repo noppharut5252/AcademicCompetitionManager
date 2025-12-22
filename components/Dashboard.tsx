@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { AppData, Announcement, User, AreaStageInfo, Team, Venue, Activity as ActivityType, Comment } from '../types';
-import { Users, School, Trophy, Megaphone, Plus, Book, Calendar, ChevronRight, FileText, Loader2, Star, Medal, TrendingUp, Activity, Timer, ArrowUpRight, Zap, Target, CheckCircle, PieChart as PieIcon, List, X, BarChart3, MapPin, Navigation, Handshake, Briefcase, UserX, GraduationCap, AlertTriangle, Clock, Heart, Share2, Download, Image as ImageIcon, ExternalLink, UserCheck, AlertOctagon, PlayCircle, ChevronDown, ChevronUp, MessageCircle, Send, ShieldCheck, RefreshCw, Crown, Search, Filter, Eye } from 'lucide-react';
+import { Users, School, Trophy, Megaphone, Plus, Book, Calendar, ChevronRight, FileText, Loader2, Star, Medal, TrendingUp, Activity, Timer, ArrowUpRight, Zap, Target, CheckCircle, PieChart as PieIcon, List, X, BarChart3, MapPin, Navigation, Handshake, Briefcase, UserX, GraduationCap, AlertTriangle, Clock, Heart, Share2, Download, Image as ImageIcon, ExternalLink, UserCheck, AlertOctagon, PlayCircle, ChevronDown, ChevronUp, MessageCircle, Send, ShieldCheck, RefreshCw, Crown, Search, Filter, Eye, Paperclip } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import StatCard from './StatCard';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -18,7 +18,8 @@ interface DashboardProps {
 const COLORS = ['#10B981', '#F59E0B', '#EF4444', '#6366F1'];
 const MEDAL_COLORS = { 'Gold': '#FFD700', 'Silver': '#C0C0C0', 'Bronze': '#CD7F32', 'Participant': '#94a3b8' };
 
-// --- Helper for Image URL ---
+// --- Helper Functions (Moved outside for reuse) ---
+
 const getAttachmentImageUrl = (att: { url: string, id?: string }) => {
     if (att.id) return `https://drive.google.com/thumbnail?id=${att.id}&sz=w1000`;
     if (att.url.includes('drive.google.com')) {
@@ -28,7 +29,6 @@ const getAttachmentImageUrl = (att: { url: string, id?: string }) => {
     return att.url;
 };
 
-// --- Helper for Video Embed ---
 const getVideoEmbedUrl = (url: string): string | null => {
     if (!url) return null;
     const loomMatch = url.match(/loom\.com\/share\/([a-f0-9]+)/);
@@ -38,23 +38,114 @@ const getVideoEmbedUrl = (url: string): string | null => {
     return null;
 };
 
-const getUserAvatar = (id: string, name?: string) => {
-    const seed = name || id;
-    return `https://ui-avatars.com/api/?name=${seed}&background=random&color=fff&size=64`;
+const getAreaInfo = (team: any): AreaStageInfo | null => {
+    try { return JSON.parse(team.stageInfo); } catch { return null; }
 };
 
-const generateCaptcha = () => {
-    const num1 = Math.floor(Math.random() * 10) + 1;
-    const num2 = Math.floor(Math.random() * 10) + 1;
-    return { question: `${num1} + ${num2} = ?`, answer: num1 + num2 };
+const calculateMedalFromScore = (score: number) => {
+    if (score >= 80) return 'Gold';
+    if (score >= 70) return 'Silver';
+    if (score >= 60) return 'Bronze';
+    return 'Participant';
 };
 
-// ... (Existing AnnouncementDetailModal, NewsCard, CountdownWidget, DashboardSkeleton components remain unchanged) ...
-// (Omitting them here for brevity as they are unchanged from previous file content provided in prompt, focusing on main Dashboard)
+// --- Modals ---
+
+const ActivityResultsModal = ({ activityId, data, onClose, viewLevel }: { activityId: string, data: AppData, onClose: () => void, viewLevel: 'cluster' | 'area' }) => {
+    const activity = data.activities.find(a => a.id === activityId);
+    
+    const teams = useMemo(() => {
+        let list = data.teams.filter(t => t.activityId === activityId);
+        
+        if (viewLevel === 'area') {
+             list = list.filter(t => t.stageStatus === 'Area' || String(t.flag).toUpperCase() === 'TRUE');
+        }
+
+        const processed = list.map(t => {
+            let score = 0, rank = '', medal = '';
+            if (viewLevel === 'area') {
+                const info = getAreaInfo(t);
+                score = info?.score || 0;
+                rank = info?.rank || '';
+                medal = info?.medal || '';
+            } else {
+                score = t.score;
+                rank = t.rank;
+                medal = t.medalOverride || (score >= 80 ? 'Gold' : score >= 70 ? 'Silver' : score >= 60 ? 'Bronze' : 'Participant');
+            }
+            return { ...t, displayScore: score, displayRank: rank, displayMedal: medal };
+        });
+
+        // Show teams that have been scored or explicitly marked present (-1)
+        return processed.filter(t => t.displayScore > 0 || t.displayScore === -1).sort((a, b) => {
+             // Sort by Rank ASC (if exists) -> Score DESC
+             const rA = parseInt(a.displayRank) || 999;
+             const rB = parseInt(b.displayRank) || 999;
+             if (rA !== rB) return rA - rB;
+             return b.displayScore - a.displayScore;
+        });
+    }, [data.teams, activityId, viewLevel]);
+
+    return (
+        <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-white rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+                <div className={`p-4 border-b border-gray-100 flex justify-between items-center ${viewLevel === 'area' ? 'bg-purple-600 text-white' : 'bg-blue-600 text-white'}`}>
+                    <div>
+                        <h3 className="font-bold text-lg flex items-center">
+                            <Trophy className="w-5 h-5 mr-2" />
+                            {activity?.name || 'รายละเอียดผลการแข่งขัน'}
+                        </h3>
+                        <p className="text-white/80 text-xs mt-0.5">
+                            ผลการแข่งขัน {viewLevel === 'area' ? 'ระดับเขตพื้นที่' : 'ระดับกลุ่มเครือข่าย'}
+                        </p>
+                    </div>
+                    <button onClick={onClose} className="p-1.5 hover:bg-white/20 rounded-full transition-colors"><X className="w-6 h-6"/></button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-0">
+                    <table className="min-w-full text-sm">
+                        <thead className="bg-gray-50 sticky top-0 shadow-sm">
+                            <tr>
+                                <th className="px-4 py-3 text-center w-16">อันดับ</th>
+                                <th className="px-4 py-3 text-left">ทีม</th>
+                                <th className="px-4 py-3 text-left">โรงเรียน</th>
+                                <th className="px-4 py-3 text-center w-24">คะแนน</th>
+                                <th className="px-4 py-3 text-left">รางวัล</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                            {teams.map((t, idx) => {
+                                const school = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
+                                const medalColor = t.displayMedal.includes('Gold') ? 'text-yellow-600 bg-yellow-50 border-yellow-200' :
+                                                   t.displayMedal.includes('Silver') ? 'text-gray-600 bg-gray-50 border-gray-200' :
+                                                   t.displayMedal.includes('Bronze') ? 'text-orange-600 bg-orange-50 border-orange-200' : 'text-blue-600 bg-blue-50 border-blue-200';
+                                return (
+                                <tr key={t.teamId} className="hover:bg-gray-50">
+                                    <td className="px-4 py-3 text-center font-bold text-gray-500">
+                                        {t.displayRank || '-'}
+                                    </td>
+                                    <td className="px-4 py-3 font-medium text-gray-900">{t.teamName}</td>
+                                    <td className="px-4 py-3 text-gray-600">{school?.SchoolName || t.schoolId}</td>
+                                    <td className="px-4 py-3 text-center font-bold text-blue-600">{t.displayScore === -1 ? '-' : t.displayScore}</td>
+                                    <td className="px-4 py-3">
+                                        <span className={`px-2 py-1 rounded border text-xs font-bold ${medalColor}`}>
+                                            {t.displayMedal || 'เข้าร่วม'}
+                                        </span>
+                                    </td>
+                                </tr>
+                                );
+                            })}
+                            {teams.length === 0 && (
+                                <tr><td colSpan={5} className="py-12 text-center text-gray-400">ยังไม่มีข้อมูลผลการแข่งขัน</td></tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    );
+}
 
 const AnnouncementDetailModal = ({ item, user, onClose, onUpdate }: { item: Announcement, user?: User | null, onClose: () => void, onUpdate?: (updatedItem: Announcement) => void }) => {
-    // ... (Same as before) ...
-    // Re-implementing briefly to avoid errors if copy-pasted directly without context
     const coverAttachment = item.attachments?.find(att => att.type.includes('image'));
     const coverImage = coverAttachment ? getAttachmentImageUrl(coverAttachment) : null;
     const videoEmbedUrl = item.link ? getVideoEmbedUrl(item.link) : null;
@@ -62,22 +153,156 @@ const AnnouncementDetailModal = ({ item, user, onClose, onUpdate }: { item: Anno
     const isLiked = user && likedBy.includes(user.userid);
     const [comments, setComments] = useState<Comment[]>(item.comments || []);
     const [commentInput, setCommentInput] = useState('');
-    
-    // ... Simplified logic for display ...
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const handleLike = async () => {
+        if (!user) return;
+        const newLikedBy = isLiked ? likedBy.filter(id => id !== user.userid) : [...likedBy, user.userid];
+        setLikedBy(newLikedBy);
+        await toggleLikeAnnouncement(item.id, user.userid);
+        if (onUpdate) onUpdate({ ...item, likedBy: newLikedBy });
+    };
+
+    const handleComment = async () => {
+        if (!user || !commentInput.trim()) return;
+        setIsSubmitting(true);
+        const newComment: Comment = {
+            id: Date.now().toString(),
+            userId: user.userid,
+            userName: user.name || user.displayName || 'User',
+            userAvatar: user.pictureUrl,
+            content: commentInput,
+            timestamp: new Date().toISOString()
+        };
+        const updatedComments = [...comments, newComment];
+        setComments(updatedComments);
+        setCommentInput('');
+        await addComment(item.id, newComment);
+        if (onUpdate) onUpdate({ ...item, comments: updatedComments });
+        setIsSubmitting(false);
+    };
+
     return (
         <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
             <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
                 <div className="p-4 border-b border-gray-100 flex justify-between items-start bg-gray-50">
                     <div className="pr-4">
                         <h3 className="font-bold text-lg text-gray-900 leading-tight">{item.title}</h3>
+                        <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
+                            <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-medium uppercase">{item.type}</span>
+                            <span>{new Date(item.date).toLocaleDateString('th-TH', { dateStyle: 'long' })}</span>
+                        </div>
                     </div>
                     <button onClick={onClose} className="p-2 hover:bg-gray-200 rounded-full transition-colors shrink-0">
                         <X className="w-5 h-5 text-gray-500" />
                     </button>
                 </div>
-                <div className="p-6 overflow-y-auto">
-                    {coverImage && <img src={coverImage} className="w-full h-48 object-cover rounded-lg mb-4" />}
-                    <div className="prose prose-sm text-gray-700 whitespace-pre-wrap">{item.content}</div>
+                
+                <div className="p-0 overflow-y-auto flex-1 bg-white">
+                    {/* Media Section */}
+                    {videoEmbedUrl ? (
+                        <div className="aspect-video w-full bg-black">
+                            <iframe src={videoEmbedUrl} className="w-full h-full" frameBorder="0" allowFullScreen />
+                        </div>
+                    ) : coverImage && (
+                        <img src={coverImage} className="w-full h-auto max-h-[300px] object-cover" />
+                    )}
+
+                    <div className="p-6 space-y-6">
+                        {/* Content */}
+                        <div className="prose prose-sm text-gray-700 whitespace-pre-wrap max-w-none">
+                            {item.content}
+                        </div>
+
+                        {/* Attachments List */}
+                        {item.attachments && item.attachments.length > 0 && (
+                            <div className="border-t border-gray-100 pt-4">
+                                <h4 className="text-sm font-bold text-gray-900 mb-3 flex items-center"><Paperclip className="w-4 h-4 mr-2"/> เอกสารแนบ</h4>
+                                <div className="space-y-2">
+                                    {item.attachments.map((att, i) => (
+                                        <a key={i} href={att.url} target="_blank" rel="noreferrer" className="flex items-center p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-all group">
+                                            <div className="p-2 bg-blue-100 text-blue-600 rounded-lg mr-3 group-hover:bg-white group-hover:scale-110 transition-all">
+                                                {att.type.includes('pdf') ? <FileText className="w-5 h-5"/> : <ImageIcon className="w-5 h-5"/>}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="text-sm font-medium text-gray-900 truncate">{att.name}</div>
+                                                <div className="text-xs text-gray-500">คลิกเพื่อเปิดดู</div>
+                                            </div>
+                                            <ExternalLink className="w-4 h-4 text-gray-400 group-hover:text-blue-500" />
+                                        </a>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Actions: Like & Share */}
+                        <div className="flex items-center gap-4 pt-4 border-t border-gray-100">
+                            <button 
+                                onClick={handleLike}
+                                disabled={!user}
+                                className={`flex items-center px-4 py-2 rounded-full text-sm font-medium transition-all ${isLiked ? 'bg-pink-100 text-pink-600' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                            >
+                                <Heart className={`w-4 h-4 mr-2 ${isLiked ? 'fill-current' : ''}`} />
+                                {likedBy.length} ถูกใจ
+                            </button>
+                            <button 
+                                onClick={() => shareAnnouncement(item.id, item.title, item.content, item.type, item.date, coverImage, item.link || '')}
+                                className="flex items-center px-4 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-all ml-auto"
+                            >
+                                <Share2 className="w-4 h-4 mr-2" />
+                                แชร์
+                            </button>
+                        </div>
+
+                        {/* Comments Section */}
+                        <div className="bg-gray-50 -mx-6 -mb-6 p-6 mt-4 border-t border-gray-100">
+                            <h4 className="text-sm font-bold text-gray-900 mb-4 flex items-center">
+                                <MessageCircle className="w-4 h-4 mr-2"/> ความคิดเห็น ({comments.length})
+                            </h4>
+                            
+                            <div className="space-y-4 mb-6 max-h-[300px] overflow-y-auto">
+                                {comments.map((c) => (
+                                    <div key={c.id} className="flex gap-3">
+                                        <img src={c.userAvatar || `https://ui-avatars.com/api/?name=${c.userName}&background=random`} className="w-8 h-8 rounded-full bg-white border border-gray-200" />
+                                        <div className="flex-1">
+                                            <div className="bg-white p-3 rounded-2xl rounded-tl-none border border-gray-200 shadow-sm">
+                                                <div className="flex justify-between items-baseline mb-1">
+                                                    <span className="text-xs font-bold text-gray-900">{c.userName}</span>
+                                                    <span className="text-[10px] text-gray-400">{new Date(c.timestamp).toLocaleDateString('th-TH')}</span>
+                                                </div>
+                                                <p className="text-sm text-gray-700">{c.content}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                                {comments.length === 0 && <p className="text-center text-gray-400 text-sm italic py-4">ยังไม่มีความคิดเห็น</p>}
+                            </div>
+
+                            {user ? (
+                                <div className="flex gap-2">
+                                    <input 
+                                        type="text" 
+                                        className="flex-1 border border-gray-300 rounded-full px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                        placeholder="เขียนความคิดเห็น..."
+                                        value={commentInput}
+                                        onChange={(e) => setCommentInput(e.target.value)}
+                                        onKeyDown={(e) => e.key === 'Enter' && handleComment()}
+                                    />
+                                    <button 
+                                        onClick={handleComment}
+                                        disabled={!commentInput.trim() || isSubmitting}
+                                        className="bg-blue-600 text-white p-2 rounded-full hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                                    >
+                                        <Send className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="text-center text-xs text-gray-500 bg-white p-2 rounded-lg border border-gray-200">
+                                    กรุณาเข้าสู่ระบบเพื่อแสดงความคิดเห็น
+                                </div>
+                            )}
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -85,7 +310,6 @@ const AnnouncementDetailModal = ({ item, user, onClose, onUpdate }: { item: Anno
 };
 
 const NewsCard: React.FC<{ item: Announcement; user?: User | null; onLike: (id: string) => void; onClick: () => void; }> = ({ item, user, onLike, onClick }) => {
-    // ... (Same as before) ...
     return (
         <div onClick={onClick} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-all group cursor-pointer flex flex-col h-full">
             <div className="p-4 flex flex-col flex-1">
@@ -100,7 +324,6 @@ const NewsCard: React.FC<{ item: Announcement; user?: User | null; onLike: (id: 
 };
 
 const CountdownWidget = ({ data }: { data: AppData }) => {
-    // ... (Same as before) ...
     return (
         <div className="bg-gradient-to-r from-orange-500 to-red-500 rounded-xl p-4 text-white shadow-md relative overflow-hidden mb-6">
             <div className="relative z-10 flex flex-col items-center justify-center">
@@ -126,11 +349,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
   const [viewLevel, setViewLevel] = useState<'cluster' | 'area'>('area');
   const [isLoading, setIsLoading] = useState(true);
   
-  // Announcement States
-  const [showUnscoredModal, setShowUnscoredModal] = useState(false);
-  const [showRankingModal, setShowRankingModal] = useState(false);
-  const [showIntegrityModal, setShowIntegrityModal] = useState(false);
-  const [showCooperationModal, setShowCooperationModal] = useState(false);
+  // States
   const [viewingAnnouncement, setViewingAnnouncement] = useState<Announcement | null>(null);
   const [newsList, setNewsList] = useState<Announcement[]>([]);
   const [newsLimit, setNewsLimit] = useState(6);
@@ -140,6 +359,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
   // Announced Results States
   const [announcedSearch, setAnnouncedSearch] = useState('');
   const [announcedCategory, setAnnouncedCategory] = useState('All');
+  const [resultsModalActivityId, setResultsModalActivityId] = useState<string | null>(null);
 
   useEffect(() => {
       const timer = setTimeout(() => setIsLoading(false), 800);
@@ -171,17 +391,6 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
           if (found) setViewingAnnouncement(found);
       }
   }, [searchParams, data.announcements]);
-
-  const getAreaInfo = (team: any): AreaStageInfo | null => {
-      try { return JSON.parse(team.stageInfo); } catch { return null; }
-  };
-
-  const calculateMedalFromScore = (score: number) => {
-      if (score >= 80) return 'Gold';
-      if (score >= 70) return 'Silver';
-      if (score >= 60) return 'Bronze';
-      return 'Participant';
-  };
 
   // --- Logic for Announced Results Section ---
   const announcedActivities = useMemo(() => {
@@ -276,22 +485,6 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
       };
   }, [scopeTeams, viewLevel, data.activities]);
 
-  const leaderboards = useMemo(() => {
-      // Logic for leaderboards (Top schools)
-      // Simplified for brevity in this response update
-      const schoolStats: Record<string, any> = {};
-      // ... processing ...
-      return { topBySuccessRate: [] }; // Placeholder for detailed logic
-  }, [scopeTeams]);
-
-  // ... (Integrity, MySchool, etc. logic) ...
-  const unscoredTeams = useMemo(() => {
-      return scopeTeams.filter(t => {
-          if (viewLevel === 'area') { const info = getAreaInfo(t); return !info || !info.score || info.score === 0; }
-          return t.score === 0;
-      });
-  }, [scopeTeams, viewLevel]);
-
   const latestResults = useMemo(() => {
       const scored = scopeTeams.filter(t => {
           if (viewLevel === 'area') { const info = getAreaInfo(t); return (info?.score || 0) > 0; }
@@ -309,6 +502,16 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20 relative">
       {viewingAnnouncement && <AnnouncementDetailModal item={viewingAnnouncement} user={user} onClose={() => { setViewingAnnouncement(null); setSearchParams({}); }} />}
+      
+      {/* Activity Results Modal */}
+      {resultsModalActivityId && (
+          <ActivityResultsModal 
+              activityId={resultsModalActivityId}
+              data={data}
+              onClose={() => setResultsModalActivityId(null)}
+              viewLevel={viewLevel}
+          />
+      )}
 
       <div className={`rounded-3xl p-6 text-white shadow-xl flex flex-col md:flex-row justify-between items-center gap-6 relative overflow-hidden ${viewLevel === 'area' ? 'bg-gradient-to-r from-purple-800 to-indigo-900' : 'bg-gradient-to-r from-blue-600 to-indigo-600'}`}>
         <div className="absolute top-0 right-0 p-4 opacity-10">{viewLevel === 'area' ? <Trophy className="w-40 h-40" /> : <School className="w-40 h-40" />}</div>
@@ -398,7 +601,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
                                   <td className="px-6 py-3 text-center font-bold text-green-600">{act.scoredTeams}</td>
                                   <td className="px-6 py-3 text-right">
                                       <button 
-                                          onClick={() => navigate(`/results?activityId=${act.id}`)}
+                                          onClick={() => setResultsModalActivityId(act.id)}
                                           className="text-xs bg-purple-50 text-purple-700 px-3 py-1.5 rounded-lg border border-purple-100 hover:bg-purple-100 font-bold inline-flex items-center"
                                       >
                                           <Eye className="w-3 h-3 mr-1.5" /> ดูผล
