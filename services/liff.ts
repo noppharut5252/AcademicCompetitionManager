@@ -432,7 +432,8 @@ export const shareTop3Result = async (
                             "type": "button",
                             "style": "link",
                             "height": "sm",
-                            "action": { "type": "uri", "label": "เปิดระบบ", "uri": window.location.href }
+                            "action": { "type": "uri", "label": "เปิดระบบ", "uri": "https://noppharut5252.github.io/AcademicCompetitionManager/#/results" }
+                          // uri: "https://noppharut5252.github.io/AcademicCompetitionManager/#/results"
                         }
                     ]
                 }
