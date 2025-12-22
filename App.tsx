@@ -24,14 +24,28 @@ import { Loader2, LogIn, User as UserIcon, Lock, Globe, AlertCircle, Sparkles, L
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 
 const App: React.FC = () => {
-  const [data, setData] = useState<AppData | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [liffChecking, setLiffChecking] = useState(true);
-  const [loadingText, setLoadingText] = useState('กำลังเริ่มต้นระบบ...');
+  // 1. Optimistic Load from Cache
+  const [data, setData] = useState<AppData | null>(() => {
+      try {
+          const cached = localStorage.getItem('comp_data');
+          return cached ? JSON.parse(cached) : null;
+      } catch { return null; }
+  });
+  
+  // 2. Optimistic User Load
+  const [currentUser, setCurrentUser] = useState<User | any | null>(() => {
+      try {
+          const cached = localStorage.getItem('comp_user');
+          return cached ? JSON.parse(cached) : null;
+      } catch { return null; }
+  });
+
+  // Only show loading screen if we have ABSOLUTELY NO data to show
+  const [loading, setLoading] = useState(!data);
+  const [loadingText, setLoadingText] = useState('กำลังโหลด...');
   
   // Auth State
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [currentUser, setCurrentUser] = useState<User | any | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(!!currentUser);
   const [isRegistering, setIsRegistering] = useState(false);
   
   // Linking Account State
@@ -49,85 +63,64 @@ const App: React.FC = () => {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Initialize LIFF and Session on mount
+  // Initialize System (Parallel Execution)
   useEffect(() => {
     const initialize = async () => {
-      setLoadingText('กำลังเชื่อมต่อ LINE Service...');
-      // 0. Always attempt to init LIFF to ensure SDK capabilities (Sharing) are ready
-      let liffProfile: LiffProfile | null = null;
-      try {
-          liffProfile = await initLiff();
-      } catch (e) {
-          console.warn("LIFF init warning:", e);
-      }
+      // A. Trigger Data Fetch in Background
+      const dataPromise = fetchAppData(true); // silent fetch
 
-      setLoadingText('ตรวจสอบข้อมูลผู้ใช้งาน...');
-      // 1. Check Local Storage for existing session
-      const savedUserStr = localStorage.getItem('comp_user');
-      if (savedUserStr) {
-          try {
-              const savedUser = JSON.parse(savedUserStr);
-              setCurrentUser(savedUser);
-              setIsAuthenticated(true);
-              setLiffChecking(false);
-              fetchAppData();
-              return; 
-          } catch(e) {
-              localStorage.removeItem('comp_user');
-          }
-      }
-
-      // 2. If no session, use LIFF to check if user needs to login/register/link
-      if (liffProfile) {
-          setLoading(true);
-          const dbUser = await checkUserPermission(liffProfile.userId);
-          
-          if (dbUser) {
-             // Success: Found in DB
-             const fullUser = { ...dbUser, pictureUrl: liffProfile.pictureUrl, displayName: liffProfile.displayName };
-             setCurrentUser(fullUser);
-             localStorage.setItem('comp_user', JSON.stringify(fullUser));
-             setIsAuthenticated(true);
-             fetchAppData();
-          } else {
-             // Failed: Not linked yet -> Go to Link/Register Flow
-             console.log("LINE connected but not linked. Prompting link or register.");
-             setPendingLiffProfile(liffProfile);
-             setIsLinkingMode(true);
-             fetchAppData(); // Pre-fetch data
-          }
-          setLoading(false);
+      // B. Handle Authentication
+      if (currentUser) {
+          // Fast Path: User already cached, just refresh LIFF token silently
+          initLiff().catch(e => console.warn("LIFF Lazy Init:", e));
       } else {
-          // MODIFIED: If no LIFF and no LocalStorage, Default to Guest Mode immediately
-          // This allows the main page to show without login
-          console.log("No auth found, defaulting to Public/Guest mode.");
-          setCurrentUser({ name: 'Guest', isGuest: true, level: 'guest' });
-          setIsAuthenticated(true);
-          fetchAppData();
+          // Slow Path: Check LIFF or Default to Guest
+          try {
+              // Try to initialize LIFF quickly
+              const liffProfile = await initLiff();
+              if (liffProfile) {
+                  const dbUser = await checkUserPermission(liffProfile.userId);
+                  if (dbUser) {
+                      // Found User
+                      const fullUser = { ...dbUser, pictureUrl: liffProfile.pictureUrl, displayName: liffProfile.displayName };
+                      setCurrentUser(fullUser);
+                      localStorage.setItem('comp_user', JSON.stringify(fullUser));
+                      setIsAuthenticated(true);
+                  } else {
+                      // Not linked yet -> Go to Link Mode
+                      setPendingLiffProfile(liffProfile);
+                      setIsLinkingMode(true);
+                  }
+              } else {
+                  // No LIFF (Browser) -> Default Guest
+                  handleGuestAccess();
+              }
+          } catch (e) {
+              // Error -> Default Guest
+              console.warn("Auth check failed, defaulting to guest", e);
+              handleGuestAccess();
+          }
       }
       
-      setLiffChecking(false);
+      await dataPromise;
     };
+    
     initialize();
   }, []);
 
   const fetchAppData = async (silent = false) => {
-    if (!silent) setLoading(true);
-    setLoadingText('กำลังดาวน์โหลดข้อมูลการแข่งขัน...');
+    // Only block UI if we have absolutely no data and it's not a silent update
+    if (!data && !silent) setLoading(true);
     
-    // Artificial delay steps for UX feedback if it takes long
-    const timer1 = setTimeout(() => setLoadingText('กำลังประมวลผลข้อมูลทีม...'), 2000);
-    const timer2 = setTimeout(() => setLoadingText('กำลังเตรียมตารางสรุปผล...'), 4500);
-
     try {
       const result = await fetchData();
       setData(result);
+      localStorage.setItem('comp_data', JSON.stringify(result));
     } catch (err) {
-      setError('ไม่สามารถโหลดข้อมูลการแข่งขันได้');
+      console.error(err);
+      if (!data) setError('ไม่สามารถโหลดข้อมูลการแข่งขันได้ (กรุณาตรวจสอบอินเทอร์เน็ต)');
     } finally {
-      clearTimeout(timer1);
-      clearTimeout(timer2);
-      if (!silent) setLoading(false);
+      setLoading(false);
     }
   };
 
@@ -148,7 +141,6 @@ const App: React.FC = () => {
             localStorage.setItem('comp_user', JSON.stringify(user));
             setIsAuthenticated(true);
             fetchAppData();
-            // If we were on /login, go to dashboard
             if (window.location.hash.includes('/login')) {
                 window.location.hash = '#/dashboard';
             }
@@ -163,9 +155,10 @@ const App: React.FC = () => {
   };
 
   const handleGuestAccess = () => {
-      setCurrentUser({ name: 'Guest', isGuest: true } as User);
+      const guestUser = { name: 'Guest', isGuest: true, level: 'guest' };
+      setCurrentUser(guestUser);
       setIsAuthenticated(true);
-      fetchAppData();
+      // Don't save guest to local storage to re-check next time, or do save if you want persistent guest
   };
 
   const handleRegistrationComplete = (newUser: User) => {
@@ -239,10 +232,6 @@ const App: React.FC = () => {
                 <Loader2 className="w-4 h-4 animate-spin" />
                 <span className="text-xs font-medium tracking-wide animate-pulse">{loadingText}</span>
             </div>
-            
-            <p className="text-gray-400 text-xs text-center max-w-[200px]">
-                กำลังเชื่อมต่อกับฐานข้อมูล Google Sheets อาจใช้เวลาสักครู่...
-            </p>
         </div>
         <style>{`
             @keyframes shimmer {
@@ -253,8 +242,8 @@ const App: React.FC = () => {
       </div>
   );
 
-  // 1. Initial Loading (Checking LIFF or Fetching Data)
-  if (liffChecking || loading) {
+  // 1. Initial Loading (Only if NO cache and fetch pending)
+  if (loading) {
     return <LoadingScreen />;
   }
 
