@@ -236,7 +236,7 @@ export const shareScoreResult = async (
   score: string | number, 
   medal: string, 
   rank: string,
-  teamId: string = '' 
+  teamId: string = '' // Added teamId param
 ): Promise<{ success: boolean; method: 'line' | 'share' | 'copy' | 'error' }> => {
     
     await ensureLiffInitialized();
@@ -245,12 +245,12 @@ export const shareScoreResult = async (
     const rankText = rank ? ` (ลำดับที่ ${rank})` : '';
     const displayTeamName = (teamName && teamName.trim() !== '') ? teamName : schoolName || 'ไม่ระบุชื่อทีม';
     
-    // ลิงก์สาธารณะที่ไม่ต้องเข้าระบบ
+    // New Public Link logic
     const publicLink = teamId 
         ? `${window.location.origin}${window.location.pathname}#/share-result?id=${teamId}`
         : window.location.href;
 
-    const textSummary = `🏆 ตารางคะแนนกิจกรรม: ${activityName}\nสถานศึกษา: ${schoolName}\nทีม: ${displayTeamName}\n\n⭐ คะแนน: ${score}\n🏅 รางวัล: ${medalThai}${rankText}\n\nเปิดดูตารางสรุปผลฉบับเต็ม: ${publicLink}`;
+    const textSummary = `🏆 ผลการแข่งขัน: ${activityName}\nทีม: ${displayTeamName}\nโรงเรียน: ${schoolName}\n\n⭐ คะแนน: ${score}\n🏅 รางวัล: ${medalThai}${rankText}\n\nดูผลเต็มๆ: ${publicLink}`;
 
     // @ts-ignore
     const isLoggedIn = liff.isLoggedIn();
@@ -260,7 +260,7 @@ export const shareScoreResult = async (
         
         const flexMessage = {
             type: "flex",
-            altText: `ตารางสรุปผล: ${activityName} - ${schoolName}`,
+            altText: `ผลการแข่งขัน: ${displayTeamName}`,
             contents: {
                 "type": "bubble",
                 "body": {
@@ -285,7 +285,7 @@ export const shareScoreResult = async (
                       "layout": "vertical",
                       "contents": [
                         { "type": "text", "text": String(score), "size": "5xl", "weight": "bold", "color": "#333333", "align": "center" },
-                        { "type": "text", "text": "คะแนนที่ได้รับ (Score)", "size": "xxs", "color": "#aaaaaa", "align": "center" }
+                        { "type": "text", "text": "คะแนน (Score)", "size": "xxs", "color": "#aaaaaa", "align": "center" }
                       ],
                       "margin": "xl"
                     },
@@ -293,7 +293,7 @@ export const shareScoreResult = async (
                       "type": "box",
                       "layout": "horizontal",
                       "contents": [
-                        { "type": "text", "text": "รางวัลที่ได้รับ:", "flex": 1, "color": "#555555", "size": "sm" },
+                        { "type": "text", "text": "รางวัล:", "flex": 1, "color": "#555555", "size": "sm" },
                         { "type": "text", "text": medalThai, "flex": 2, "weight": "bold", "align": "end", "color": medalColor, "size": "sm" }
                       ],
                       "margin": "lg"
@@ -317,8 +317,7 @@ export const shareScoreResult = async (
                       "type": "button",
                       "style": "primary",
                       "height": "sm",
-                      "action": { "type": "uri", "label": "เปิดดูตารางสรุปผลฉบับเต็ม", "uri": publicLink },
-                      "color": "#2563EB"
+                      "action": { "type": "uri", "label": "เปิดดูรายละเอียดเพิ่มเติม", "uri": publicLink }
                     }
                   ]
                 }
@@ -335,7 +334,7 @@ export const shareScoreResult = async (
     if (navigator.share) {
         try {
             await navigator.share({
-                title: 'ตารางสรุปผลการแข่งขัน',
+                title: 'ผลการแข่งขัน',
                 text: textSummary,
                 url: publicLink,
             });
@@ -351,6 +350,7 @@ export const shareScoreResult = async (
     }
 }
 
+// ... rest of the file (shareTop3Result, shareVenue, shareSchedule, shareAnnouncement) remains unchanged ...
 export const shareTop3Result = async (
   activityName: string,
   winners: { rank: number; teamName: string; schoolName: string; score: string; medal: string }[]
@@ -432,7 +432,7 @@ export const shareTop3Result = async (
                             "type": "button",
                             "style": "link",
                             "height": "sm",
-                            "action": { "type": "uri", "label": "เปิดระบบ", "uri": https://noppharut5252.github.io/AcademicCompetitionManager/#/results }
+                            "action": { "type": "uri", "label": "เปิดระบบ", "uri": window.location.href }
                         }
                     ]
                 }
@@ -560,6 +560,7 @@ export const shareVenue = async (venue: any): Promise<{ success: boolean; method
     }
 }
 
+// Updated: Share Specific Schedule with Robust Fallback
 export const shareSchedule = async (
     activityName: string,
     venueName: string,
