@@ -588,6 +588,23 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
   const [isLoading, setIsLoading] = useState(false);
   const [isCompact, setIsCompact] = useState(false); // NEW: Compact Mode state
 
+  // Helper functions
+  const showToast = (message: string, type: 'success' | 'error' | 'info') => {
+      setToast({ message, type, isVisible: true });
+  };
+
+  const handleRefresh = async () => {
+      setIsLoading(true);
+      try {
+          await onDataUpdate();
+          showToast('ข้อมูลอัปเดตล่าสุดแล้ว', 'success');
+      } catch (e) {
+          showToast('เกิดข้อผิดพลาดในการรีเฟรช', 'error');
+      } finally {
+          setIsLoading(false);
+      }
+  };
+
   // Fixed state type definition
   const [confirmState, setConfirmState] = useState<{ 
       isOpen: boolean, 
@@ -710,17 +727,6 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       return (data.activities || []).find(a => a.id === selectedActivityId);
   }, [data.activities, selectedActivityId]);
 
-  const showToast = (message: string, type: 'success' | 'error' | 'info') => {
-      setToast({ message, type, isVisible: true });
-  };
-
-  const handleRefresh = async () => {
-        setIsLoading(true);
-        await onDataUpdate();
-        setIsLoading(false);
-        showToast('อัปเดตข้อมูลล่าสุดแล้ว', 'success');
-  };
-
   const handleToggleLock = async () => {
       if (!selectedActivityId) return;
       const newLockState = !isActivityLocked;
@@ -764,7 +770,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
       );
   }
 
-  // 2. Data Filtering
+  // Data Filtering
   const { availableCategories, availableActivities, allAuthorizedTeams } = useMemo(() => {
       let validActivities = data.activities || [];
       if (role === 'score') {
@@ -795,9 +801,13 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
   const announcedActivitiesData = useMemo(() => {
       return availableActivities.map(act => {
           let actTeams = allAuthorizedTeams.filter(t => t.activityId === act.id);
+          
+          // Strict Filtering based on View Scope
           if (viewScope === 'area') {
+              // AREA SCOPE: Filter teams that reached area stage
               actTeams = actTeams.filter(t => t.stageStatus === 'Area' || String(t.flag).toUpperCase() === 'TRUE');
           } else {
+              // CLUSTER SCOPE: Filter by cluster if selected (Admin) or enforced (Group Admin)
               if (canFilterCluster && selectedClusterFilter) {
                   actTeams = actTeams.filter(t => {
                       const s = (data.schools || []).find(sc => sc.SchoolID === t.schoolId || sc.SchoolName === t.schoolId);
@@ -806,7 +816,7 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
               }
           }
 
-          // Check locked status for this activity in current scope
+          // Check locked status for this activity in current scope ONLY
           const isLocked = (data.activityStatus || []).some(s => s.activityId === act.id && s.scope === viewScope && s.isLocked) || false;
 
           const totalTeams = actTeams.length;
@@ -814,10 +824,12 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
           let rank1Count = 0;
 
           actTeams.forEach(t => {
+              // Calculate score based on SCOPE
               const score = viewScope === 'area' ? (getAreaInfo(t)?.score || 0) : t.score;
               const rank = viewScope === 'area' ? (getAreaInfo(t)?.rank || '') : t.rank;
               const flag = t.flag;
 
+              // Only count if score exists in THIS scope
               if (score > 0 || score === -1) scoredTeams++;
 
               if (viewScope === 'area') {
@@ -836,12 +848,19 @@ const ScoreEntry: React.FC<ScoreEntryProps> = ({ data, user, onDataUpdate }) => 
               isLocked
           };
       }).filter(a => {
-          // Changed Logic: If isLocked is true, it should appear in announced list regardless of score count
-          if (a.isLocked) return true;
-          if (a.scoredTeams === 0) return false;
+          // Visibility Logic:
+          // 1. Must match category filter
           if (announcedCategoryFilter !== 'All' && a.category !== announcedCategoryFilter) return false;
+          
+          // 2. Must match search
           if (announcedSearch && !a.name.toLowerCase().includes(announcedSearch.toLowerCase())) return false;
-          return true;
+
+          // 3. SHOW if Locked in current scope OR has scores in current scope
+          // This ensures Area view doesn't show activities that only have Cluster scores
+          if (a.isLocked) return true;
+          if (a.scoredTeams > 0) return true;
+          
+          return false;
       });
   }, [availableActivities, allAuthorizedTeams, viewScope, announcedCategoryFilter, announcedSearch, data.schools, selectedClusterFilter, canFilterCluster, data.activityStatus]);
 
