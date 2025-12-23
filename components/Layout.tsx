@@ -27,6 +27,7 @@ const ScannerModal = ({
     data?: AppData;
     user?: User | any;
 }) => {
+    // ... (ScannerModal code remains unchanged)
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [mode, setMode] = useState<'scan' | 'manual'>('scan');
@@ -313,11 +314,9 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
   const handleLogout = (e: React.MouseEvent) => {
       e.stopPropagation();
       localStorage.removeItem('comp_user'); 
-      if (isGuest) {
-          window.location.reload();
-      } else {
-          logoutLiff(); 
-      }
+      logoutLiff(); 
+      // Force reload to clear state properly
+      window.location.reload();
   };
 
   const handleNav = (id: string) => {
@@ -453,31 +452,40 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
         </nav>
 
         <div className="p-4 border-t border-gray-100">
-          <div 
-            className={`flex items-center p-2 rounded-lg transition-colors ${!isGuest ? 'cursor-pointer hover:bg-gray-50' : ''}`}
-            onClick={handleProfileClick}
-            title={!isGuest ? "แก้ไขข้อมูลส่วนตัว" : ""}
-          >
-            {userProfile?.pictureUrl || userProfile?.avatarFileId ? (
-                <img 
-                src={userProfile?.pictureUrl || `https://drive.google.com/thumbnail?id=${userProfile?.avatarFileId}`} 
-                alt="User" 
-                className="h-10 w-10 rounded-full bg-gray-200 object-cover"
-                onError={(e) => { (e.target as HTMLImageElement).src = 'https://ui-avatars.com/api/?name=' + (userProfile?.displayName || userProfile?.name || 'User'); }}
-                />
-            ) : (
-                <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center text-gray-500">
-                    <UserCircle className="w-6 h-6" />
+          {isGuest ? (
+              <button 
+                  onClick={() => navigate('/login')}
+                  className="w-full flex items-center justify-center bg-blue-600 text-white py-2 rounded-lg font-bold hover:bg-blue-700 transition-colors shadow-sm text-sm"
+              >
+                  <LogIn className="w-4 h-4 mr-2" /> เข้าสู่ระบบ
+              </button>
+          ) : (
+              <div 
+                className={`flex items-center p-2 rounded-lg transition-colors cursor-pointer hover:bg-gray-50`}
+                onClick={handleProfileClick}
+                title="แก้ไขข้อมูลส่วนตัว"
+              >
+                {userProfile?.pictureUrl || userProfile?.avatarFileId ? (
+                    <img 
+                    src={userProfile?.pictureUrl || `https://drive.google.com/thumbnail?id=${userProfile?.avatarFileId}`} 
+                    alt="User" 
+                    className="h-10 w-10 rounded-full bg-gray-200 object-cover"
+                    onError={(e) => { (e.target as HTMLImageElement).src = 'https://ui-avatars.com/api/?name=' + (userProfile?.displayName || userProfile?.name || 'User'); }}
+                    />
+                ) : (
+                    <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center text-gray-500">
+                        <UserCircle className="w-6 h-6" />
+                    </div>
+                )}
+                <div className="ml-3 overflow-hidden flex-1">
+                  <p className="text-sm font-medium text-gray-700 truncate">{userProfile?.displayName || userProfile?.name || 'Guest'}</p>
+                  <p className="text-xs text-gray-500 truncate">{userProfile?.level || 'User'}</p>
                 </div>
-            )}
-            <div className="ml-3 overflow-hidden flex-1">
-              <p className="text-sm font-medium text-gray-700 truncate">{userProfile?.displayName || userProfile?.name || 'Guest'}</p>
-              <p className="text-xs text-gray-500 truncate">{isGuest ? 'Read Only' : (userProfile?.level || 'User')}</p>
-            </div>
-            <button className={`ml-1 ${isGuest ? 'text-blue-500 hover:text-blue-600' : 'text-gray-400 hover:text-red-500'}`} title={isGuest ? "เข้าสู่ระบบ" : "ออกจากระบบ"} onClick={handleLogout}>
-              {isGuest ? <LogIn className="w-5 h-5" /> : <LogOut className="w-5 h-5" />}
-            </button>
-          </div>
+                <button className="ml-1 text-gray-400 hover:text-red-500" title="ออกจากระบบ" onClick={handleLogout}>
+                  <LogOut className="w-5 h-5" />
+                </button>
+              </div>
+          )}
         </div>
       </aside>
 
@@ -491,17 +499,26 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
                 <span className="font-bold text-gray-900 text-lg">CompManager</span>
             </div>
             <div className="flex items-center gap-2">
-                 <div className="flex items-center gap-2 cursor-pointer" onClick={handleProfileClick}>
-                     <div className="text-right">
-                        <p className="text-xs font-bold text-gray-700 max-w-[100px] truncate">{userProfile?.displayName || userProfile?.name || 'Guest'}</p>
+                 {isGuest ? (
+                     <button 
+                        onClick={() => navigate('/login')}
+                        className="flex items-center text-sm font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-full border border-blue-100"
+                     >
+                         <LogIn className="w-4 h-4 mr-1" /> Login
+                     </button>
+                 ) : (
+                     <div className="flex items-center gap-2 cursor-pointer" onClick={handleProfileClick}>
+                         <div className="text-right">
+                            <p className="text-xs font-bold text-gray-700 max-w-[100px] truncate">{userProfile?.displayName || userProfile?.name || 'User'}</p>
+                         </div>
+                         {userProfile?.pictureUrl ? (
+                            <img src={userProfile.pictureUrl} alt="User" className="h-8 w-8 rounded-full bg-gray-200" />
+                         ) : (
+                            <div className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400"><UserCircle className="w-6 h-6" /></div>
+                         )}
+                         <button onClick={handleLogout} className="ml-1 text-gray-500"><LogOut className="w-5 h-5" /></button>
                      </div>
-                     {userProfile?.pictureUrl ? (
-                        <img src={userProfile.pictureUrl} alt="User" className="h-8 w-8 rounded-full bg-gray-200" />
-                     ) : (
-                        <div className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400"><UserCircle className="w-6 h-6" /></div>
-                     )}
-                 </div>
-                 <button onClick={handleLogout} className="ml-1 text-gray-500">{isGuest ? <LogIn className="w-5 h-5" /> : <LogOut className="w-5 h-5" />}</button>
+                 )}
             </div>
         </header>
 
