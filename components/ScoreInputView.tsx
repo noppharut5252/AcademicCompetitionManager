@@ -3,7 +3,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { AppData, User, Team, AreaStageInfo } from '../types';
 import { updateTeamResult, updateAreaResult } from '../services/api';
 import { shareScoreResult, shareTop3Result } from '../services/liff';
-import { Save, AlertCircle, CheckCircle, Trophy, ChevronRight, ChevronLeft, Share2, Calculator, X, History, Loader2, ListChecks, Wand2, Hash, RotateCcw, Delete, Crown } from 'lucide-react';
+import { Save, AlertCircle, CheckCircle, Trophy, ChevronRight, ChevronLeft, Share2, Calculator, X, History, Loader2, ListChecks, Wand2, Hash, RotateCcw, Delete, Crown, LogIn, Lock } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import ConfirmationModal from './ConfirmationModal';
 
@@ -37,7 +37,7 @@ interface SubmittedSlip {
 const calculateMedal = (scoreStr: string, manualMedal: string): string => {
     const score = parseFloat(scoreStr);
     if (score === -1) return 'ไม่เข้าร่วมแข่งขัน';
-    if (manualMedal && manualMedal !== '' && manualMedal !== '- Auto -') return manualMedal;
+    if (manualMedal && manualMedal !== '' && manualMedal !== '- Auto -' && manualMedal !== 'Auto') return manualMedal;
     if (isNaN(score)) return '';
     if (score >= 80) return 'Gold';
     if (score >= 70) return 'Silver';
@@ -145,6 +145,7 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
 
   // Role & Scope Logic
   const role = user?.level?.toLowerCase();
+  const allowedRoles = ['admin', 'area', 'group_admin', 'score'];
   const isAdminOrArea = role === 'admin' || role === 'area';
   const isGroupAdmin = role === 'group_admin';
   
@@ -586,8 +587,8 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
         }
 
         try {
-            // Fix: Pass activity.name as the first parameter (2 args expected by definition)
-            await shareTop3Result(activity.name, winners);
+            // FIX: Pass activityId as 3rd parameter for deep linking
+            await shareTop3Result(activity.name, winners, activity.id);
         } catch (e) {
             console.error(e);
             alert('ไม่สามารถแชร์ได้');
@@ -710,14 +711,44 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
   };
 
   const dirtyCount = Object.keys(edits).filter(id => edits[id].isDirty && teams.some(t => t.teamId === id)).length;
+  
+  // Calculate completion stats
+  const totalTeams = teams.length;
+  const scoredTeams = teams.filter(t => {
+      const edit = edits[t.teamId];
+      let score = 0;
+      if (edit?.score) score = parseFloat(edit.score);
+      else if (viewScope === 'area') score = getAreaInfo(t)?.score || 0;
+      else score = t.score;
+      return score > 0 || score === -1;
+  }).length;
 
-  if (!user) {
+  if (!user || !allowedRoles.includes(role || '')) {
       return (
-          <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-gray-50 text-center">
-              <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
-              <h2 className="text-xl font-bold text-gray-800">กรุณาเข้าสู่ระบบ</h2>
-              <button onClick={() => navigate('/')} className="bg-blue-600 text-white px-6 py-2 rounded-lg mt-4">กลับหน้าหลัก</button>
-          </div>
+        <div className="flex flex-col items-center justify-center h-[60vh] text-gray-500 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200 m-4 p-6 text-center animate-in fade-in">
+            {user?.isGuest ? (
+                <>
+                    <div className="bg-blue-100 p-4 rounded-full mb-4 mx-auto w-20 h-20 flex items-center justify-center">
+                        <LogIn className="w-10 h-10 text-blue-600" />
+                    </div>
+                    <h2 className="text-xl font-bold text-gray-800 mb-2">กรุณาเข้าสู่ระบบ</h2>
+                    <p className="text-sm text-gray-500 mb-6 max-w-xs mx-auto">คุณต้องเข้าสู่ระบบในฐานะกรรมการ หรือผู้ดูแลระบบ เพื่อทำการบันทึกคะแนน</p>
+                    <button 
+                        onClick={() => navigate('/login')} 
+                        className="px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-bold shadow-md transition-all flex items-center mx-auto"
+                    >
+                        <LogIn className="w-5 h-5 mr-2" /> เข้าสู่ระบบ
+                    </button>
+                </>
+            ) : (
+                <>
+                    <span title="Locked"><Lock className="w-16 h-16 mb-4 text-gray-300 mx-auto" /></span>
+                    <h2 className="text-xl font-bold text-gray-700">ไม่มีสิทธิ์เข้าถึง</h2>
+                    <p className="mb-6">บัญชีของคุณไม่มีสิทธิ์ในการบันทึกคะแนน</p>
+                    <button onClick={() => navigate('/dashboard')} className="px-6 py-2 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-100 font-medium">กลับหน้าหลัก</button>
+                </>
+            )}
+        </div>
       );
   }
 
@@ -802,21 +833,34 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
             </div>
         )}
 
+        {/* Sticky Save Button (Mobile) */}
+        {dirtyCount > 0 && (
+            <div className="fixed bottom-20 left-0 right-0 z-[90] flex justify-center md:hidden px-4 animate-in slide-in-from-bottom-2">
+                <button 
+                    onClick={initiateBatchSave}
+                    className="w-full max-w-sm bg-blue-600 text-white font-bold py-3 rounded-xl shadow-lg flex items-center justify-center active:scale-95 transition-transform"
+                >
+                    <Save className="w-5 h-5 mr-2" />
+                    บันทึกทั้งหมด ({dirtyCount})
+                </button>
+            </div>
+        )}
+
         {/* Header */}
         <div className="bg-white border-b border-gray-200 sticky top-0 z-20 shadow-sm">
             <div className="px-4 py-3 flex items-center justify-between">
                 <button onClick={() => navigate('/score')} className="p-2 -ml-2 text-gray-500 hover:bg-gray-100 rounded-full">
                     <ChevronLeft className="w-6 h-6" />
                 </button>
-                <div className="text-center flex-1 mx-2">
+                <div className="text-center flex-1 mx-2 overflow-hidden">
                     <div className="text-[10px] text-blue-600 font-bold uppercase tracking-wider">Score Input</div>
-                    <div className="text-sm font-bold text-gray-800 line-clamp-1">{activity?.name || 'Loading...'}</div>
+                    <div className="text-sm font-bold text-gray-800 truncate">{activity?.name || 'Loading...'}</div>
                 </div>
                 <div className="flex items-center">
                     {dirtyCount > 0 && (
                         <button 
                             onClick={initiateBatchSave}
-                            className="bg-blue-600 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-sm mr-2 animate-pulse"
+                            className="hidden md:block bg-blue-600 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-sm mr-2 animate-pulse"
                         >
                             Save All ({dirtyCount})
                         </button>
@@ -825,6 +869,17 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
                         <History className="w-6 h-6" />
                         {history.length > 0 && <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>}
                     </button>
+                </div>
+            </div>
+            
+            {/* Completion Bar */}
+            <div className="px-4 pb-2">
+                <div className="flex justify-between text-[10px] text-gray-500 mb-1">
+                    <span>ความคืบหน้า: {scoredTeams} / {totalTeams}</span>
+                    <span className="font-bold text-blue-600">{Math.round((scoredTeams / totalTeams) * 100) || 0}%</span>
+                </div>
+                <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                    <div className="bg-green-500 h-full transition-all duration-500" style={{ width: `${(scoredTeams / totalTeams) * 100}%` }}></div>
                 </div>
             </div>
             
@@ -889,7 +944,7 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
                     <div 
                         key={team.teamId} 
                         id={`team-${team.teamId}`}
-                        className={`bg-white rounded-2xl border shadow-sm overflow-hidden transition-all duration-300 ${isActive ? 'ring-2 ring-blue-500 shadow-xl scale-[1.01] z-10' : 'border-gray-200'}`}
+                        className={`bg-white rounded-2xl border shadow-sm overflow-hidden transition-all duration-300 ${isActive ? 'ring-2 ring-blue-500 shadow-xl scale-[1.01] z-10' : 'border-gray-200'} ${displayScore ? 'border-l-4 border-l-green-500' : ''}`}
                         onClick={() => setActiveTeamId(team.teamId)}
                     >
                         <div className="bg-gray-50 px-4 py-3 border-b border-gray-100 flex justify-between items-start">
@@ -899,9 +954,10 @@ const ScoreInputView: React.FC<ScoreInputViewProps> = ({ data, user, onDataUpdat
                                 <div className="text-xs text-gray-500 mt-1">{(data.schools || []).find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId)?.SchoolName || team.schoolId}</div>
                             </div>
                             <div className="flex flex-col items-end gap-1">
+                                {isDirty && <div className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-bold flex items-center animate-pulse">Unsaved</div>}
                                 {displayScore && !isDirty && <div className="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-bold flex items-center"><CheckCircle className="w-3 h-3 mr-1"/> Saved</div>}
                                 {(scoreVal > 0 || scoreVal === -1) && !isDirty && (
-                                    <button onClick={(e) => { e.stopPropagation(); handleShare(team); }} className="text-blue-500 bg-blue-50 p-1.5 rounded-full">
+                                    <button onClick={(e) => { e.stopPropagation(); handleShare(team); }} className="text-blue-500 bg-blue-50 p-1.5 rounded-full hover:bg-blue-100">
                                         <Share2 className="w-4 h-4" />
                                     </button>
                                 )}
