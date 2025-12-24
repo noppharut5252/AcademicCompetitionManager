@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { AppData, Announcement, User, AreaStageInfo, Team, Venue, Activity as ActivityType, Comment } from '../types';
-import { Users, School, Trophy, Megaphone, Plus, Book, Calendar, ChevronRight, FileText, Loader2, Star, Medal, TrendingUp, Activity, Timer, ArrowUpRight, Zap, Target, CheckCircle, PieChart as PieIcon, List, X, BarChart3, MapPin, Navigation, Handshake, Briefcase, UserX, GraduationCap, AlertTriangle, Clock, Heart, Share2, Download, Image as ImageIcon, ExternalLink, UserCheck, AlertOctagon, PlayCircle, ChevronDown, ChevronUp, MessageCircle, Send, ShieldCheck, RefreshCw, Crown, Search, Filter, Eye, Paperclip, ScanLine, QrCode, Award } from 'lucide-react';
+import { Users, School, Trophy, Megaphone, Plus, Book, Calendar, ChevronRight, FileText, Loader2, Star, Medal, TrendingUp, Activity, Timer, ArrowUpRight, Zap, Target, CheckCircle, PieChart as PieIcon, List, X, BarChart3, MapPin, Navigation, Handshake, Briefcase, UserX, GraduationCap, AlertTriangle, Clock, Heart, Share2, Download, Image as ImageIcon, ExternalLink, UserCheck, AlertOctagon, PlayCircle, ChevronDown, ChevronUp, MessageCircle, Send, ShieldCheck, RefreshCw, Crown, Search, Filter, Eye, Paperclip, ScanLine, QrCode, Award, LogIn } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import StatCard from './StatCard';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -204,6 +204,9 @@ const AnnouncementDetailModal = ({ item, user, onClose, onUpdate }: { item: Anno
     const [comments, setComments] = useState<Comment[]>(item.comments || []);
     const [commentInput, setCommentInput] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
+    
+    // Security: Max Length
+    const MAX_COMMENT_LENGTH = 300;
 
     const handleLike = async () => {
         if (!user) return;
@@ -215,13 +218,18 @@ const AnnouncementDetailModal = ({ item, user, onClose, onUpdate }: { item: Anno
 
     const handleComment = async () => {
         if (!user || !commentInput.trim()) return;
+        if (commentInput.length > MAX_COMMENT_LENGTH) {
+            alert(`ความคิดเห็นต้องไม่เกิน ${MAX_COMMENT_LENGTH} ตัวอักษร`);
+            return;
+        }
+
         setIsSubmitting(true);
         const newComment: Comment = {
             id: Date.now().toString(),
             userId: user.userid,
             userName: user.name || user.displayName || 'User',
             userAvatar: user.pictureUrl,
-            content: commentInput,
+            content: commentInput.trim(),
             timestamp: new Date().toISOString()
         };
         const updatedComments = [...comments, newComment];
@@ -231,6 +239,8 @@ const AnnouncementDetailModal = ({ item, user, onClose, onUpdate }: { item: Anno
         if (onUpdate) onUpdate({ ...item, comments: updatedComments });
         setIsSubmitting(false);
     };
+
+    const navigate = useNavigate();
 
     return (
         <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
@@ -312,15 +322,15 @@ const AnnouncementDetailModal = ({ item, user, onClose, onUpdate }: { item: Anno
                             
                             <div className="space-y-4 mb-6 max-h-[300px] overflow-y-auto">
                                 {comments.map((c) => (
-                                    <div key={c.id} className="flex gap-3">
+                                    <div key={c.id} className="flex gap-3 animate-in fade-in slide-in-from-bottom-2">
                                         <img src={c.userAvatar || `https://ui-avatars.com/api/?name=${c.userName}&background=random`} className="w-8 h-8 rounded-full bg-white border border-gray-200" />
                                         <div className="flex-1">
                                             <div className="bg-white p-3 rounded-2xl rounded-tl-none border border-gray-200 shadow-sm">
                                                 <div className="flex justify-between items-baseline mb-1">
                                                     <span className="text-xs font-bold text-gray-900">{c.userName}</span>
-                                                    <span className="text-[10px] text-gray-400">{new Date(c.timestamp).toLocaleDateString('th-TH')}</span>
+                                                    <span className="text-[10px] text-gray-400">{new Date(c.timestamp).toLocaleDateString('th-TH', { hour: '2-digit', minute: '2-digit' })}</span>
                                                 </div>
-                                                <p className="text-sm text-gray-700">{c.content}</p>
+                                                <p className="text-sm text-gray-700 break-words">{c.content}</p>
                                             </div>
                                         </div>
                                     </div>
@@ -329,26 +339,39 @@ const AnnouncementDetailModal = ({ item, user, onClose, onUpdate }: { item: Anno
                             </div>
 
                             {user ? (
-                                <div className="flex gap-2">
-                                    <input 
-                                        type="text" 
-                                        className="flex-1 border border-gray-300 rounded-full px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                        placeholder="เขียนความคิดเห็น..."
-                                        value={commentInput}
-                                        onChange={(e) => setCommentInput(e.target.value)}
-                                        onKeyDown={(e) => e.key === 'Enter' && handleComment()}
-                                    />
-                                    <button 
-                                        onClick={handleComment}
-                                        disabled={!commentInput.trim() || isSubmitting}
-                                        className="bg-blue-600 text-white p-2 rounded-full hover:bg-blue-700 disabled:opacity-50 transition-colors"
-                                    >
-                                        <Send className="w-4 h-4" />
-                                    </button>
+                                <div className="flex flex-col gap-2">
+                                    <div className="relative">
+                                        <input 
+                                            type="text" 
+                                            className="w-full border border-gray-300 rounded-full pl-4 pr-12 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                            placeholder="เขียนความคิดเห็น..."
+                                            value={commentInput}
+                                            maxLength={MAX_COMMENT_LENGTH}
+                                            onChange={(e) => setCommentInput(e.target.value)}
+                                            onKeyDown={(e) => e.key === 'Enter' && handleComment()}
+                                            disabled={isSubmitting}
+                                        />
+                                        <button 
+                                            onClick={handleComment}
+                                            disabled={!commentInput.trim() || isSubmitting}
+                                            className="absolute right-1 top-1 bg-blue-600 text-white p-1.5 rounded-full hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                                        >
+                                            {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin"/> : <Send className="w-4 h-4" />}
+                                        </button>
+                                    </div>
+                                    <div className={`text-[10px] text-right px-2 ${commentInput.length >= MAX_COMMENT_LENGTH ? 'text-red-500 font-bold' : 'text-gray-400'}`}>
+                                        {commentInput.length}/{MAX_COMMENT_LENGTH}
+                                    </div>
                                 </div>
                             ) : (
-                                <div className="text-center text-xs text-gray-500 bg-white p-2 rounded-lg border border-gray-200">
-                                    กรุณาเข้าสู่ระบบเพื่อแสดงความคิดเห็น
+                                <div className="text-center p-4 bg-white rounded-xl border border-dashed border-gray-300">
+                                    <p className="text-sm text-gray-500 mb-2">กรุณาเข้าสู่ระบบเพื่อแสดงความคิดเห็น</p>
+                                    <button 
+                                        onClick={() => { onClose(); navigate('/login'); }}
+                                        className="text-xs bg-blue-600 text-white px-4 py-2 rounded-full hover:bg-blue-700 transition-colors inline-flex items-center"
+                                    >
+                                        <LogIn className="w-3 h-3 mr-1.5" /> เข้าสู่ระบบ
+                                    </button>
                                 </div>
                             )}
                         </div>
@@ -359,15 +382,62 @@ const AnnouncementDetailModal = ({ item, user, onClose, onUpdate }: { item: Anno
     );
 };
 
-const NewsCard: React.FC<{ item: Announcement; user?: User | null; onLike: (id: string) => void; onClick: () => void; }> = ({ item, user, onLike, onClick }) => {
+const NewsCard: React.FC<{ item: Announcement; user?: User | null; clusterName?: string; onClick: () => void; }> = ({ item, user, clusterName, onClick }) => {
+    // Logic for "NEW" badge: posted within 7 days
+    const isNew = useMemo(() => {
+        const date = new Date(item.date);
+        const now = new Date();
+        const diff = now.getTime() - date.getTime();
+        return diff < 7 * 24 * 60 * 60 * 1000;
+    }, [item.date]);
+
+    const hasAttachments = item.attachments && item.attachments.length > 0;
+
     return (
-        <div onClick={onClick} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-all group cursor-pointer flex flex-col h-full">
-            <div className="p-4 flex flex-col flex-1">
-                <div className="flex justify-between items-start mb-2">
-                    <span className="text-[10px] text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full flex items-center"><Calendar className="w-3 h-3 mr-1" />{new Date(item.date).toLocaleDateString('th-TH', {day: 'numeric', month: 'short'})}</span>
+        <div onClick={onClick} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-all group cursor-pointer flex flex-col h-full relative">
+            {isNew && (
+                <div className="absolute top-2 right-2 px-2 py-0.5 bg-red-500 text-white text-[9px] font-bold rounded-full shadow-sm z-10 animate-pulse">
+                    NEW
                 </div>
-                <h3 className="text-sm font-bold text-gray-900 mb-2 line-clamp-2 leading-tight group-hover:text-blue-600 transition-colors">{item.title}</h3>
+            )}
+            <div className="p-4 flex flex-col flex-1">
+                <div className="flex flex-wrap gap-2 items-center mb-2">
+                    <span className="text-[10px] text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full flex items-center">
+                        <Calendar className="w-3 h-3 mr-1" />
+                        {new Date(item.date).toLocaleDateString('th-TH', {day: 'numeric', month: 'short'})}
+                    </span>
+                    {/* Show Scope Badge */}
+                    {item.clusterId && item.clusterId !== 'area' && (
+                        <span className="text-[10px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100 flex items-center">
+                            <Target className="w-3 h-3 mr-1" /> {clusterName || 'กลุ่มเครือข่าย'}
+                        </span>
+                    )}
+                    {(!item.clusterId || item.clusterId === 'area') && (
+                        <span className="text-[10px] text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-100 flex items-center">
+                            <Trophy className="w-3 h-3 mr-1" /> ระดับเขต
+                        </span>
+                    )}
+                </div>
+                
+                <h3 className="text-sm font-bold text-gray-900 mb-2 line-clamp-2 leading-tight group-hover:text-blue-600 transition-colors">
+                    {item.title}
+                </h3>
                 <p className="text-xs text-gray-500 line-clamp-3 mb-3 flex-1">{item.content}</p>
+                
+                {/* Footer with Attachment Indicators */}
+                <div className="mt-auto pt-3 border-t border-gray-50 flex justify-between items-center text-xs">
+                    <div className="flex gap-2">
+                        {hasAttachments && (
+                            <span className="flex items-center text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded" title="มีไฟล์แนบ">
+                                <Paperclip className="w-3 h-3 mr-1" />
+                                {item.attachments?.length}
+                            </span>
+                        )}
+                    </div>
+                    <span className="text-blue-500 font-medium group-hover:underline flex items-center">
+                        อ่านต่อ <ChevronRight className="w-3 h-3 ml-0.5" />
+                    </span>
+                </div>
             </div>
         </div>
     );
@@ -409,10 +479,8 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
 
   // States
   const [viewingAnnouncement, setViewingAnnouncement] = useState<Announcement | null>(null);
-  const [newsList, setNewsList] = useState<Announcement[]>([]);
-  const [newsLimit, setNewsLimit] = useState(6);
-  const [manualList, setManualList] = useState<Announcement[]>([]);
-  const [manualLimit, setManualLimit] = useState(5);
+  const [activeTab, setActiveTab] = useState<'news' | 'manual'>('news');
+  const [searchNews, setSearchNews] = useState('');
 
   // Announced Results States
   const [announcedSearch, setAnnouncedSearch] = useState('');
@@ -424,21 +492,35 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
       return () => clearTimeout(timer);
   }, []);
 
-  useEffect(() => {
-      if (!data.announcements) return;
-      // Re-use userClusterID derived above
-      const filterNews = (type: 'news' | 'manual') => {
-          return data.announcements.filter(a => {
-              if (a.type !== type) return false;
-              if (!a.clusterId || a.clusterId === 'area') return true;
-              if (userClusterID && a.clusterId === userClusterID) return true;
-              if (user?.level === 'admin' || user?.level === 'area') return true;
-              return false;
-          });
-      };
-      setNewsList(filterNews('news'));
-      setManualList(filterNews('manual'));
-  }, [data.announcements, user, userClusterID]);
+  // Filter News Logic
+  const displayNews = useMemo(() => {
+      if (!data.announcements) return [];
+      
+      return data.announcements.filter(a => {
+          // 1. Filter by Tab Type
+          if (a.type !== activeTab) return false;
+          
+          // 2. Filter by Scope/User Permission
+          // Show Area (clusterId='area' or null) OR Cluster-specific match
+          let isVisible = false;
+          if (!a.clusterId || a.clusterId === 'area') {
+              isVisible = true; // Everyone sees area news
+          } else {
+              // Cluster news: Show if user is admin OR belongs to that cluster
+              if (user?.level === 'admin' || user?.level === 'area') isVisible = true;
+              else if (userClusterID && a.clusterId === userClusterID) isVisible = true;
+          }
+          if (!isVisible) return false;
+
+          // 3. Search Filter
+          if (searchNews) {
+              const term = searchNews.toLowerCase();
+              return a.title.toLowerCase().includes(term) || a.content.toLowerCase().includes(term);
+          }
+          
+          return true;
+      });
+  }, [data.announcements, activeTab, searchNews, userClusterID, user]);
 
   // Handle Params for Deep Link Modal
   useEffect(() => {
@@ -644,7 +726,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
           />
       )}
 
-      {/* Mobile Quick Actions */}
+      {/* ... [Mobile Quick Actions Block] ... */}
       <div className="md:hidden grid grid-cols-4 gap-3 mb-2">
           <button onClick={() => navigate('/idcards')} className="flex flex-col items-center justify-center bg-white p-3 rounded-2xl shadow-sm border border-gray-100 active:scale-95 transition-transform">
               <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 mb-1">
@@ -1024,17 +1106,71 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
           )}
       </div>
 
-      {/* Announcements & Manuals */}
+      {/* REFACTORED: News & Manuals Section */}
       <div className="mt-8 border-t border-gray-200 pt-8">
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-             <div className="lg:col-span-3 space-y-4">
-                <div className="flex items-center justify-between mb-2"><h2 className="text-lg font-bold text-gray-800 flex items-center"><Megaphone className="w-5 h-5 mr-2 text-orange-500" /> ข่าวประชาสัมพันธ์</h2></div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{newsList.length > 0 ? newsList.slice(0, newsLimit).map(item => <NewsCard key={item.id} item={item} user={user} onLike={() => {}} onClick={() => setViewingAnnouncement(item)} />) : <div className="col-span-full text-center py-10 text-gray-400 text-sm border-dashed border-2 rounded-xl bg-gray-50">ยังไม่มีข่าวประชาสัมพันธ์</div>}</div>
-             </div>
-             <div className="lg:col-span-1 space-y-4">
-                <h2 className="text-lg font-bold text-gray-800 flex items-center mb-4 border-b pb-2"><Book className="w-5 h-5 mr-2 text-green-600" /> คู่มือการใช้งาน</h2>
-                <div className="flex flex-col gap-3">{manualList.length > 0 ? manualList.slice(0, manualLimit).map(item => { const att = item.attachments?.find(a => a.type.includes('image')); const img = att ? getAttachmentImageUrl(att) : null; return (<div key={item.id} onClick={() => setViewingAnnouncement(item)} className="flex items-start p-3 bg-white border border-gray-200 rounded-xl hover:border-green-400 transition-colors group cursor-pointer shadow-sm hover:shadow-md"><div className="p-2 bg-green-50 text-green-600 rounded-lg mr-3 group-hover:bg-green-100 border border-green-100 overflow-hidden shrink-0 w-10 h-10 flex items-center justify-center mt-0.5">{img ? <img src={img} className="w-full h-full object-cover" alt="icon" /> : <FileText className="w-5 h-5"/>}</div><div className="text-sm font-medium text-gray-700 group-hover:text-green-700 leading-snug">{item.title}</div></div>); }) : <div className="text-center py-4 text-gray-400 text-sm">ไม่มีคู่มือ</div>}</div>
-             </div>
+          {/* Header */}
+          <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-gray-800 flex items-center">
+                  <Megaphone className="w-5 h-5 mr-2 text-orange-500" /> ข่าวสารและคู่มือ
+              </h2>
+          </div>
+
+          {/* Navigation & Search */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mb-4">
+              <div className="p-2 bg-gray-50/50 flex flex-col md:flex-row justify-between items-center gap-3">
+                  {/* Tabs */}
+                  <div className="flex bg-gray-200/50 p-1 rounded-lg w-full md:w-auto">
+                      <button 
+                          onClick={() => setActiveTab('news')}
+                          className={`flex-1 md:flex-none px-6 py-2 rounded-md text-sm font-bold transition-all flex items-center justify-center ${activeTab === 'news' ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                      >
+                          <Megaphone className="w-4 h-4 mr-2" /> ข่าวประชาสัมพันธ์
+                      </button>
+                      <button 
+                          onClick={() => setActiveTab('manual')}
+                          className={`flex-1 md:flex-none px-6 py-2 rounded-md text-sm font-bold transition-all flex items-center justify-center ${activeTab === 'manual' ? 'bg-white text-green-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                      >
+                          <Book className="w-4 h-4 mr-2" /> คู่มือการใช้งาน
+                      </button>
+                  </div>
+
+                  {/* Search */}
+                  <div className="relative w-full md:w-64">
+                      <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                      <input 
+                          type="text" 
+                          className="w-full pl-9 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                          placeholder={activeTab === 'news' ? 'ค้นหาข่าว...' : 'ค้นหาคู่มือ...'}
+                          value={searchNews}
+                          onChange={(e) => setSearchNews(e.target.value)}
+                      />
+                  </div>
+              </div>
+          </div>
+
+          {/* Content Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {displayNews.length > 0 ? (
+                  displayNews.map(item => {
+                      const clusterName = (data.clusters || []).find(c => c.ClusterID === item.clusterId)?.ClusterName;
+                      return (
+                          <NewsCard 
+                              key={item.id} 
+                              item={item} 
+                              user={user} 
+                              clusterName={clusterName}
+                              onClick={() => setViewingAnnouncement(item)} 
+                          />
+                      );
+                  })
+              ) : (
+                  <div className="col-span-full py-12 text-center text-gray-400 border-2 border-dashed border-gray-200 rounded-xl bg-gray-50/50">
+                      <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3 text-gray-400">
+                          {activeTab === 'news' ? <Megaphone className="w-6 h-6 opacity-30" /> : <Book className="w-6 h-6 opacity-30" />}
+                      </div>
+                      <p>ไม่พบ{activeTab === 'news' ? 'ข่าวประชาสัมพันธ์' : 'คู่มือการใช้งาน'}</p>
+                  </div>
+              )}
           </div>
       </div>
     </div>
