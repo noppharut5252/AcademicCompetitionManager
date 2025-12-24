@@ -100,6 +100,7 @@ export interface User {
   // New fields matching DB columns
   tel?: string;
   userline_id?: string;
+  password?: string; // Only used for registration/update payload, not returned by default
 }
 
 export interface FileLog {
@@ -265,6 +266,7 @@ export interface AppConfig {
   menu_judges: boolean;
   menu_announcements: boolean;
   menu_schools: boolean;
+  menu_users: boolean; // New: User Management Menu
 }
 
 export interface AppData {
