@@ -49,6 +49,11 @@ const calculateMedalFromScore = (score: number) => {
     return 'Participant';
 };
 
+const formatScore = (score: number) => {
+    if (score === -1) return '-';
+    return parseFloat(score.toFixed(2));
+};
+
 // --- Modals ---
 
 const ActivityResultsModal = ({ activityId, data, onClose, viewLevel }: { activityId: string, data: AppData, onClose: () => void, viewLevel: 'cluster' | 'area' }) => {
@@ -96,7 +101,7 @@ const ActivityResultsModal = ({ activityId, data, onClose, viewLevel }: { activi
                 team.teamName,
                 schoolName,
                 activityName,
-                team.displayScore,
+                formatScore(team.displayScore),
                 team.displayMedal,
                 team.displayRank,
                 team.teamId
@@ -149,7 +154,7 @@ const ActivityResultsModal = ({ activityId, data, onClose, viewLevel }: { activi
                                         <div className="text-xs text-gray-500 sm:hidden">{school?.SchoolName || t.schoolId}</div>
                                     </td>
                                     <td className="px-4 py-3 text-gray-600 hidden sm:table-cell">{school?.SchoolName || t.schoolId}</td>
-                                    <td className="px-4 py-3 text-center font-bold text-blue-600">{t.displayScore === -1 ? '-' : t.displayScore}</td>
+                                    <td className="px-4 py-3 text-center font-bold text-blue-600">{formatScore(t.displayScore)}</td>
                                     <td className="px-4 py-3">
                                         <span className={`px-2 py-1 rounded border text-xs font-bold ${medalColor} whitespace-nowrap`}>
                                             {t.displayMedal || 'เข้าร่วม'}
@@ -383,6 +388,14 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
   const [viewLevel, setViewLevel] = useState<'cluster' | 'area'>('area');
   const [isLoading, setIsLoading] = useState(true);
   
+  // User Context for Cluster Filter
+  const userSchool = (data.schools || []).find(s => s.SchoolID === user?.SchoolID);
+  const userClusterID = userSchool?.SchoolCluster;
+  const isGroupAdmin = user?.level === 'group_admin';
+  
+  // Cluster Filter State
+  const [clusterFilter, setClusterFilter] = useState(isGroupAdmin ? (userClusterID || '') : '');
+
   // States
   const [viewingAnnouncement, setViewingAnnouncement] = useState<Announcement | null>(null);
   const [newsList, setNewsList] = useState<Announcement[]>([]);
@@ -402,8 +415,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
 
   useEffect(() => {
       if (!data.announcements) return;
-      const userSchool = (data.schools || []).find(s => s.SchoolID === user?.SchoolID);
-      const userClusterID = userSchool?.SchoolCluster;
+      // Re-use userClusterID derived above
       const filterNews = (type: 'news' | 'manual') => {
           return data.announcements.filter(a => {
               if (a.type !== type) return false;
@@ -415,7 +427,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
       };
       setNewsList(filterNews('news'));
       setManualList(filterNews('manual'));
-  }, [data.announcements, user, data.schools]);
+  }, [data.announcements, user, userClusterID]);
 
   // Handle Params for Deep Link Modal
   useEffect(() => {
@@ -426,21 +438,38 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
       }
   }, [searchParams, data.announcements]);
 
-  // --- Logic for Announced Results Section ---
+  // --- Core Data Filtering: Scope Teams ---
+  const scopeTeams = useMemo(() => {
+      let teams = data.teams || [];
+      
+      // Filter by Level
+      if (viewLevel === 'area') {
+          teams = teams.filter(t => t.stageStatus === 'Area' || String(t.flag).toUpperCase() === 'TRUE');
+      }
+
+      // Filter by Cluster (Available if viewLevel is cluster OR if needed in area view to filter source)
+      // Usually Area view is aggregate, but if user filters by cluster, we show teams from that cluster that made it to area
+      if (clusterFilter) {
+          teams = teams.filter(t => {
+              const s = (data.schools || []).find(sc => sc.SchoolID === t.schoolId || sc.SchoolName === t.schoolId);
+              return s?.SchoolCluster === clusterFilter;
+          });
+      }
+
+      return teams;
+  }, [data.teams, viewLevel, clusterFilter, data.schools]);
+
+  // --- Logic for Announced Results Section (Updated to use clusterFilter) ---
   const announcedActivities = useMemo(() => {
       if (!data.activities) return { list: [], categories: [] };
       
       const categories = Array.from(new Set(data.activities.map(a => a.category))).sort();
       
       const results = data.activities.map(act => {
-          // Filter teams for this activity
-          let teams = (data.teams || []).filter(t => t.activityId === act.id);
-          
-          if (viewLevel === 'area') {
-              teams = teams.filter(t => t.stageStatus === 'Area' || String(t.flag).toUpperCase() === 'TRUE');
-          }
+          // Filter teams for this activity within the current scope/filter
+          const teams = scopeTeams.filter(t => t.activityId === act.id);
 
-          // Check if announced (has scores or manually locked)
+          // Check if announced (has scores)
           const scoredCount = teams.filter(t => {
               const score = viewLevel === 'area' ? (getAreaInfo(t)?.score || 0) : t.score;
               return score > 0 || score === -1;
@@ -455,7 +484,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
               scoredTeams: scoredCount,
               isAnnounced: scoredCount > 0 || isLocked
           };
-      }).filter(a => a.isAnnounced);
+      }).filter(a => a.isAnnounced); // Show only if announced/locked
 
       // Apply Filters
       const filtered = results.filter(a => {
@@ -465,14 +494,11 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
       });
 
       return { list: filtered, categories };
-  }, [data.activities, data.teams, data.activityStatus, viewLevel, announcedCategory, announcedSearch]);
+  }, [data.activities, scopeTeams, data.activityStatus, viewLevel, announcedCategory, announcedSearch]);
 
   const handleShareTop3 = async (act: any) => {
-        let teams = data.teams.filter(t => t.activityId === act.id);
-        
-        if (viewLevel === 'area') {
-            teams = teams.filter(t => t.stageStatus === 'Area' || String(t.flag).toUpperCase() === 'TRUE');
-        }
+        // Use scopeTeams directly to respect filters
+        const teams = scopeTeams.filter(t => t.activityId === act.id);
 
         const winners = teams.map(t => {
             let score = 0, rank = '', medal = '';
@@ -490,7 +516,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
                 rank: parseInt(rank) || 999,
                 teamName: t.teamName,
                 schoolName: data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId)?.SchoolName || t.schoolId,
-                score: String(score),
+                score: String(formatScore(score)),
                 medal: medal
             };
         }).filter(w => w.rank >= 1 && w.rank <= 3).sort((a, b) => a.rank - b.rank);
@@ -505,14 +531,6 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
             alert('ยังไม่มีข้อมูลลำดับที่ 1-3');
         }
   };
-
-  // --- Data Filtering & Processing for Stats ---
-  const scopeTeams = useMemo(() => {
-      if (viewLevel === 'area') {
-          return (data.teams || []).filter(t => t.stageStatus === 'Area' || String(t.flag).toUpperCase() === 'TRUE');
-      }
-      return data.teams || [];
-  }, [data.teams, viewLevel]);
 
   const { stats, medalChartData, categoryChartData, topSchools } = useMemo(() => {
       const totalTeams = scopeTeams.length;
@@ -640,9 +658,32 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
             <p className="text-white/80 text-sm">ติดตามข่าวสารและผลการแข่งขันล่าสุด</p>
         </div>
         <div className="bg-white/10 p-1.5 rounded-xl backdrop-blur-md flex relative z-10 border border-white/20">
-            <button onClick={() => setViewLevel('cluster')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center ${viewLevel === 'cluster' ? 'bg-white text-blue-600 shadow' : 'text-white/80 hover:bg-white/10'}`}><School className="w-4 h-4 mr-2"/> ระดับกลุ่มฯ</button>
-            <button onClick={() => setViewLevel('area')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center ${viewLevel === 'area' ? 'bg-white text-purple-600 shadow' : 'text-white/80 hover:bg-white/10'}`}><Trophy className="w-4 h-4 mr-2"/> ระดับเขตฯ</button>
+            <button onClick={() => { setViewLevel('cluster'); if (!isGroupAdmin) setClusterFilter(''); }} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center ${viewLevel === 'cluster' ? 'bg-white text-blue-600 shadow' : 'text-white/80 hover:bg-white/10'}`}><School className="w-4 h-4 mr-2"/> ระดับกลุ่มฯ</button>
+            <button onClick={() => { setViewLevel('area'); setClusterFilter(''); }} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center ${viewLevel === 'area' ? 'bg-white text-purple-600 shadow' : 'text-white/80 hover:bg-white/10'}`}><Trophy className="w-4 h-4 mr-2"/> ระดับเขตฯ</button>
         </div>
+      </div>
+
+      {/* NEW: Global Filter Bar */}
+      <div className="flex flex-col sm:flex-row gap-4 items-center bg-white p-3 rounded-xl shadow-sm border border-gray-100">
+          <div className="flex items-center text-sm font-bold text-gray-700 whitespace-nowrap">
+              <Filter className="w-4 h-4 mr-2 text-gray-500" />
+              ตัวกรองข้อมูล:
+          </div>
+          <div className="w-full sm:w-72">
+              <SearchableSelect 
+                  options={[{label: 'ทุกกลุ่มเครือข่าย (All Clusters)', value: ''}, ...(data.clusters || []).map(c => ({ label: c.ClusterName, value: c.ClusterID }))]}
+                  value={clusterFilter}
+                  onChange={setClusterFilter}
+                  placeholder="แสดงทุกกลุ่มเครือข่าย"
+                  disabled={isGroupAdmin}
+                  icon={<School className="h-4 w-4" />}
+              />
+          </div>
+          {clusterFilter && (
+              <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                  กำลังแสดงผลเฉพาะ: <b>{(data.clusters || []).find(c => c.ClusterID === clusterFilter)?.ClusterName}</b>
+              </span>
+          )}
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -737,7 +778,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
                               <div key={team.teamId} className={`p-4 hover:bg-gray-50 transition-colors flex items-center justify-between animate-in slide-in-from-right duration-300 ${isVeryRecent ? 'bg-blue-50/30' : ''}`}>
                                   <div className="flex items-start gap-3 flex-1 min-w-0">
                                       <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 text-white font-bold text-sm shadow-sm ${isGold ? 'bg-yellow-400' : medal.includes('Silver') ? 'bg-gray-400' : 'bg-orange-400'}`}>
-                                          {score}
+                                          {formatScore(score)}
                                       </div>
                                       <div className="min-w-0">
                                           <div className="flex items-center gap-2 mb-0.5">
@@ -785,7 +826,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
                             <div className="flex-1 min-w-0">
                                 <div className="text-sm font-medium text-gray-800 truncate">{s.name}</div>
                             </div>
-                            <div className="font-bold text-sm text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{s.score}</div>
+                            <div className="font-bold text-sm text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{formatScore(s.score)}</div>
                         </div>
                     )) : (
                         <div className="p-6 text-center text-xs text-gray-400">ยังไม่มีข้อมูลคะแนน</div>
