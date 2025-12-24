@@ -17,6 +17,7 @@ import PrintDocumentsView from './components/PrintDocumentsView';
 import LiveScoreView from './components/LiveScoreView'; 
 import PublicResultView from './components/PublicResultView'; 
 import SettingsView from './components/SettingsView';
+import UserManagement from './components/UserManagement'; // New Component
 import LoginScreen from './components/LoginScreen';
 import { AppData, User } from './types';
 import { fetchData, checkUserPermission, verifyAndLinkLine } from './services/api';
@@ -371,6 +372,7 @@ const App: React.FC = () => {
                             <Route path="/documents" element={<PrintDocumentsView data={data} user={currentUser} />} />
                             <Route path="/announcements" element={<AnnouncementManager data={data} user={currentUser} onDataUpdate={() => fetchAppData(true)} />} />
                             <Route path="/schools" element={<PlaceholderMenu title="ข้อมูลโรงเรียน" />} />
+                            <Route path="/users" element={<UserManagement data={data} currentUser={currentUser} />} />
                             <Route path="/settings" element={<SettingsView data={data} user={currentUser} onDataUpdate={() => fetchAppData(true)} />} />
                             <Route 
                                 path="/profile" 
