@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { AppData, User, AppConfig } from '../types';
-import { Save, Loader2, Lock, Eye, EyeOff, LayoutDashboard, MonitorPlay, Users, MapPin, Trophy, Edit3, Award, Printer, FileBadge, IdCard, Gavel, Megaphone, School } from 'lucide-react';
+import { Save, Loader2, Lock, Eye, EyeOff, LayoutDashboard, MonitorPlay, Users, MapPin, Trophy, Edit3, Award, Printer, FileBadge, IdCard, Gavel, Megaphone, School, UserCog } from 'lucide-react';
 import { saveAppConfig } from '../services/api';
 
 interface SettingsViewProps {
@@ -11,21 +11,14 @@ interface SettingsViewProps {
 }
 
 const SettingsView: React.FC<SettingsViewProps> = ({ data, user, onDataUpdate }) => {
-  const [config, setConfig] = useState<AppConfig>({
-      menu_live: true,
-      menu_teams: true,
-      menu_venues: true,
-      menu_activities: true,
-      menu_score: true,
-      menu_results: true,
-      menu_documents: true,
-      menu_certificates: true,
-      menu_idcards: true,
-      menu_judges: true,
-      menu_announcements: true,
-      menu_schools: true,
-      ...data.appConfig
-  });
+  // Use same defaults as Layout to ensure consistency
+  const defaults: AppConfig = {
+      menu_live: true, menu_teams: true, menu_venues: true, menu_activities: true,
+      menu_score: true, menu_results: true, menu_documents: true, menu_certificates: true,
+      menu_idcards: true, menu_judges: true, menu_announcements: true, menu_schools: true, menu_users: true
+  };
+
+  const [config, setConfig] = useState<AppConfig>({ ...defaults, ...(data.appConfig || {}) });
   
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
@@ -34,9 +27,8 @@ const SettingsView: React.FC<SettingsViewProps> = ({ data, user, onDataUpdate })
   const isAdminOrArea = role === 'admin' || role === 'area';
 
   useEffect(() => {
-      if (data.appConfig) {
-          setConfig(prev => ({ ...prev, ...data.appConfig }));
-      }
+      // Re-merge when data updates
+      setConfig({ ...defaults, ...(data.appConfig || {}) });
   }, [data.appConfig]);
 
   if (!isAdminOrArea) {
@@ -85,6 +77,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ data, user, onDataUpdate })
       { key: 'menu_judges', label: 'ทำเนียบกรรมการ (Judges)', icon: Gavel },
       { key: 'menu_announcements', label: 'ข่าว/คู่มือ (Announcements)', icon: Megaphone },
       { key: 'menu_schools', label: 'โรงเรียน (Schools)', icon: School },
+      { key: 'menu_users', label: 'ผู้ใช้งาน (Users)', icon: UserCog },
   ];
 
   return (
@@ -99,23 +92,26 @@ const SettingsView: React.FC<SettingsViewProps> = ({ data, user, onDataUpdate })
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {menuItems.map((item) => (
-                      <div 
-                          key={item.key} 
-                          className={`p-4 rounded-xl border transition-all flex items-center justify-between cursor-pointer ${config[item.key as keyof AppConfig] ? 'bg-white border-gray-200 hover:border-blue-300 shadow-sm' : 'bg-gray-50 border-gray-100 opacity-60'}`}
-                          onClick={() => handleToggle(item.key as keyof AppConfig)}
-                      >
-                          <div className="flex items-center gap-3">
-                              <div className={`p-2 rounded-lg ${config[item.key as keyof AppConfig] ? 'bg-blue-50 text-blue-600' : 'bg-gray-200 text-gray-400'}`}>
-                                  <item.icon className="w-5 h-5" />
+                  {menuItems.map((item) => {
+                      const isVisible = config[item.key as keyof AppConfig] !== false; // Treat undefined as true
+                      return (
+                          <div 
+                              key={item.key} 
+                              className={`p-4 rounded-xl border transition-all flex items-center justify-between cursor-pointer ${isVisible ? 'bg-white border-gray-200 hover:border-blue-300 shadow-sm' : 'bg-gray-50 border-gray-100 opacity-60'}`}
+                              onClick={() => handleToggle(item.key as keyof AppConfig)}
+                          >
+                              <div className="flex items-center gap-3">
+                                  <div className={`p-2 rounded-lg ${isVisible ? 'bg-blue-50 text-blue-600' : 'bg-gray-200 text-gray-400'}`}>
+                                      <item.icon className="w-5 h-5" />
+                                  </div>
+                                  <span className="font-medium text-sm text-gray-700">{item.label}</span>
                               </div>
-                              <span className="font-medium text-sm text-gray-700">{item.label}</span>
+                              <div className={`w-10 h-6 rounded-full p-1 transition-colors ${isVisible ? 'bg-green-500' : 'bg-gray-300'}`}>
+                                  <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform ${isVisible ? 'translate-x-4' : 'translate-x-0'}`}></div>
+                              </div>
                           </div>
-                          <div className={`w-10 h-6 rounded-full p-1 transition-colors ${config[item.key as keyof AppConfig] ? 'bg-green-500' : 'bg-gray-300'}`}>
-                              <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform ${config[item.key as keyof AppConfig] ? 'translate-x-4' : 'translate-x-0'}`}></div>
-                          </div>
-                      </div>
-                  ))}
+                      );
+                  })}
               </div>
 
               {message && (
