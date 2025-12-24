@@ -56,11 +56,19 @@ const formatScore = (score: number) => {
 
 // --- Modals ---
 
-const ActivityResultsModal = ({ activityId, data, onClose, viewLevel }: { activityId: string, data: AppData, onClose: () => void, viewLevel: 'cluster' | 'area' }) => {
+const ActivityResultsModal = ({ activityId, data, onClose, viewLevel, clusterFilter }: { activityId: string, data: AppData, onClose: () => void, viewLevel: 'cluster' | 'area', clusterFilter?: string }) => {
     const activity = data.activities.find(a => a.id === activityId);
     
     const teams = useMemo(() => {
         let list = data.teams.filter(t => t.activityId === activityId);
+        
+        // Filter by Cluster if provided (Crucial for Dashboard Cluster View)
+        if (clusterFilter) {
+            list = list.filter(t => {
+                const s = (data.schools || []).find(sc => sc.SchoolID === t.schoolId || sc.SchoolName === t.schoolId);
+                return s?.SchoolCluster === clusterFilter;
+            });
+        }
         
         if (viewLevel === 'area') {
              list = list.filter(t => t.stageStatus === 'Area' || String(t.flag).toUpperCase() === 'TRUE');
@@ -89,7 +97,7 @@ const ActivityResultsModal = ({ activityId, data, onClose, viewLevel }: { activi
              if (rA !== rB) return rA - rB;
              return b.displayScore - a.displayScore;
         });
-    }, [data.teams, activityId, viewLevel]);
+    }, [data.teams, activityId, viewLevel, clusterFilter, data.schools]);
 
     const handleShareTeam = async (team: any) => {
         const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
@@ -111,6 +119,9 @@ const ActivityResultsModal = ({ activityId, data, onClose, viewLevel }: { activi
         }
     };
 
+    const clusterName = clusterFilter ? (data.clusters.find(c => c.ClusterID === clusterFilter)?.ClusterName) : '';
+    const subTitle = viewLevel === 'area' ? 'ผลการแข่งขัน ระดับเขตพื้นที่' : (clusterName ? `ผลการแข่งขัน ${clusterName}` : 'ผลการแข่งขัน ระดับกลุ่มเครือข่าย');
+
     return (
         <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
             <div className="bg-white rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
@@ -121,7 +132,7 @@ const ActivityResultsModal = ({ activityId, data, onClose, viewLevel }: { activi
                             {activity?.name || 'รายละเอียดผลการแข่งขัน'}
                         </h3>
                         <p className="text-white/80 text-xs mt-0.5">
-                            ผลการแข่งขัน {viewLevel === 'area' ? 'ระดับเขตพื้นที่' : 'ระดับกลุ่มเครือข่าย'}
+                            {subTitle}
                         </p>
                     </div>
                     <button onClick={onClose} className="p-1.5 hover:bg-white/20 rounded-full transition-colors"><X className="w-6 h-6"/></button>
@@ -484,7 +495,17 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
               scoredTeams: scoredCount,
               isAnnounced: scoredCount > 0 || isLocked
           };
-      }).filter(a => a.isAnnounced); // Show only if announced/locked
+      }).filter(a => {
+          // Visibility Logic:
+          // 1. Must match announced state
+          if (!a.isAnnounced) return false;
+          
+          // 2. Hide activities with no teams in the current scope (specifically for Cluster View or Filter)
+          // This ensures that if a cluster didn't participate in an activity, it won't show up in their announced list
+          if (a.totalTeams === 0) return false;
+
+          return true;
+      }); 
 
       // Apply Filters
       const filtered = results.filter(a => {
@@ -619,6 +640,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, user }) => {
               data={data}
               onClose={() => setResultsModalActivityId(null)}
               viewLevel={viewLevel}
+              clusterFilter={clusterFilter}
           />
       )}
 
