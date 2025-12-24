@@ -143,6 +143,47 @@ export const updateUser = async (user: Partial<User>): Promise<boolean> => {
     }
 }
 
+export const getAllUsers = async (): Promise<User[]> => {
+    try {
+        const response = await fetch(`${API_URL}?action=getAllUsers`, {
+            method: 'GET',
+            mode: 'cors'
+        });
+        if (!response.ok) return [];
+        return await response.json();
+    } catch (e) {
+        console.error("Get All Users failed", e);
+        return [];
+    }
+}
+
+export const saveUserAdmin = async (user: Partial<User>): Promise<{ status: string, userId?: string, message?: string }> => {
+    try {
+        const response = await fetch(`${API_URL}?action=saveUserAdmin`, {
+            method: 'POST',
+            mode: 'cors',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify(user)
+        });
+        if (!response.ok) return { status: 'error', message: 'Network error' };
+        return await response.json();
+    } catch (e: any) {
+        return { status: 'error', message: e.toString() };
+    }
+}
+
+export const deleteUser = async (id: string): Promise<boolean> => {
+    try {
+        const response = await fetch(`${API_URL}?action=deleteUser&id=${encodeURIComponent(id)}`, {
+            method: 'GET',
+            mode: 'cors'
+        });
+        if (!response.ok) return false;
+        const result = await response.json();
+        return result.status === 'success';
+    } catch (e) { return false; }
+}
+
 export const updateTeamResult = async (teamId: string, score: number, rank: string, medal: string, flag: string = '', stage: string = '', remark: string = ''): Promise<boolean> => {
     try {
         const response = await fetch(`${API_URL}?action=updateTeamResult&teamId=${encodeURIComponent(teamId)}&score=${score}&rank=${encodeURIComponent(rank)}&medal=${encodeURIComponent(medal)}&flag=${encodeURIComponent(flag)}&stage=${encodeURIComponent(stage)}&remark=${encodeURIComponent(remark)}`, {
