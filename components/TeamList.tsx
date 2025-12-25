@@ -88,19 +88,19 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
 
   // Extract unique categories
   const categories = useMemo(() => {
-    return Array.from(new Set(data.activities.map(a => a.category))).sort();
+    return Array.from(new Set((data.activities || []).map(a => a.category))).sort();
   }, [data.activities]);
 
   // Extract clusters for filter
   const clusters = useMemo(() => {
-    return data.clusters.sort((a, b) => a.ClusterName.localeCompare(b.ClusterName));
+    return (data.clusters || []).sort((a, b) => a.ClusterName.localeCompare(b.ClusterName));
   }, [data.clusters]);
 
   // Extract schools for filter
   const schoolOptions = useMemo(() => {
       return [
           { label: 'ทั้งหมด (All Schools)', value: '' },
-          ...data.schools.map(s => ({ label: s.SchoolName, value: s.SchoolID }))
+          ...(data.schools || []).map(s => ({ label: s.SchoolName, value: s.SchoolID }))
       ];
   }, [data.schools]);
 
@@ -209,13 +209,13 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
       if (!isWithinDeadline(team)) return false;
 
       if (isGroupAdmin) {
-          const userSchool = data.schools.find(s => s.SchoolID === user.SchoolID);
-          const teamSchool = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
+          const userSchool = (data.schools || []).find(s => s.SchoolID === user.SchoolID);
+          const teamSchool = (data.schools || []).find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
           return userSchool && teamSchool && userSchool.SchoolCluster === teamSchool.SchoolCluster;
       }
 
       if (isSchoolAdmin) {
-          const userSchool = data.schools.find(s => s.SchoolID === user.SchoolID);
+          const userSchool = (data.schools || []).find(s => s.SchoolID === user.SchoolID);
           return team.schoolId === user.SchoolID || (userSchool && team.schoolId === userSchool.SchoolName);
       }
 
@@ -245,17 +245,17 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
       let bgGradient = "from-blue-600 to-indigo-700";
 
       if (role === 'admin' || role === 'area') {
-          scopeTeams = data.teams;
+          scopeTeams = data.teams || [];
           title = "ภาพรวมระดับเขตพื้นที่ (District Overview)";
           icon = Trophy;
           bgGradient = "from-purple-600 to-indigo-600";
       } else if (role === 'group_admin') {
-          const userSchool = data.schools.find(s => s.SchoolID === user.SchoolID);
+          const userSchool = (data.schools || []).find(s => s.SchoolID === user.SchoolID);
           const clusterId = userSchool?.SchoolCluster;
-          const cluster = data.clusters.find(c => c.ClusterID === clusterId);
+          const cluster = (data.clusters || []).find(c => c.ClusterID === clusterId);
           if (cluster) {
-              scopeTeams = data.teams.filter(t => {
-                  const teamSchool = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
+              scopeTeams = (data.teams || []).filter(t => {
+                  const teamSchool = (data.schools || []).find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
                   return teamSchool && teamSchool.SchoolCluster === clusterId;
               });
               title = `ภาพรวม ${cluster.ClusterName}`;
@@ -263,9 +263,9 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
               bgGradient = "from-blue-600 to-cyan-600";
           }
       } else if (role === 'school_admin' || role === 'user') {
-          const userSchool = data.schools.find(s => s.SchoolID === user.SchoolID);
+          const userSchool = (data.schools || []).find(s => s.SchoolID === user.SchoolID);
           if (userSchool) {
-               scopeTeams = data.teams.filter(t => 
+               scopeTeams = (data.teams || []).filter(t => 
                   t.schoolId === user.SchoolID || 
                   t.schoolId === userSchool.SchoolName
               );
@@ -304,7 +304,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
 
           // For Top Schools calculation, we use score > 0
           if (score > 0) {
-              const sName = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId)?.SchoolName || t.schoolId;
+              const sName = (data.schools || []).find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId)?.SchoolName || t.schoolId;
               schoolScores[sName] = (schoolScores[sName] || 0) + score;
           }
       });
@@ -329,23 +329,23 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
   }, [data.teams, data.schools, data.clusters, user, viewRound, role]);
 
   const filteredTeams = useMemo(() => {
-    let teams = data.teams;
+    let teams = data.teams || [];
     const isGuest = !user || user.isGuest;
 
     if (isGuest) {
     } else if (user) {
         if (role === 'admin' || role === 'area') {
         } else if (role === 'group_admin') {
-            const userSchool = data.schools.find(s => s.SchoolID === user.SchoolID);
+            const userSchool = (data.schools || []).find(s => s.SchoolID === user.SchoolID);
             if (userSchool) {
                 const userClusterId = userSchool.SchoolCluster;
                 teams = teams.filter(t => {
-                    const teamSchool = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
+                    const teamSchool = (data.schools || []).find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
                     return teamSchool && teamSchool.SchoolCluster === userClusterId;
                 });
             } else { teams = []; }
         } else if (role === 'school_admin' || role === 'user') {
-            const userSchool = data.schools.find(s => s.SchoolID === user.SchoolID);
+            const userSchool = (data.schools || []).find(s => s.SchoolID === user.SchoolID);
             if (user.SchoolID) {
                 teams = teams.filter(t => 
                     t.schoolId === user.SchoolID || 
@@ -365,9 +365,9 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
     }
 
     let result = teams.filter(team => {
-      const activity = data.activities.find(a => a.id === team.activityId);
-      const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
-      const cluster = school ? data.clusters.find(c => c.ClusterID === school.SchoolCluster) : null;
+      const activity = (data.activities || []).find(a => a.id === team.activityId);
+      const school = (data.schools || []).find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
+      const cluster = school ? (data.clusters || []).find(c => c.ClusterID === school.SchoolCluster) : null;
       const normalizedStatus = normalizeStatus(team.status);
       
       const term = searchTerm.toLowerCase();
@@ -415,8 +415,8 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
                     valB = b.teamName.toLowerCase();
                     break;
                 case 'school':
-                    const schoolA = data.schools.find(s => s.SchoolID === a.schoolId || s.SchoolName === a.schoolId);
-                    const schoolB = data.schools.find(s => s.SchoolID === b.schoolId || s.SchoolName === b.schoolId);
+                    const schoolA = (data.schools || []).find(s => s.SchoolID === a.schoolId || s.SchoolName === a.schoolId);
+                    const schoolB = (data.schools || []).find(s => s.SchoolID === b.schoolId || s.SchoolName === b.schoolId);
                     valA = (schoolA?.SchoolName || a.schoolId).toLowerCase();
                     valB = (schoolB?.SchoolName || b.schoolId).toLowerCase();
                     break;
@@ -590,9 +590,27 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
 
       const teamsByActivity: Record<string, Team[]> = {};
       filteredTeams.forEach(t => {
-          const actName = data.activities.find(a => a.id === t.activityId)?.name || t.activityId;
+          const actName = (data.activities || []).find(a => a.id === t.activityId)?.name || t.activityId;
           if (!teamsByActivity[actName]) teamsByActivity[actName] = [];
           teamsByActivity[actName].push(t);
+      });
+
+      // Sort teams within each activity by score descending
+      Object.keys(teamsByActivity).forEach(actName => {
+          teamsByActivity[actName].sort((a, b) => {
+              let scoreA = 0;
+              let scoreB = 0;
+              
+              if (viewRound === 'area') {
+                  scoreA = getAreaInfo(a.stageInfo)?.score || 0;
+                  scoreB = getAreaInfo(b.stageInfo)?.score || 0;
+              } else {
+                  scoreA = a.score || 0;
+                  scoreB = b.score || 0;
+              }
+              
+              return scoreB - scoreA;
+          });
       });
 
       const htmlContent = `
@@ -640,7 +658,7 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
                         </thead>
                         <tbody>
                             ${teams.map((t, idx) => {
-                                 const school = data.schools.find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
+                                 const school = (data.schools || []).find(s => s.SchoolID === t.schoolId || s.SchoolName === t.schoolId);
                                  const rawScore = viewRound === 'cluster' ? t.score : getAreaInfo(t.stageInfo)?.score;
                                  const displayScore = (typeof rawScore === 'number' && rawScore > 0) ? rawScore : '-';
                                  return `
@@ -1031,9 +1049,9 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
       {/* Mobile Cards */}
       <div className="grid grid-cols-1 gap-4 md:hidden">
         {paginatedTeams.map((team) => {
-            const activity = data.activities.find(a => a.id === team.activityId);
-            const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
-            const cluster = school ? data.clusters.find(c => c.ClusterID === school.SchoolCluster) : null;
+            const activity = (data.activities || []).find(a => a.id === team.activityId);
+            const school = (data.schools || []).find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
+            const cluster = school ? (data.clusters || []).find(c => c.ClusterID === school.SchoolCluster) : null;
             const areaInfo = getAreaInfo(team.stageInfo);
             const imageUrl = getTeamImageUrl(team);
             const showScore = viewRound === 'cluster' ? team.score : areaInfo?.score;
@@ -1212,10 +1230,10 @@ const TeamList: React.FC<TeamListProps> = ({ data, user, onDataUpdate }) => {
             <tbody className="bg-white divide-y divide-gray-200">
               {paginatedTeams.length > 0 ? (
                 paginatedTeams.map((team) => {
-                  const activity = data.activities.find(a => a.id === team.activityId);
-                  const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
-                  const cluster = school ? data.clusters.find(c => c.ClusterID === school.SchoolCluster) : null;
-                  const teamFiles = data.files.filter(f => f.TeamID === team.teamId);
+                  const activity = (data.activities || []).find(a => a.id === team.activityId);
+                  const school = (data.schools || []).find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
+                  const cluster = school ? (data.clusters || []).find(c => c.ClusterID === school.SchoolCluster) : null;
+                  const teamFiles = (data.files || []).filter(f => f.TeamID === team.teamId);
                   const areaInfo = getAreaInfo(team.stageInfo);
                   const imageUrl = getTeamImageUrl(team);
                   
