@@ -58,11 +58,23 @@ const calculateMedal = (score: number) => {
 
 // --- Sub-Components ---
 
-const ModalToast = ({ message, type, isVisible }: { message: string, type: 'success' | 'error', isVisible: boolean }) => {
+const ModalToast = ({ message, type, isVisible }: { message: string, type: 'success' | 'error' | 'info', isVisible: boolean }) => {
     if (!isVisible) return null;
+    
+    let bgClass = 'bg-blue-600';
+    let icon = <Info className="w-5 h-5 mr-2" />;
+
+    if (type === 'success') {
+        bgClass = 'bg-green-600';
+        icon = <CheckCircle className="w-5 h-5 mr-2" />;
+    } else if (type === 'error') {
+        bgClass = 'bg-red-600';
+        icon = <AlertCircle className="w-5 h-5 mr-2" />;
+    }
+
     return (
-        <div className={`absolute top-20 left-1/2 transform -translate-x-1/2 z-[70] flex items-center px-4 py-3 rounded-xl shadow-lg animate-in slide-in-from-top-5 fade-in duration-300 ${type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>
-            {type === 'success' ? <CheckCircle className="w-5 h-5 mr-2" /> : <AlertCircle className="w-5 h-5 mr-2" />}
+        <div className={`absolute top-20 left-1/2 transform -translate-x-1/2 z-[70] flex items-center px-4 py-3 rounded-xl shadow-lg animate-in slide-in-from-top-5 fade-in duration-300 ${bgClass} text-white`}>
+            {icon}
             <span className="font-medium text-sm">{message}</span>
         </div>
     );
@@ -163,7 +175,7 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
   const [isSharing, setIsSharing] = useState(false);
   
   // Modals & Popups
-  const [toast, setToast] = useState<{ msg: string, type: 'success' | 'error', show: boolean }>({ msg: '', type: 'success', show: false });
+  const [toast, setToast] = useState<{ msg: string, type: 'success' | 'error' | 'info', isVisible: boolean }>({ msg: '', type: 'success', isVisible: false });
   const [confirmDelete, setConfirmDelete] = useState<{ show: boolean, type: 'teacher' | 'student', index: number }>({ show: false, type: 'teacher', index: -1 });
   const [imageZoom, setImageZoom] = useState<string | null>(null);
 
@@ -244,6 +256,8 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
   const handleSave = async () => {
       if (uploadingState.loading) return;
       setIsSaving(true);
+      showNotification('กำลังบันทึกข้อมูล...', 'info');
+      
       const prepare = (m: any) => {
           const { image, fileId, ...rest } = m; 
           return fileId ? { ...rest, photoDriveId: fileId } : rest;
@@ -260,7 +274,7 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
       const success = await updateTeamDetails(payload);
       setIsSaving(false);
       if (success) {
-          showNotification('บันทึกสำเร็จ', 'success');
+          showNotification('บันทึกสำเร็จเรียบร้อย', 'success');
           setHasUnsavedChanges(false);
           setIsEditing(false);
           if (onSaveSuccess) onSaveSuccess();
@@ -269,9 +283,9 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
       }
   };
 
-  const showNotification = (msg: string, type: 'success' | 'error') => {
-      setToast({ msg, type, show: true });
-      setTimeout(() => setToast(prev => ({ ...prev, show: false })), 3000);
+  const showNotification = (msg: string, type: 'success' | 'error' | 'info') => {
+      setToast({ msg, type, isVisible: true });
+      setTimeout(() => setToast(prev => ({ ...prev, isVisible: false })), 3000);
   };
 
   const handlePrintApplication = () => {
@@ -484,17 +498,32 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
                           <div key={idx} className={`flex items-center gap-3 p-3 bg-white border rounded-xl shadow-sm relative group ${isDiff ? 'border-orange-300 ring-1 ring-orange-100' : 'border-gray-200'}`}>
                               <div className="relative shrink-0 cursor-pointer" onClick={() => m.image && setImageZoom(m.image)}>
                                   {m.image ? (
-                                      <img src={m.image} className="w-12 h-12 rounded-full object-cover border" alt="Avatar"/>
+                                      <div className="relative">
+                                          <img src={m.image} className={`w-12 h-12 rounded-full object-cover border ${uploadingState.id === `${type}-${idx}` ? 'opacity-50' : ''}`} alt="Avatar"/>
+                                          {uploadingState.id === `${type}-${idx}` && (
+                                              <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center z-10 backdrop-blur-sm">
+                                                  <Loader2 className="w-5 h-5 text-white animate-spin" />
+                                              </div>
+                                          )}
+                                      </div>
                                   ) : (
-                                      <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 font-bold border">{type === 'teacher' ? 'T' : 'S'}{idx+1}</div>
+                                      <div className="relative w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 font-bold border">
+                                          {uploadingState.id === `${type}-${idx}` ? <Loader2 className="w-5 h-5 animate-spin" /> : (type === 'teacher' ? 'T' : 'S')}{!uploadingState.loading && (idx+1)}
+                                      </div>
                                   )}
                                   {m.image && <div className="absolute inset-0 bg-black/0 hover:bg-black/20 rounded-full transition-colors flex items-center justify-center"><Maximize2 className="w-4 h-4 text-white opacity-0 hover:opacity-100"/></div>}
                                   {isEditing && (
-                                      <label className="absolute -bottom-1 -right-1 bg-white p-1 rounded-full shadow border cursor-pointer hover:text-blue-600">
+                                      <label 
+                                          className="absolute -bottom-1 -right-1 bg-white p-1 rounded-full shadow border cursor-pointer hover:text-blue-600 transition-colors"
+                                          onClick={(e) => e.stopPropagation()}
+                                      >
                                           <Camera className="w-3 h-3" />
                                           <input type="file" className="hidden" accept="image/*" onChange={async (e) => {
                                               if (!e.target.files?.[0]) return;
-                                              setUploadingState({ id: `${type}-${idx}`, loading: true });
+                                              const fileId = `${type}-${idx}`;
+                                              setUploadingState({ id: fileId, loading: true });
+                                              showNotification('กำลังเตรียมไฟล์และอัปโหลด...', 'info');
+
                                               try {
                                                   const base64 = await resizeImage(e.target.files[0]);
                                                   const res = await uploadImage(base64, `avatar_${team.teamId}_${type}_${idx}.jpg`);
@@ -502,8 +531,15 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
                                                       const newList = [...list];
                                                       newList[idx] = { ...newList[idx], image: getPhotoUrl(res.fileId), fileId: res.fileId };
                                                       type === 'teacher' ? setEditTeachers(newList) : setEditStudents(newList);
+                                                      showNotification('อัปโหลดรูปภาพสำเร็จ', 'success');
+                                                  } else {
+                                                       showNotification('อัปโหลดไม่สำเร็จ: ' + res.message, 'error');
                                                   }
-                                              } finally { setUploadingState({ id: '', loading: false }); }
+                                              } catch (e) {
+                                                   showNotification('เกิดข้อผิดพลาดในการอัปโหลด', 'error');
+                                              } finally { 
+                                                   setUploadingState({ id: '', loading: false }); 
+                                              }
                                           }}/>
                                       </label>
                                   )}
@@ -513,7 +549,7 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
                                   {isEditing ? (
                                       <div className="flex gap-2">
                                           <PrefixInput value={m.prefix || ''} onChange={val => { const n = [...list]; n[idx].prefix = val; type === 'teacher' ? setEditTeachers(n) : setEditStudents(n); }} />
-                                          <input className="flex-1 border rounded px-2 py-2 text-sm bg-gray-50 focus:bg-white" placeholder="ชื่อ-สกุล" value={m.name} onChange={e => { const n = [...list]; n[idx].name = e.target.value; type === 'teacher' ? setEditTeachers(n) : setEditStudents(n); }} />
+                                          <input className="flex-1 border rounded px-2 py-2 text-sm bg-gray-50 focus:bg-white transition-colors focus:ring-1 focus:ring-blue-500 outline-none" placeholder="ชื่อ-สกุล" value={m.name} onChange={e => { const n = [...list]; n[idx].name = e.target.value; type === 'teacher' ? setEditTeachers(n) : setEditStudents(n); }} />
                                       </div>
                                   ) : (
                                       <div>
@@ -528,7 +564,7 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
                                   {/* Only show Phone for Teachers */}
                                   {type === 'teacher' && (
                                       isEditing ? (
-                                          <input className="w-full border rounded px-2 py-1 text-xs" placeholder="เบอร์โทร" value={m.phone || ''} onChange={e => { const n = [...list]; n[idx].phone = e.target.value; setEditTeachers(n); }} />
+                                          <input className="w-full border rounded px-2 py-1 text-xs focus:ring-1 focus:ring-blue-500 outline-none" placeholder="เบอร์โทร" value={m.phone || ''} onChange={e => { const n = [...list]; n[idx].phone = e.target.value; setEditTeachers(n); }} />
                                       ) : <p className="text-xs text-gray-500 flex items-center">{maskData(m.phone || '-', 'phone', canEdit)} {!canEdit && m.phone && <ShieldCheck className="w-3 h-3 ml-1 text-green-500"/>}</p>
                                   )}
                               </div>
@@ -737,7 +773,7 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
                 </div>
             )}
 
-            <ModalToast message={toast.msg} type={toast.type} isVisible={toast.show} />
+            <ModalToast message={toast.msg} type={toast.type as any} isVisible={toast.isVisible} />
 
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col animate-in slide-in-from-bottom-4 duration-300 relative" onClick={e => e.stopPropagation()}>
                 
@@ -748,7 +784,14 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
                     <div className="flex justify-between items-start mt-4">
                         <div className="flex-1 min-w-0 pr-4">
                             {isEditing ? (
-                                <input className="text-2xl font-bold text-gray-900 border-b-2 border-blue-500 focus:outline-none w-full" value={editTeamName} onChange={e => setEditTeamName(e.target.value)} />
+                                <div className="space-y-1">
+                                    <input 
+                                        className="text-2xl font-bold text-gray-900 border-b-2 border-blue-500 focus:outline-none w-full bg-blue-50/20 px-2 rounded-t" 
+                                        value={editTeamName} 
+                                        onChange={e => setEditTeamName(e.target.value)} 
+                                    />
+                                    <div className="text-xs text-blue-500 font-medium">Editing enabled</div>
+                                </div>
                             ) : (
                                 <div className="flex items-center gap-2">
                                     <h2 className="text-2xl font-bold text-gray-900 line-clamp-1">{editTeamName}</h2>
@@ -810,13 +853,13 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
                         <div className="flex gap-3">
                             {isEditing ? (
                                 <>
-                                    <button onClick={() => { setIsEditing(false); setHasUnsavedChanges(false); }} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg text-sm font-medium">ยกเลิก</button>
-                                    <button onClick={handleSave} disabled={isSaving} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-bold shadow-sm flex items-center disabled:opacity-70">
+                                    <button onClick={() => { setIsEditing(false); setHasUnsavedChanges(false); showNotification('ยกเลิกการแก้ไข', 'info'); }} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg text-sm font-medium">ยกเลิก</button>
+                                    <button onClick={handleSave} disabled={isSaving} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-bold shadow-sm flex items-center disabled:opacity-70 transition-all">
                                         {isSaving ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : <Save className="w-4 h-4 mr-2"/>} บันทึก
                                     </button>
                                 </>
                             ) : (
-                                <button onClick={() => setIsEditing(true)} className="px-6 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium shadow-sm flex items-center">
+                                <button onClick={() => { setIsEditing(true); showNotification('เข้าสู่โหมดแก้ไขข้อมูล', 'info'); }} className="px-6 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium shadow-sm flex items-center">
                                     <Edit3 className="w-4 h-4 mr-2"/> แก้ไขข้อมูล
                                 </button>
                             )}
@@ -840,6 +883,7 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
                     const n = [...editStudents]; n.splice(confirmDelete.index, 1); setEditStudents(n);
                 }
                 setConfirmDelete({ show: false, type: 'teacher', index: -1 });
+                showNotification('ลบรายชื่อแล้ว (กดบันทึกเพื่อยืนยัน)', 'info');
             }}
             onCancel={() => setConfirmDelete({ show: false, type: 'teacher', index: -1 })}
         />
