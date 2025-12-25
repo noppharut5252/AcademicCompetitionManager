@@ -1,5 +1,5 @@
 
-import { AppData, User, Team, CertificateTemplate, Venue, Judge, JudgeConfig, Announcement, Attachment, Comment, PrintConfig, AppConfig } from '../types';
+import { AppData, User, Team, CertificateTemplate, Venue, Judge, JudgeConfig, Announcement, Attachment, Comment, PrintConfig, AppConfig, School } from '../types';
 import { getMockData } from './mockData';
 
 const API_URL = "https://script.google.com/macros/s/AKfycbyYcf6m-3ypN3aX8F6prN0BLQcz0JyW0gj3Tq8dJyMs54gaTXSv_1uytthNu9H4CmMy/exec";
@@ -473,6 +473,34 @@ export const saveVenue = async (venue: Venue): Promise<boolean> => {
 export const deleteVenue = async (venueId: string): Promise<boolean> => {
     try {
         const response = await fetch(`${API_URL}?action=deleteVenue&id=${encodeURIComponent(venueId)}`, {
+            method: 'GET',
+            mode: 'cors'
+        });
+        if (!response.ok) return false;
+        const result = await response.json();
+        return result.status === 'success';
+    } catch (e) { return false; }
+};
+
+// NEW: Save School
+export const saveSchool = async (school: School): Promise<boolean> => {
+    try {
+        const response = await fetch(`${API_URL}?action=saveSchool`, {
+            method: 'POST',
+            mode: 'cors',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify(school)
+        });
+        if (!response.ok) return false;
+        const result = await response.json();
+        return result.status === 'success';
+    } catch (e) { return false; }
+};
+
+// NEW: Delete School
+export const deleteSchool = async (schoolId: string): Promise<boolean> => {
+    try {
+        const response = await fetch(`${API_URL}?action=deleteSchool&id=${encodeURIComponent(schoolId)}`, {
             method: 'GET',
             mode: 'cors'
         });
