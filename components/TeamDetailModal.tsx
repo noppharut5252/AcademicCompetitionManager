@@ -27,13 +27,6 @@ const DEFAULT_CLASS_OPTIONS = [
 
 // --- Helper Functions ---
 
-const parseLevelConfig = (configStr: string): string[] => {
-    if (!configStr) return DEFAULT_CLASS_OPTIONS;
-    const options: Set<string> = new Set();
-    const parts = configStr.split(',').map(s => s.trim()).filter(s => s);
-    return DEFAULT_CLASS_OPTIONS; 
-};
-
 // PDPA Masking Function
 const maskData = (text: string, type: 'phone' | 'line', isVisible: boolean) => {
     if (isVisible || !text) return text;
@@ -53,6 +46,14 @@ const getAreaInfo = (team: Team): AreaStageInfo | null => {
     } catch {
         return null;
     }
+};
+
+// Calculate Medal Logic
+const calculateMedal = (score: number) => {
+    if (score >= 80) return 'Gold';
+    if (score >= 70) return 'Silver';
+    if (score >= 60) return 'Bronze';
+    return 'Participant';
 };
 
 // --- Sub-Components ---
@@ -283,10 +284,18 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
       
       if (data.venues) {
           for (const v of data.venues) {
-              const schedule = v.scheduledActivities?.find(s => s.activityId === team.activityId);
-              if (schedule) {
-                  placeStr = `${v.name} ${schedule.building || ''} ${schedule.room || ''}`;
-                  dateStr = `${schedule.date || ''} ${schedule.timeRange || ''}`;
+              const schedules = v.scheduledActivities?.filter(s => s.activityId === team.activityId) || [];
+              
+              // Filter based on view context (Area vs Cluster)
+              const match = schedules.find(s => {
+                  if (isAreaContext) return s.level === 'area';
+                  // For cluster view, accept 'cluster' or undefined level (legacy/default)
+                  return s.level === 'cluster' || !s.level;
+              });
+
+              if (match) {
+                  placeStr = `${v.name} ${match.building || ''} ${match.room || ''}`;
+                  dateStr = `${match.date || ''} ${match.timeRange || ''}`;
                   break;
               }
           }
@@ -571,6 +580,12 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
       }
 
       const hasScore = score > 0 || score === -1;
+
+      // Auto-calculate medal if score exists but no medal
+      if (!medal && score > 0) {
+          medal = calculateMedal(score);
+      }
+
       const lowerMedal = (medal || '').toLowerCase();
       
       // Determine Styles
@@ -685,6 +700,11 @@ const TeamDetailModal: React.FC<TeamDetailModalProps> = ({ team, data, onClose, 
               scoreVal = areaInfo.score || 0;
               medalVal = areaInfo.medal || '';
               rankVal = areaInfo.rank || '';
+          }
+
+          // Auto-calculate for sharing if missing
+          if (!medalVal && scoreVal > 0) {
+              medalVal = calculateMedal(scoreVal);
           }
 
           // Trigger Service
