@@ -17,7 +17,8 @@ import PrintDocumentsView from './components/PrintDocumentsView';
 import LiveScoreView from './components/LiveScoreView'; 
 import PublicResultView from './components/PublicResultView'; 
 import SettingsView from './components/SettingsView';
-import UserManagement from './components/UserManagement'; // New Component
+import UserManagement from './components/UserManagement'; 
+import SchoolManagement from './components/SchoolManagement'; // New Component
 import LoginScreen from './components/LoginScreen';
 import { AppData, User } from './types';
 import { fetchData, checkUserPermission, verifyAndLinkLine } from './services/api';
@@ -337,13 +338,6 @@ const App: React.FC = () => {
     return null;
   };
 
-  const PlaceholderMenu = ({ title }: { title: string }) => (
-      <div className="bg-white p-6 rounded-xl border border-gray-100 text-center py-12">
-          <h3 className="text-lg font-bold text-gray-800 mb-2">{title}</h3>
-          <p className="text-gray-500 text-sm">ส่วนนี้อยู่ระหว่างการพัฒนา</p>
-      </div>
-  );
-
   return (
     <HashRouter>
         {/* Public Routes */}
@@ -371,7 +365,7 @@ const App: React.FC = () => {
                             <Route path="/idcards" element={<DocumentsView data={data} type="idcard" user={currentUser} />} />
                             <Route path="/documents" element={<PrintDocumentsView data={data} user={currentUser} />} />
                             <Route path="/announcements" element={<AnnouncementManager data={data} user={currentUser} onDataUpdate={() => fetchAppData(true)} />} />
-                            <Route path="/schools" element={<PlaceholderMenu title="ข้อมูลโรงเรียน" />} />
+                            <Route path="/schools" element={<SchoolManagement data={data} user={currentUser} onDataUpdate={() => fetchAppData(true)} />} />
                             <Route path="/users" element={<UserManagement data={data} currentUser={currentUser} />} />
                             <Route path="/settings" element={<SettingsView data={data} user={currentUser} onDataUpdate={() => fetchAppData(true)} />} />
                             <Route 
