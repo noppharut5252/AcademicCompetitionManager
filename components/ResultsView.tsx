@@ -1,7 +1,9 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { AppData, Team, AreaStageInfo, School, User } from '../types';
-import { Award, Search, Medal, Star, Trophy, LayoutGrid, Crown, School as SchoolIcon, CheckCircle, BarChart3, Flag, MapPin, ChevronLeft, ChevronRight, Filter, TrendingUp, X, List, Clock, Zap, Info, ChevronDown, ChevronUp, Activity } from 'lucide-react';
+import { Award, Search, Medal, Star, Trophy, LayoutGrid, Crown, School as SchoolIcon, CheckCircle, BarChart3, Flag, MapPin, ChevronLeft, ChevronRight, Filter, TrendingUp, X, List, Clock, Zap, Info, ChevronDown, ChevronUp, Activity, Download, PieChart as PieIcon, RefreshCw } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts';
+import SearchableSelect from './SearchableSelect';
 
 interface ResultsViewProps {
   data: AppData;
@@ -79,6 +81,8 @@ const getMedalTextThai = (medalStr: string) => {
     if (medal.includes('Bronze')) return 'เหรียญทองแดง';
     return 'เข้าร่วม';
 };
+
+const COLORS = ['#F59E0B', '#94A3B8', '#F97316', '#3B82F6']; // Gold, Silver, Bronze, Blue
 
 const SchoolDetailModal = ({ schoolName, teams, stage, onClose, data }: { schoolName: string, teams: any[], stage: Stage, onClose: () => void, data: AppData }) => {
     return (
@@ -267,11 +271,14 @@ const ActivityRankingModal = ({ activityId, stage, data, onClose }: { activityId
 
 const ResultsView: React.FC<ResultsViewProps> = ({ data, user }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [selectedCluster, setSelectedCluster] = useState(''); // NEW: Cluster Filter
   // Set default stage to 'area'
   const [stage, setStage] = useState<Stage>('area');
   const [quickFilter, setQuickFilter] = useState<QuickFilter>('all');
   const [isLoading, setIsLoading] = useState(true);
   const [showAllStats, setShowAllStats] = useState(false);
+  const [showStatsChart, setShowStatsChart] = useState(true); // New: Toggle Chart
   
   // Modal State
   const [selectedSchoolDetail, setSelectedSchoolDetail] = useState<{ name: string, cluster?: string } | null>(null);
@@ -298,7 +305,7 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data, user }) => {
   // Reset pagination when filters change
   useEffect(() => {
       setCurrentPage(1);
-  }, [searchTerm, stage, quickFilter]);
+  }, [searchTerm, stage, quickFilter, selectedCategory, selectedCluster]);
 
   const getAreaInfo = (team: Team): AreaStageInfo | null => {
       try {
@@ -307,6 +314,10 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data, user }) => {
           return null;
       }
   };
+
+  const categories = useMemo(() => {
+      return ['All', ...Array.from(new Set(data.activities.map(a => a.category))).sort()];
+  }, [data.activities]);
 
   // --- My School Summary Logic ---
   const mySchoolSummary = useMemo(() => {
@@ -391,22 +402,31 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data, user }) => {
             ? (String(displayRank) === '1') 
             : (String(team.rank) === '1' && String(team.flag).toUpperCase() === 'TRUE');
 
+          const activity = data.activities.find(a => a.id === team.activityId);
+          const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
+
           return {
               ...team,
               displayScore,
               displayRank,
               displayMedalRaw,
               isRep,
-              schoolName: data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId)?.SchoolName || team.schoolId,
-              clusterName: data.clusters.find(c => c.ClusterID === (data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId)?.SchoolCluster))?.ClusterName || '-',
-              activityName: data.activities.find(a => a.id === team.activityId)?.name || team.activityId
+              schoolName: school?.SchoolName || team.schoolId,
+              clusterName: data.clusters.find(c => c.ClusterID === school?.SchoolCluster)?.ClusterName || '-',
+              schoolClusterID: school?.SchoolCluster, // Add ID for filtering
+              activityName: activity?.name || team.activityId,
+              activityCategory: activity?.category || 'General'
           };
       });
 
       // Filter
       const filtered = teams.filter(t => {
-          const hasScore = t.displayScore > 0 || (stage === 'area' && t.stageStatus === 'Area'); // Basic visibility
-          
+          // Cluster Filter
+          if (selectedCluster && selectedCluster !== 'All' && t.schoolClusterID !== selectedCluster) return false;
+
+          // Category Filter
+          if (selectedCategory !== 'All' && t.activityCategory !== selectedCategory) return false;
+
           // Search (Added Activity Name search)
           const term = searchTerm.toLowerCase();
           const matchSearch = t.teamName.toLowerCase().includes(term) || 
@@ -437,7 +457,52 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data, user }) => {
           return rankA - rankB;
       });
 
-  }, [data.teams, data.schools, data.clusters, stage, searchTerm, quickFilter, data.activities]);
+  }, [data.teams, data.schools, data.clusters, stage, searchTerm, quickFilter, data.activities, selectedCategory, selectedCluster]);
+
+  // --- Chart Data Preparation ---
+  const chartData = useMemo(() => {
+      let gold = 0, silver = 0, bronze = 0, participant = 0;
+      processedData.forEach(t => {
+          const m = t.displayMedalRaw || '';
+          if (m.includes('Gold')) gold++;
+          else if (m.includes('Silver')) silver++;
+          else if (m.includes('Bronze')) bronze++;
+          else participant++;
+      });
+      return [
+          { name: 'Gold', value: gold },
+          { name: 'Silver', value: silver },
+          { name: 'Bronze', value: bronze },
+          { name: 'Other', value: participant }
+      ];
+  }, [processedData]);
+
+  // --- Export CSV ---
+  const handleExportCSV = () => {
+      const headers = ['Team Name', 'School', 'Activity', 'Category', 'Score', 'Rank', 'Medal', 'Representative'];
+      const csvContent = [
+          headers.join(','),
+          ...processedData.map(t => [
+              `"${t.teamName.replace(/"/g, '""')}"`,
+              `"${t.schoolName.replace(/"/g, '""')}"`,
+              `"${t.activityName.replace(/"/g, '""')}"`,
+              `"${t.activityCategory.replace(/"/g, '""')}"`,
+              t.displayScore,
+              t.displayRank || '-',
+              t.displayMedalRaw,
+              t.isRep ? 'Yes' : 'No'
+          ].join(','))
+      ].join('\n');
+
+      const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `competition_results_${stage}_${new Date().toISOString().slice(0,10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+  };
 
   // --- Recent Updates (Top 6 latest updated) ---
   const recentUpdates = useMemo(() => {
@@ -449,33 +514,6 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data, user }) => {
           return dateB - dateA;
       }).slice(0, 6);
   }, [processedData]);
-
-  // --- Area Insights Stats ---
-  const areaStats = useMemo(() => {
-      if (stage !== 'area') return null;
-      let totalGold = 0;
-      const schoolGoldMap: Record<string, number> = {};
-      const activityCountMap: Record<string, number> = {};
-
-      processedData.forEach(t => {
-          if ((t.displayMedalRaw || '').includes('Gold')) {
-              totalGold++;
-              schoolGoldMap[t.schoolName] = (schoolGoldMap[t.schoolName] || 0) + 1;
-          }
-          activityCountMap[t.activityName] = (activityCountMap[t.activityName] || 0) + 1;
-      });
-
-      const goldSchoolsCount = Object.keys(schoolGoldMap).length;
-      
-      // Find most popular/active activity
-      let topActivity = '-';
-      let maxCount = 0;
-      Object.entries(activityCountMap).forEach(([name, count]) => {
-          if (count > maxCount) { maxCount = count; topActivity = name; }
-      });
-
-      return { totalGold, goldSchoolsCount, topActivity, maxCount };
-  }, [processedData, stage]);
 
   // --- Medal Summary Statistics ---
   const summaryStats = useMemo(() => {
@@ -508,9 +546,13 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data, user }) => {
               totalCount: sortedList.length
           };
       } else {
+          // Cluster Stage
           const clusterMap: Record<string, Record<string, SchoolStat>> = {};
           
           processedData.forEach(t => {
+              // Apply Cluster Filter Logic here as well for consistency in stats
+              if (selectedCluster && selectedCluster !== 'All' && t.schoolClusterID !== selectedCluster) return;
+
               const cName = t.clusterName;
               if (!clusterMap[cName]) clusterMap[cName] = {};
               
@@ -549,7 +591,7 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data, user }) => {
           
           return { type: 'cluster', data: sortedClusters };
       }
-  }, [processedData, stage, showAllStats, userCluster]);
+  }, [processedData, stage, showAllStats, userCluster, selectedCluster]);
 
   // --- Modal Logic ---
   const modalTeams = useMemo(() => {
@@ -672,64 +714,64 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data, user }) => {
           </div>
       )}
 
-      {/* Recent Updates Block */}
+      {/* Visual Analytics Chart */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+          <div className="flex justify-between items-center mb-4">
+              <h3 className="text-sm font-bold text-gray-800 flex items-center">
+                  <PieIcon className="w-4 h-4 mr-2 text-purple-600" /> 
+                  ภาพรวมเหรียญรางวัล (Medal Distribution)
+              </h3>
+              <button onClick={() => setShowStatsChart(!showStatsChart)} className="text-xs text-blue-600 hover:underline">
+                  {showStatsChart ? 'ซ่อนกราฟ' : 'แสดงกราฟ'}
+              </button>
+          </div>
+          {showStatsChart && (
+              <div className="h-64 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={chartData}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                          <XAxis dataKey="name" tick={{fontSize: 12}} />
+                          <YAxis tick={{fontSize: 12}} />
+                          <Tooltip />
+                          <Bar dataKey="value" name="จำนวนทีม" radius={[4, 4, 0, 0]}>
+                              {chartData.map((entry, index) => (
+                                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                              ))}
+                          </Bar>
+                      </BarChart>
+                  </ResponsiveContainer>
+              </div>
+          )}
+      </div>
+
+      {/* Recent Updates Block - Enhanced */}
       {recentUpdates.length > 0 && (
-          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-xl border border-blue-100 shadow-sm relative overflow-hidden">
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-xl border border-blue-100 shadow-sm relative overflow-hidden animate-in fade-in slide-in-from-top-4">
               <div className="flex items-center justify-between mb-3 relative z-10">
                   <h3 className="text-sm font-bold text-blue-800 flex items-center">
-                      <Zap className="w-4 h-4 mr-2 text-yellow-500 fill-yellow-500" />
+                      <Zap className="w-4 h-4 mr-2 text-yellow-500 fill-yellow-500 animate-pulse" />
                       รายการที่ประกาศล่าสุด (Recently Updated)
                   </h3>
+                  <span className="text-[10px] text-blue-600 font-medium bg-white px-2 py-0.5 rounded-full shadow-sm">
+                      <RefreshCw className="w-3 h-3 inline mr-1" />
+                      Real-time
+                  </span>
               </div>
               <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2 relative z-10">
                   {recentUpdates.map((t, i) => (
-                      <div key={`${t.teamId}-${i}`} className="min-w-[200px] bg-white p-3 rounded-lg border border-blue-100 shadow-sm hover:shadow-md transition-shadow flex flex-col">
+                      <div key={`${t.teamId}-${i}`} className="min-w-[200px] max-w-[220px] bg-white p-3 rounded-lg border border-blue-100 shadow-sm hover:shadow-md transition-all hover:-translate-y-1 flex flex-col group">
                           <div className="text-[10px] text-gray-400 font-medium mb-1 flex items-center">
                               <Clock className="w-3 h-3 mr-1" />
                               {t.lastEditedAt ? new Date(t.lastEditedAt).toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'}) : 'Recently'}
                           </div>
-                          <div className="font-bold text-gray-800 text-sm truncate" title={t.teamName}>{t.teamName}</div>
+                          <div className="font-bold text-gray-800 text-sm truncate group-hover:text-blue-600 transition-colors" title={t.teamName}>{t.teamName}</div>
                           <div className="text-xs text-gray-500 truncate mb-2">{t.schoolName}</div>
                           <div className="mt-auto flex items-center justify-between pt-2 border-t border-gray-50">
-                              <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded truncate max-w-[100px]">{t.activityName}</span>
+                              <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded truncate max-w-[100px]" title={t.activityName}>{t.activityName}</span>
                               <span className="font-bold text-blue-600 text-sm">{t.displayScore}</span>
                           </div>
                       </div>
                   ))}
-              </div>
-          </div>
-      )}
-
-      {/* Area Interesting Stats Block */}
-      {stage === 'area' && areaStats && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-white p-4 rounded-xl border border-yellow-200 shadow-sm flex items-center gap-4 bg-gradient-to-br from-yellow-50 to-white">
-                  <div className="p-3 bg-yellow-100 text-yellow-600 rounded-full">
-                      <Medal className="w-6 h-6" />
-                  </div>
-                  <div>
-                      <div className="text-xs text-gray-500 uppercase font-bold">รวมเหรียญทอง</div>
-                      <div className="text-2xl font-black text-gray-800">{areaStats.totalGold}</div>
-                  </div>
-              </div>
-              <div className="bg-white p-4 rounded-xl border border-green-200 shadow-sm flex items-center gap-4 bg-gradient-to-br from-green-50 to-white">
-                  <div className="p-3 bg-green-100 text-green-600 rounded-full">
-                      <SchoolIcon className="w-6 h-6" />
-                  </div>
-                  <div>
-                      <div className="text-xs text-gray-500 uppercase font-bold">โรงเรียนที่ได้ทอง</div>
-                      <div className="text-2xl font-black text-gray-800">{areaStats.goldSchoolsCount}</div>
-                  </div>
-              </div>
-              <div className="bg-white p-4 rounded-xl border border-purple-200 shadow-sm flex items-center gap-4 bg-gradient-to-br from-purple-50 to-white">
-                  <div className="p-3 bg-purple-100 text-purple-600 rounded-full">
-                      <TrendingUp className="w-6 h-6" />
-                  </div>
-                  <div className="min-w-0">
-                      <div className="text-xs text-gray-500 uppercase font-bold">แข่งขันสูงสุด</div>
-                      <div className="text-lg font-bold text-gray-800 truncate" title={areaStats.topActivity}>{areaStats.topActivity}</div>
-                      <div className="text-xs text-purple-500 font-medium">{areaStats.maxCount} ทีม</div>
-                  </div>
               </div>
           </div>
       )}
@@ -907,6 +949,63 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data, user }) => {
 
       {/* Filter Bar */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col gap-4 sticky top-0 z-10 md:static">
+        <div className="flex flex-col md:flex-row gap-4">
+            <div className="flex-1 min-w-[200px]">
+                <label className="block text-xs font-bold text-gray-500 mb-1">หมวดหมู่ (Category)</label>
+                <select 
+                    className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                    value={selectedCategory}
+                    onChange={(e) => setSelectedCategory(e.target.value)}
+                >
+                    {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                </select>
+            </div>
+            
+            {/* Cluster Filter */}
+            <div className="flex-1 min-w-[200px]">
+                <label className="block text-xs font-bold text-gray-500 mb-1">กลุ่มเครือข่าย (Cluster)</label>
+                <SearchableSelect 
+                    options={[{ label: 'ทั้งหมด (All Clusters)', value: 'All' }, ...(data.clusters || []).map(c => ({ label: c.ClusterName, value: c.ClusterID }))]}
+                    value={selectedCluster}
+                    onChange={setSelectedCluster}
+                    placeholder="เลือกกลุ่มเครือข่าย"
+                    icon={<LayoutGrid className="h-4 w-4" />}
+                />
+            </div>
+
+            <div className="flex-1 relative">
+                <label className="block text-xs font-bold text-gray-500 mb-1">ค้นหา (Search)</label>
+                <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <Search className="h-5 w-5 text-gray-400" />
+                    </div>
+                    <input
+                        type="text"
+                        className="block w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm transition-all"
+                        placeholder="ค้นหาชื่อทีม, โรงเรียน..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                    {searchTerm && (
+                        <button 
+                            onClick={() => setSearchTerm('')}
+                            className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+                        >
+                            <X className="h-4 w-4" />
+                        </button>
+                    )}
+                </div>
+            </div>
+            <div className="flex items-end">
+                <button 
+                    onClick={handleExportCSV}
+                    className="w-full md:w-auto px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-bold flex items-center justify-center hover:bg-green-700 shadow-sm transition-all"
+                >
+                    <Download className="w-4 h-4 mr-2" /> Export CSV
+                </button>
+            </div>
+        </div>
+
         <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
             <button 
                 onClick={() => setQuickFilter('all')}
@@ -932,27 +1031,6 @@ const ResultsView: React.FC<ResultsViewProps> = ({ data, user }) => {
             >
                 <Trophy className="w-3 h-3 mr-1.5" /> {stage === 'area' ? 'ผู้ชนะ (ที่ 1)' : 'ตัวแทนกลุ่มฯ'}
             </button>
-        </div>
-
-        <div className="relative w-full">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <Search className="h-5 w-5 text-gray-400" />
-          </div>
-          <input
-            type="text"
-            className="block w-full pl-10 pr-10 py-2.5 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm transition-all"
-            placeholder="ค้นหาชื่อทีม, โรงเรียน, กิจกรรม, หรือกลุ่มเครือข่าย..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-          {searchTerm && (
-              <button 
-                onClick={() => setSearchTerm('')}
-                className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
-              >
-                  <X className="h-4 w-4" />
-              </button>
-          )}
         </div>
       </div>
       
