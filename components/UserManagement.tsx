@@ -1,8 +1,8 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { AppData, User } from '../types';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { AppData, User, Activity } from '../types';
 import { getAllUsers, saveUserAdmin, deleteUser } from '../services/api';
-import { Search, Plus, Edit2, Trash2, User as UserIcon, Shield, School, CheckCircle, X, Save, Lock, Loader2, RefreshCw, AlertTriangle, Phone, Mail, MoreHorizontal } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, User as UserIcon, Shield, School, CheckCircle, X, Save, Lock, Loader2, RefreshCw, AlertTriangle, Phone, Mail, MoreHorizontal, Eye, EyeOff, Copy, Download, Upload, CheckSquare, Square, FileText, LayoutGrid, MessageCircle, Link as LinkIcon } from 'lucide-react';
 import SearchableSelect from './SearchableSelect';
 import ConfirmationModal from './ConfirmationModal';
 
@@ -26,28 +26,42 @@ const getRoleLevel = (role: string = '') => {
 const UserManagement: React.FC<UserManagementProps> = ({ data, currentUser }) => {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Filters
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('All');
+  const [clusterFilter, setClusterFilter] = useState('All'); // New: Cluster Filter
+  const [lineFilter, setLineFilter] = useState<'All' | 'Connected' | 'NotConnected'>('All'); // New: Line Filter
   
+  // Selection State (Bulk Actions)
+  const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
+
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<Partial<User>>({});
   const [isSaving, setIsSaving] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState<{ isOpen: boolean, id: string | null }>({ isOpen: false, id: null });
+  const [confirmDelete, setConfirmDelete] = useState<{ isOpen: boolean, ids: string[] }>({ isOpen: false, ids: [] });
+  
+  // Password Visibility
+  const [showPassword, setShowPassword] = useState(false);
+  
+  // Credential Modal (Post-Create)
+  const [createdCredential, setCreatedCredential] = useState<{username: string, password: string} | null>(null);
+
+  // File Import Ref
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
 
-  // Determine Current User Scope & Level
+  // Permissions & Context
   const userRole = currentUser?.level?.toLowerCase() || 'user';
   const myLevel = getRoleLevel(userRole);
-  
   const isAdminOrArea = userRole === 'admin' || userRole === 'area';
   const isGroupAdmin = userRole === 'group_admin';
   const isSchoolAdmin = userRole === 'school_admin';
 
-  // Find User's Cluster (for Group Admin)
   const userClusterId = useMemo(() => {
       if (!currentUser?.SchoolID) return null;
       const school = data.schools.find(s => s.SchoolID === currentUser.SchoolID);
@@ -63,26 +77,20 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, currentUser }) =>
       const res = await getAllUsers();
       setUsers(res);
       setLoading(false);
+      setSelectedUserIds(new Set()); // Reset selection
   };
 
-  // Filter Users based on Scope
+  // --- Filtering & Scope ---
   const scopedUsers = useMemo(() => {
       return users.filter(u => {
-          // 1. Admin/Area sees all
           if (isAdminOrArea) return true;
-
-          // 2. Group Admin sees users in their cluster
           if (isGroupAdmin) {
               const uSchool = data.schools.find(s => s.SchoolID === u.SchoolID);
-              // Strict mode: Must match cluster
               return uSchool?.SchoolCluster === userClusterId;
           }
-
-          // 3. School Admin sees users in their school
           if (isSchoolAdmin) {
               return u.SchoolID === currentUser?.SchoolID;
           }
-
           return false;
       });
   }, [users, isAdminOrArea, isGroupAdmin, isSchoolAdmin, userClusterId, currentUser, data.schools]);
@@ -96,39 +104,77 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, currentUser }) =>
           
           const matchesRole = roleFilter === 'All' || u.level === roleFilter;
           
-          return matchesSearch && matchesRole;
+          // Cluster Filter
+          let matchesCluster = true;
+          if (clusterFilter !== 'All') {
+              const uSchool = data.schools.find(s => s.SchoolID === u.SchoolID);
+              matchesCluster = uSchool?.SchoolCluster === clusterFilter;
+          }
+
+          // Line Connection Filter
+          let matchesLine = true;
+          if (lineFilter !== 'All') {
+              const hasLine = !!u.userline_id;
+              if (lineFilter === 'Connected') matchesLine = hasLine;
+              if (lineFilter === 'NotConnected') matchesLine = !hasLine;
+          }
+
+          return matchesSearch && matchesRole && matchesCluster && matchesLine;
       });
-  }, [scopedUsers, searchTerm, roleFilter]);
+  }, [scopedUsers, searchTerm, roleFilter, clusterFilter, lineFilter, data.schools]);
 
   const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
   const paginatedUsers = filteredUsers.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
-  // Available Roles for Creation based on permissions (Strict Hierarchy)
-  const availableRoles = useMemo(() => {
-      const allRoles = [
-          { value: 'admin', label: 'Admin (ผู้ดูแลระบบสูงสุด)', color: 'bg-purple-100 text-purple-800' },
-          { value: 'area', label: 'Area Admin (เขตพื้นที่)', color: 'bg-indigo-100 text-indigo-800' },
-          { value: 'group_admin', label: 'Group Admin (ประธานกลุ่มฯ)', color: 'bg-blue-100 text-blue-800' },
-          { value: 'school_admin', label: 'School Admin (แอดมินโรงเรียน)', color: 'bg-cyan-100 text-cyan-800' },
-          { value: 'score', label: 'Score Entry (กรรมการบันทึกคะแนน)', color: 'bg-orange-100 text-orange-800' },
-          { value: 'user', label: 'User (ผู้ใช้งานทั่วไป)', color: 'bg-gray-100 text-gray-800' }
-      ];
+  // --- Options ---
+  
+  // All possible roles for Filtering (Display all regardless of permission to see if they exist)
+  const filterRoleOptions = [
+      { value: 'Admin', label: 'Admin' },
+      { value: 'Area', label: 'Area Admin' },
+      { value: 'Group_Admin', label: 'Group Admin' },
+      { value: 'School_Admin', label: 'School Admin' },
+      { value: 'score', label: 'Score Entry' },
+      { value: 'User', label: 'User' }
+  ];
 
-      // Rule: Can only create roles STRICTLY LOWER than self
+  // Restricted roles for Creating/Editing
+  const assignableRoles = useMemo(() => {
+      const allRoles = [
+          { value: 'Admin', label: 'Admin (ผู้ดูแลระบบสูงสุด)', color: 'bg-purple-100 text-purple-800' },
+          { value: 'Area', label: 'Area Admin (เขตพื้นที่)', color: 'bg-indigo-100 text-indigo-800' },
+          { value: 'Group_Admin', label: 'Group Admin (แอดมินกลุ่มฯ)', color: 'bg-blue-100 text-blue-800' },
+          { value: 'School_Admin', label: 'School Admin (แอดมินโรงเรียน)', color: 'bg-cyan-100 text-cyan-800' },
+          { value: 'score', label: 'Score Entry (กรรมการบันทึกคะแนน)', color: 'bg-orange-100 text-orange-800' },
+          { value: 'User', label: 'User (ผู้ใช้งานทั่วไป)', color: 'bg-gray-100 text-gray-800' }
+      ];
       return allRoles.filter(roleOption => getRoleLevel(roleOption.value) < myLevel);
   }, [myLevel]);
 
-  // Available Schools for Creation
   const schoolOptions = useMemo(() => {
       let list = data.schools;
-      if (isGroupAdmin) {
-          list = list.filter(s => s.SchoolCluster === userClusterId);
-      } else if (isSchoolAdmin) {
-          list = list.filter(s => s.SchoolID === currentUser?.SchoolID);
-      }
+      if (isGroupAdmin) list = list.filter(s => s.SchoolCluster === userClusterId);
+      else if (isSchoolAdmin) list = list.filter(s => s.SchoolID === currentUser?.SchoolID);
       return list.map(s => ({ label: s.SchoolName, value: s.SchoolID }));
   }, [data.schools, isGroupAdmin, isSchoolAdmin, userClusterId, currentUser]);
 
+  // --- Handlers: Select ---
+  const handleSelectAll = () => {
+      if (selectedUserIds.size === paginatedUsers.length) {
+          setSelectedUserIds(new Set());
+      } else {
+          setSelectedUserIds(new Set(paginatedUsers.map(u => u.userid)));
+      }
+  };
+
+  const handleSelectUser = (id: string) => {
+      const newSet = new Set(selectedUserIds);
+      if (newSet.has(id)) newSet.delete(id);
+      else newSet.add(id);
+      setSelectedUserIds(newSet);
+  };
+
+  // --- Handlers: CRUD ---
   const handleAdd = () => {
       setEditingUser({
           userid: '',
@@ -136,11 +182,13 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, currentUser }) =>
           password: '',
           name: '',
           surname: '',
-          level: 'user', // Default to lowest safe role
-          SchoolID: isSchoolAdmin ? currentUser?.SchoolID : '', // Auto-set school for School Admin
+          level: 'user',
+          SchoolID: isSchoolAdmin ? currentUser?.SchoolID : '',
           email: '',
-          tel: ''
+          tel: '',
+          assignedActivities: [] // Init for Score role
       });
+      setShowPassword(false);
       setIsModalOpen(true);
   };
 
@@ -149,14 +197,12 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, currentUser }) =>
           alert("กรุณาแก้ไขข้อมูลส่วนตัวของคุณที่เมนู 'ข้อมูลส่วนตัว (Profile)'");
           return;
       }
-      
-      // Strict Hierarchy Check for Edit
       if (getRoleLevel(user.level) >= myLevel) {
           alert("คุณไม่มีสิทธิ์แก้ไขผู้ใช้งานที่มีระดับเท่ากันหรือสูงกว่า");
           return;
       }
-
-      setEditingUser({ ...user, password: '' }); // Don't show password
+      setEditingUser({ ...user, password: '' });
+      setShowPassword(false);
       setIsModalOpen(true);
   };
 
@@ -166,8 +212,6 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, currentUser }) =>
           alert('กรุณากรอกข้อมูลให้ครบถ้วน');
           return;
       }
-
-      // Security Check on Save (Prevent escalation)
       if (editingUser.level && getRoleLevel(editingUser.level) >= myLevel) {
           alert("คุณไม่สามารถกำหนดสิทธิ์ที่สูงกว่าหรือเท่ากับตนเองได้");
           return;
@@ -178,7 +222,16 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, currentUser }) =>
           const res = await saveUserAdmin(editingUser);
           if (res.status === 'success') {
               setIsModalOpen(false);
-              fetchUsers(); // Refresh list
+              
+              // Show Credentials if new user or password changed
+              if (editingUser.password) {
+                  setCreatedCredential({
+                      username: editingUser.username,
+                      password: editingUser.password
+                  });
+              }
+              
+              fetchUsers();
           } else {
               alert('บันทึกไม่สำเร็จ: ' + res.message);
           }
@@ -189,94 +242,209 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, currentUser }) =>
       }
   };
 
-  const handleDelete = async () => {
-      if (confirmDelete.id) {
-          const targetUser = users.find(u => u.userid === confirmDelete.id);
-          if (targetUser && getRoleLevel(targetUser.level) >= myLevel) {
-              alert("คุณไม่มีสิทธิ์ลบผู้ใช้งานระดับนี้");
-              setConfirmDelete({ isOpen: false, id: null });
-              return;
+  const handleDeleteConfirm = () => {
+      const ids = Array.from(selectedUserIds);
+      if (ids.length === 0) return;
+      
+      // Permission Check for Bulk
+      const forbidden = users.filter(u => ids.includes(u.userid) && getRoleLevel(u.level) >= myLevel);
+      if (forbidden.length > 0) {
+          alert("มีผู้ใช้งานบางคนที่คุณไม่มีสิทธิ์ลบ กรุณาตรวจสอบ");
+          return;
+      }
+
+      setConfirmDelete({ isOpen: true, ids });
+  };
+
+  const handleDeleteExecute = async () => {
+      setIsSaving(true);
+      // Sequential delete (Simulated bulk)
+      for (const id of confirmDelete.ids) {
+          await deleteUser(id);
+      }
+      setIsSaving(false);
+      setConfirmDelete({ isOpen: false, ids: [] });
+      fetchUsers();
+  };
+
+  // --- Handlers: Import/Export ---
+  const handleExportCSV = () => {
+      const headers = ['Username', 'Name', 'Surname', 'Role', 'SchoolID', 'Phone', 'Email', 'LineStatus'];
+      const rows = filteredUsers.map(u => [
+          u.username, u.name, u.surname, u.level, u.SchoolID, u.tel, u.email, u.userline_id ? 'Connected' : 'Not Connected'
+      ]);
+      const csvContent = [headers.join(','), ...rows.map(r => r.map(c => `"${c || ''}"`).join(','))].join('\n');
+      
+      const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `users_export_${new Date().toISOString().slice(0,10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+  };
+
+  const handleImportClick = () => fileInputRef.current?.click();
+
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = async (evt) => {
+          const text = evt.target?.result as string;
+          const lines = text.split('\n');
+          // Skip header, start from index 1
+          const promises = [];
+          
+          setIsSaving(true); // Show loading
+          
+          for (let i = 1; i < lines.length; i++) {
+              const line = lines[i].trim();
+              if (!line) continue;
+              // Simple CSV parse (assuming no commas in values for simplicity, otherwise use a lib)
+              const cols = line.split(',').map(c => c.replace(/"/g, '').trim());
+              // Expected: Username, Password, Name, Surname, Role, SchoolID, Email, Tel
+              if (cols.length < 5) continue;
+
+              const newUser: Partial<User> = {
+                  username: cols[0],
+                  password: cols[1],
+                  name: cols[2],
+                  surname: cols[3],
+                  level: cols[4] || 'user',
+                  SchoolID: cols[5] || '',
+                  email: cols[6] || '',
+                  tel: cols[7] || ''
+              };
+              
+              // Validate Level
+              if (getRoleLevel(newUser.level) < myLevel) {
+                  promises.push(saveUserAdmin(newUser));
+              }
           }
 
-          setIsSaving(true);
-          const success = await deleteUser(confirmDelete.id);
+          await Promise.all(promises);
           setIsSaving(false);
-          setConfirmDelete({ isOpen: false, id: null });
-          if (success) {
-              fetchUsers();
-          } else {
-              alert('ลบผู้ใช้งานไม่สำเร็จ');
-          }
-      }
+          alert(`นำเข้าข้อมูลเรียบร้อยแล้ว (${promises.length} รายการ)`);
+          fetchUsers();
+          if (fileInputRef.current) fileInputRef.current.value = '';
+      };
+      reader.readAsText(file);
+  };
+
+  const handleActivityToggle = (actId: string) => {
+      const current = new Set(editingUser.assignedActivities || []);
+      if (current.has(actId)) current.delete(actId);
+      else current.add(actId);
+      setEditingUser({ ...editingUser, assignedActivities: Array.from(current) });
   };
 
   const getRoleBadge = (role: string) => {
-      const allRoles = [
-          { value: 'admin', label: 'Admin', color: 'bg-purple-100 text-purple-800' },
-          { value: 'area', label: 'Area Admin', color: 'bg-indigo-100 text-indigo-800' },
-          { value: 'group_admin', label: 'Group Admin', color: 'bg-blue-100 text-blue-800' },
-          { value: 'school_admin', label: 'School Admin', color: 'bg-cyan-100 text-cyan-800' },
-          { value: 'score', label: 'Score', color: 'bg-orange-100 text-orange-800' },
-          { value: 'user', label: 'User', color: 'bg-gray-100 text-gray-800' }
-      ];
-      const r = allRoles.find(r => r.value === role);
-      return (
-          <span className={`px-2 py-1 rounded-full text-[10px] md:text-xs font-bold ${r?.color || 'bg-gray-100 text-gray-600'}`}>
-              {r?.label || role}
-          </span>
-      );
+      // Find from assignable list first for color, otherwise fallback
+      const r = assignableRoles.find(ar => ar.value === role) || { label: role, color: 'bg-gray-100 text-gray-600' };
+      // Fallback color logic if role not in assignable list (e.g. higher roles viewing list)
+      let colorClass = r.color;
+      if (role === 'admin') colorClass = 'bg-purple-100 text-purple-800';
+      else if (role === 'area') colorClass = 'bg-indigo-100 text-indigo-800';
+      else if (role === 'group_admin') colorClass = 'bg-blue-100 text-blue-800';
+
+      return <span className={`px-2 py-1 rounded-full text-[10px] md:text-xs font-bold ${colorClass}`}>{role}</span>;
   };
 
   return (
       <div className="space-y-4 md:space-y-6 animate-in fade-in duration-500 pb-20">
           
           {/* Header */}
-          <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
               <div>
                   <h2 className="text-lg md:text-xl font-bold text-gray-800 flex items-center font-kanit">
                       <UserIcon className="w-5 h-5 md:w-6 md:h-6 mr-2 text-purple-600" />
                       จัดการผู้ใช้งาน (User Management)
                   </h2>
                   <p className="text-gray-500 text-xs md:text-sm mt-1">
-                      {isAdminOrArea ? 'บริหารจัดการบัญชีผู้ใช้ทั้งหมด' : 
-                       isGroupAdmin ? 'บริหารจัดการผู้ใช้ในกลุ่มเครือข่ายของท่าน' : 
-                       'บริหารจัดการผู้ใช้ในโรงเรียนของท่าน'}
+                      {filteredUsers.length} Users found
                   </p>
               </div>
-              <button 
-                  onClick={handleAdd}
-                  className="flex items-center justify-center w-full md:w-auto px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm font-medium text-sm"
-              >
-                  <Plus className="w-4 h-4 mr-2" /> เพิ่มผู้ใช้งานใหม่
-              </button>
+              <div className="flex flex-wrap gap-2 w-full lg:w-auto">
+                  <input type="file" ref={fileInputRef} className="hidden" accept=".csv" onChange={handleImportFile} />
+                  <button onClick={handleImportClick} className="flex items-center px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium border border-gray-200">
+                      <Upload className="w-4 h-4 mr-2" /> Import CSV
+                  </button>
+                  <button onClick={handleExportCSV} className="flex items-center px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium border border-gray-200">
+                      <Download className="w-4 h-4 mr-2" /> Export CSV
+                  </button>
+                  <button onClick={handleAdd} className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-sm font-medium text-sm">
+                      <Plus className="w-4 h-4 mr-2" /> เพิ่มผู้ใช้งาน
+                  </button>
+              </div>
           </div>
 
-          {/* Controls */}
-          <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100">
-              <div className="flex flex-col md:flex-row justify-between gap-3 mb-4 md:mb-6">
-                  <div className="flex flex-col md:flex-row gap-2 w-full md:w-auto">
-                      <div className="relative flex-1 md:w-64">
-                          <Search className="absolute inset-y-0 left-3 flex items-center pointer-events-none h-4 w-4 text-gray-400" />
-                          <input
-                              type="text"
-                              className="block w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:outline-none"
-                              placeholder="ค้นหาชื่อ, Username..."
-                              value={searchTerm}
-                              onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-                          />
-                      </div>
+          {/* Controls & Filters */}
+          <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+              <div className="flex flex-col md:flex-row gap-3 mb-4">
+                  <div className="relative flex-1">
+                      <Search className="absolute inset-y-0 left-3 flex items-center pointer-events-none h-4 w-4 text-gray-400" />
+                      <input
+                          type="text"
+                          className="block w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:outline-none"
+                          placeholder="ค้นหาชื่อ, Username..."
+                          value={searchTerm}
+                          onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+                      />
+                  </div>
+                  
+                  {/* Cluster Filter */}
+                  <div className="w-full md:w-48">
+                      <SearchableSelect 
+                          options={[{ label: 'ทุกกลุ่มเครือข่าย', value: 'All' }, ...data.clusters.map(c => ({ label: c.ClusterName, value: c.ClusterID }))]}
+                          value={clusterFilter}
+                          onChange={(val) => { setClusterFilter(val); setCurrentPage(1); }}
+                          placeholder="กรองกลุ่มเครือข่าย"
+                          disabled={isGroupAdmin} // Group Admin locked to their cluster
+                          icon={<LayoutGrid className="w-3 h-3" />}
+                      />
+                  </div>
+
+                  {/* Role Filter */}
+                  <div className="w-full md:w-40">
                       <select 
-                          className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-blue-500 outline-none bg-white w-full md:w-auto"
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-blue-500 outline-none bg-white cursor-pointer"
                           value={roleFilter}
                           onChange={(e) => { setRoleFilter(e.target.value); setCurrentPage(1); }}
                       >
                           <option value="All">ทุกสิทธิ์การใช้งาน</option>
-                          {availableRoles.map(r => <option key={r.value} value={r.value}>{r.label.split('(')[0]}</option>)}
+                          {filterRoleOptions.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                       </select>
                   </div>
-                  <button onClick={fetchUsers} className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg self-end md:self-auto" title="Refresh">
-                      <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-                  </button>
+
+                  {/* LINE Connection Filter */}
+                  <div className="w-full md:w-40">
+                      <select 
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-blue-500 outline-none bg-white cursor-pointer"
+                          value={lineFilter}
+                          onChange={(e) => { setLineFilter(e.target.value as any); setCurrentPage(1); }}
+                      >
+                          <option value="All">การเชื่อมต่อ LINE</option>
+                          <option value="Connected">เชื่อมต่อแล้ว</option>
+                          <option value="NotConnected">ยังไม่เชื่อมต่อ</option>
+                      </select>
+                  </div>
+
+                  <div className="flex gap-2 items-center justify-end md:w-auto">
+                        {selectedUserIds.size > 0 && (
+                            <button 
+                                onClick={handleDeleteConfirm}
+                                className="flex items-center px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 text-sm font-bold border border-red-100 transition-all animate-in fade-in whitespace-nowrap"
+                            >
+                                <Trash2 className="w-4 h-4 mr-2" /> ลบ ({selectedUserIds.size})
+                            </button>
+                        )}
+                        <button onClick={fetchUsers} className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg border border-gray-200" title="Refresh">
+                            <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+                        </button>
+                  </div>
               </div>
 
               {loading ? (
@@ -284,135 +452,93 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, currentUser }) =>
                       <Loader2 className="w-10 h-10 animate-spin" />
                   </div>
               ) : (
-                  <>
-                      {/* Mobile Card View */}
-                      <div className="md:hidden space-y-3">
-                          {paginatedUsers.map((u) => {
-                              const schoolName = data.schools.find(s => s.SchoolID === u.SchoolID)?.SchoolName || u.SchoolID;
-                              const isMe = u.userid === currentUser?.userid;
-                              const canModify = !isMe && getRoleLevel(u.level) < myLevel;
+                  <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-gray-50">
+                              <tr>
+                                  <th className="px-4 py-3 w-10 text-center">
+                                      <button onClick={handleSelectAll} className="text-gray-400 hover:text-blue-600">
+                                          {selectedUserIds.size === paginatedUsers.length && paginatedUsers.length > 0 ? <CheckSquare className="w-5 h-5 text-blue-600"/> : <Square className="w-5 h-5"/>}
+                                      </button>
+                                  </th>
+                                  <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">ผู้ใช้งาน</th>
+                                  <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">บทบาท</th>
+                                  <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">โรงเรียน</th>
+                                  <th className="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">จัดการ</th>
+                              </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                              {paginatedUsers.map((u) => {
+                                  const schoolName = data.schools.find(s => s.SchoolID === u.SchoolID)?.SchoolName || u.SchoolID;
+                                  const isMe = u.userid === currentUser?.userid;
+                                  const canModify = !isMe && getRoleLevel(u.level) < myLevel;
+                                  const isSelected = selectedUserIds.has(u.userid);
+                                  const isLineConnected = !!u.userline_id;
 
-                              return (
-                                  <div key={u.userid} className={`bg-white border rounded-xl p-4 shadow-sm relative ${isMe ? 'border-blue-300 bg-blue-50/20' : 'border-gray-200'}`}>
-                                      <div className="flex items-start justify-between">
-                                          <div className="flex items-center gap-3">
-                                              <div className="h-10 w-10 shrink-0">
-                                                  {u.pictureUrl || u.avatarFileId ? (
-                                                      <img className="h-10 w-10 rounded-full object-cover border" src={u.pictureUrl || `https://drive.google.com/thumbnail?id=${u.avatarFileId}`} alt="" onError={(e) => { (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${u.name}&background=random`; }} />
-                                                  ) : (
-                                                      <div className="h-10 w-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 font-bold border">{u.name?.charAt(0) || 'U'}</div>
-                                                  )}
-                                              </div>
-                                              <div>
-                                                  <div className="text-sm font-bold text-gray-900 line-clamp-1">{u.name} {u.surname}</div>
-                                                  <div className="text-xs text-gray-500">@{u.username}</div>
-                                              </div>
-                                          </div>
-                                          {isMe && <span className="text-[10px] bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full font-medium">คุณ</span>}
-                                      </div>
-                                      
-                                      <div className="mt-3 flex flex-wrap gap-2 items-center">
-                                          {getRoleBadge(u.level)}
-                                          <div className="text-xs text-gray-500 flex items-center bg-gray-50 px-2 py-1 rounded border border-gray-100 max-w-full">
-                                              <School className="w-3 h-3 mr-1 shrink-0" />
-                                              <span className="truncate">{schoolName || '-'}</span>
-                                          </div>
-                                      </div>
-
-                                      <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
-                                          <div className="flex flex-col">
-                                              <span className="flex items-center"><Phone className="w-3 h-3 mr-1"/> {u.tel || '-'}</span>
-                                          </div>
-                                          
-                                          {canModify ? (
-                                              <div className="flex gap-2">
-                                                  <button onClick={() => handleEdit(u)} className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100"><Edit2 className="w-4 h-4"/></button>
-                                                  <button onClick={() => setConfirmDelete({ isOpen: true, id: u.userid })} className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100"><Trash2 className="w-4 h-4"/></button>
-                                              </div>
-                                          ) : (
-                                              !isMe && <span className="text-gray-300 italic flex items-center"><Lock className="w-3 h-3 mr-1"/> Locked</span>
-                                          )}
-                                      </div>
-                                  </div>
-                              );
-                          })}
-                      </div>
-
-                      {/* Desktop Table View */}
-                      <div className="hidden md:block overflow-x-auto">
-                          <table className="min-w-full divide-y divide-gray-200">
-                              <thead className="bg-gray-50">
-                                  <tr>
-                                      <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">ชื่อผู้ใช้งาน</th>
-                                      <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">บทบาท (Role)</th>
-                                      <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">สังกัด / โรงเรียน</th>
-                                      <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">การติดต่อ</th>
-                                      <th className="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">จัดการ</th>
-                                  </tr>
-                              </thead>
-                              <tbody className="bg-white divide-y divide-gray-200">
-                                  {paginatedUsers.map((u) => {
-                                      const schoolName = data.schools.find(s => s.SchoolID === u.SchoolID)?.SchoolName || u.SchoolID;
-                                      const isMe = u.userid === currentUser?.userid;
-                                      const canModify = !isMe && getRoleLevel(u.level) < myLevel;
-
-                                      return (
-                                          <tr key={u.userid} className={`hover:bg-gray-50 transition-colors ${isMe ? 'bg-blue-50/30' : ''}`}>
-                                              <td className="px-6 py-4 whitespace-nowrap">
-                                                  <div className="flex items-center">
-                                                      <div className="h-10 w-10 flex-shrink-0">
-                                                          {u.pictureUrl || u.avatarFileId ? (
-                                                              <img className="h-10 w-10 rounded-full object-cover border" src={u.pictureUrl || `https://drive.google.com/thumbnail?id=${u.avatarFileId}`} alt="" onError={(e) => { (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${u.name}&background=random`; }} />
-                                                          ) : (
-                                                              <div className="h-10 w-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 font-bold border">{u.name?.charAt(0) || 'U'}</div>
+                                  return (
+                                      <tr key={u.userid} className={`hover:bg-gray-50 transition-colors ${isSelected ? 'bg-blue-50/40' : ''}`}>
+                                          <td className="px-4 py-4 text-center">
+                                              {!isMe && canModify && (
+                                                  <button onClick={() => handleSelectUser(u.userid)} className="text-gray-400 hover:text-blue-600">
+                                                      {isSelected ? <CheckSquare className="w-5 h-5 text-blue-600"/> : <Square className="w-5 h-5"/>}
+                                                  </button>
+                                              )}
+                                          </td>
+                                          <td className="px-6 py-4 whitespace-nowrap">
+                                              <div className="flex items-center">
+                                                  <div className="h-9 w-9 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 font-bold border mr-3 text-sm overflow-hidden">
+                                                      {u.avatarFileId ? (
+                                                          <img src={`https://drive.google.com/thumbnail?id=${u.avatarFileId}`} className="w-full h-full object-cover" />
+                                                      ) : u.name?.charAt(0) || 'U'}
+                                                  </div>
+                                                  <div>
+                                                      <div className="text-sm font-bold text-gray-900 flex items-center">
+                                                          {u.name} {u.surname} 
+                                                          {isMe && <span className="text-[10px] text-blue-600 bg-blue-100 px-1 rounded ml-1">(You)</span>}
+                                                          {isLineConnected && (
+                                                              <span className="ml-1.5 text-[#06C755]" title="Linked with LINE">
+                                                                  <MessageCircle className="w-3.5 h-3.5 fill-current" />
+                                                              </span>
                                                           )}
                                                       </div>
-                                                      <div className="ml-4">
-                                                          <div className="text-sm font-medium text-gray-900">{u.name} {u.surname} {isMe && <span className="text-xs text-blue-600 bg-blue-100 px-1 rounded ml-1">(คุณ)</span>}</div>
-                                                          <div className="text-xs text-gray-500">@{u.username}</div>
-                                                      </div>
+                                                      <div className="text-xs text-gray-500">@{u.username}</div>
                                                   </div>
-                                              </td>
-                                              <td className="px-6 py-4 whitespace-nowrap">
-                                                  {getRoleBadge(u.level)}
-                                              </td>
-                                              <td className="px-6 py-4">
-                                                  <div className="text-sm text-gray-900 truncate max-w-[200px]">{schoolName || '-'}</div>
-                                              </td>
-                                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                                  <div className="flex items-center"><Phone className="w-3 h-3 mr-1"/> {u.tel || '-'}</div>
-                                                  <div className="text-xs flex items-center mt-0.5"><Mail className="w-3 h-3 mr-1"/> {u.email || '-'}</div>
-                                              </td>
-                                              <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                              </div>
+                                          </td>
+                                          <td className="px-6 py-4 whitespace-nowrap">
+                                              {getRoleBadge(u.level)}
+                                              {u.level === 'score' && (
+                                                  <div className="text-[10px] text-gray-400 mt-1">
+                                                      {u.assignedActivities?.length || 0} รายการ
+                                                  </div>
+                                              )}
+                                          </td>
+                                          <td className="px-6 py-4 text-sm text-gray-600">
+                                              <div className="truncate max-w-[200px]">{schoolName || '-'}</div>
+                                          </td>
+                                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                              {canModify && (
                                                   <div className="flex justify-end gap-2">
-                                                      {canModify && (
-                                                          <>
-                                                            <button onClick={() => handleEdit(u)} className="text-blue-600 hover:text-blue-900 bg-blue-50 p-1.5 rounded hover:bg-blue-100"><Edit2 className="w-4 h-4" /></button>
-                                                            <button onClick={() => setConfirmDelete({ isOpen: true, id: u.userid })} className="text-red-600 hover:text-red-900 bg-red-50 p-1.5 rounded hover:bg-red-100"><Trash2 className="w-4 h-4" /></button>
-                                                          </>
-                                                      )}
-                                                      {!canModify && !isMe && <span className="text-gray-300 italic"><Lock className="w-4 h-4 inline" /></span>}
-                                                      {isMe && <span className="text-xs text-gray-400 italic">Profile</span>}
+                                                      <button onClick={() => handleEdit(u)} className="p-1.5 text-blue-600 bg-blue-50 rounded hover:bg-blue-100"><Edit2 className="w-4 h-4" /></button>
+                                                      <button onClick={() => setConfirmDelete({ isOpen: true, ids: [u.userid] })} className="p-1.5 text-red-600 bg-red-50 rounded hover:bg-red-100"><Trash2 className="w-4 h-4" /></button>
                                                   </div>
-                                              </td>
-                                          </tr>
-                                      );
-                                  })}
-                              </tbody>
-                          </table>
-                      </div>
-                  </>
+                                              )}
+                                          </td>
+                                      </tr>
+                                  );
+                              })}
+                          </tbody>
+                      </table>
+                  </div>
               )}
               
               {/* Pagination */}
               {totalPages > 1 && (
-                  <div className="flex justify-between items-center mt-4 pt-4 border-t border-gray-100">
-                      <div className="text-sm text-gray-600">
-                          หน้า {currentPage} จาก {totalPages}
-                      </div>
+                  <div className="flex justify-between items-center mt-4 pt-4 border-t border-gray-100 px-2">
+                      <div className="text-xs text-gray-500">หน้า {currentPage} / {totalPages}</div>
                       <div className="flex gap-2">
-                          <button onClick={() => setCurrentPage(Math.max(1, currentPage - 1))} disabled={currentPage === 1} className="px-3 py-1 border rounded hover:bg-gray-50 disabled:opacity-50 text-sm bg-white">ก่อนหน้า</button>
-                          <button onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))} disabled={currentPage === totalPages} className="px-3 py-1 border rounded hover:bg-gray-50 disabled:opacity-50 text-sm bg-white">ถัดไป</button>
+                          <button onClick={() => setCurrentPage(Math.max(1, currentPage - 1))} disabled={currentPage === 1} className="px-3 py-1 border rounded hover:bg-gray-50 disabled:opacity-50 text-xs">ก่อนหน้า</button>
+                          <button onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))} disabled={currentPage === totalPages} className="px-3 py-1 border rounded hover:bg-gray-50 disabled:opacity-50 text-xs">ถัดไป</button>
                       </div>
                   </div>
               )}
@@ -421,7 +547,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, currentUser }) =>
           {/* Edit/Add Modal */}
           {isModalOpen && (
               <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-                  <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+                  <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
                       <div className="p-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
                           <h3 className="font-bold text-gray-800 flex items-center">
                               {editingUser.userid ? <Edit2 className="w-5 h-5 mr-2 text-blue-600"/> : <Plus className="w-5 h-5 mr-2 text-blue-600"/>}
@@ -430,128 +556,226 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, currentUser }) =>
                           <button onClick={() => setIsModalOpen(false)} className="p-1 hover:bg-gray-200 rounded-full transition-colors"><X className="w-5 h-5"/></button>
                       </div>
                       
-                      <form onSubmit={handleSave} className="p-6 overflow-y-auto space-y-4">
-                          <div className="grid grid-cols-2 gap-4">
-                              <div>
-                                  <label className="block text-xs font-bold text-gray-700 mb-1">Username *</label>
-                                  <input 
-                                      required
-                                      className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
-                                      value={editingUser.username} 
-                                      onChange={e => setEditingUser({...editingUser, username: e.target.value})} 
-                                      placeholder="Username"
-                                  />
-                              </div>
-                              <div>
-                                  <label className="block text-xs font-bold text-gray-700 mb-1">Password {editingUser.userid && '(เว้นว่างหากไม่เปลี่ยน)'}</label>
-                                  <input 
-                                      type="password"
-                                      className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
-                                      value={editingUser.password} 
-                                      onChange={e => setEditingUser({...editingUser, password: e.target.value})} 
-                                      placeholder={editingUser.userid ? "New Password" : "Password"}
-                                      required={!editingUser.userid}
-                                  />
-                              </div>
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-4">
-                              <div>
-                                  <label className="block text-xs font-bold text-gray-700 mb-1">ชื่อ (Name) *</label>
-                                  <input 
-                                      required
-                                      className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
-                                      value={editingUser.name} 
-                                      onChange={e => setEditingUser({...editingUser, name: e.target.value})} 
-                                  />
-                              </div>
-                              <div>
-                                  <label className="block text-xs font-bold text-gray-700 mb-1">นามสกุล (Surname)</label>
-                                  <input 
-                                      className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
-                                      value={editingUser.surname} 
-                                      onChange={e => setEditingUser({...editingUser, surname: e.target.value})} 
-                                  />
-                              </div>
-                          </div>
-
-                          <div>
-                              <label className="block text-xs font-bold text-gray-700 mb-1">สิทธิ์การใช้งาน (Role) *</label>
-                              <select 
-                                  className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
-                                  value={editingUser.level}
-                                  onChange={e => setEditingUser({...editingUser, level: e.target.value})}
-                              >
-                                  {availableRoles.length > 0 ? (
-                                      availableRoles.map(r => <option key={r.value} value={r.value}>{r.label}</option>)
-                                  ) : (
-                                      <option value="" disabled>ไม่มีสิทธิ์สร้างผู้ใช้ใหม่</option>
-                                  )}
-                              </select>
-                              {availableRoles.length === 0 && <p className="text-xs text-red-500 mt-1">คุณไม่มีสิทธิ์สร้างผู้ใช้ระดับรองลงไป</p>}
-                          </div>
-
-                          <div>
-                              <label className="block text-xs font-bold text-gray-700 mb-1">สังกัดโรงเรียน</label>
-                              {isSchoolAdmin ? (
-                                  <div className="w-full px-3 py-2 bg-gray-100 border border-gray-200 rounded-lg text-sm text-gray-600 cursor-not-allowed">
-                                      {data.schools.find(s => s.SchoolID === currentUser?.SchoolID)?.SchoolName || currentUser?.SchoolID} (Locked)
+                      <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                          {/* Login Info */}
+                          <div className="space-y-4">
+                              <h4 className="text-sm font-bold text-gray-900 border-b pb-1 mb-2">ข้อมูลเข้าระบบ</h4>
+                              <div className="grid grid-cols-2 gap-4">
+                                  <div>
+                                      <label className="block text-xs font-bold text-gray-700 mb-1">Username *</label>
+                                      <input 
+                                          required
+                                          className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
+                                          value={editingUser.username} 
+                                          onChange={e => setEditingUser({...editingUser, username: e.target.value})} 
+                                          placeholder="Username"
+                                      />
                                   </div>
-                              ) : (
-                                  <SearchableSelect 
-                                      options={schoolOptions}
-                                      value={editingUser.SchoolID || ''}
-                                      onChange={val => setEditingUser({...editingUser, SchoolID: val})}
-                                      placeholder="ค้นหาโรงเรียน..."
-                                      icon={<School className="w-3 h-3"/>}
-                                  />
+                                  <div>
+                                      <label className="block text-xs font-bold text-gray-700 mb-1">Password {editingUser.userid && '(เว้นว่างหากไม่เปลี่ยน)'}</label>
+                                      <div className="relative">
+                                          <input 
+                                              type={showPassword ? "text" : "password"}
+                                              className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none pr-10" 
+                                              value={editingUser.password} 
+                                              onChange={e => setEditingUser({...editingUser, password: e.target.value})} 
+                                              placeholder={editingUser.userid ? "New Password" : "Password"}
+                                              required={!editingUser.userid}
+                                          />
+                                          <button 
+                                              type="button"
+                                              onClick={() => setShowPassword(!showPassword)}
+                                              className="absolute right-2 top-2 text-gray-400 hover:text-gray-600"
+                                          >
+                                              {showPassword ? <EyeOff className="w-4 h-4"/> : <Eye className="w-4 h-4"/>}
+                                          </button>
+                                      </div>
+                                  </div>
+                              </div>
+                          </div>
+
+                          {/* Personal Info */}
+                          <div className="space-y-4">
+                              <h4 className="text-sm font-bold text-gray-900 border-b pb-1 mb-2">ข้อมูลส่วนตัว</h4>
+                              <div className="grid grid-cols-2 gap-4">
+                                  <div>
+                                      <label className="block text-xs font-bold text-gray-700 mb-1">ชื่อ (Name) *</label>
+                                      <input 
+                                          required
+                                          className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
+                                          value={editingUser.name} 
+                                          onChange={e => setEditingUser({...editingUser, name: e.target.value})} 
+                                      />
+                                  </div>
+                                  <div>
+                                      <label className="block text-xs font-bold text-gray-700 mb-1">นามสกุล (Surname)</label>
+                                      <input 
+                                          className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
+                                          value={editingUser.surname} 
+                                          onChange={e => setEditingUser({...editingUser, surname: e.target.value})} 
+                                      />
+                                  </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-4">
+                                  <div>
+                                      <label className="block text-xs font-bold text-gray-700 mb-1">เบอร์โทร</label>
+                                      <input 
+                                          className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
+                                          value={editingUser.tel} 
+                                          onChange={e => setEditingUser({...editingUser, tel: e.target.value})} 
+                                      />
+                                  </div>
+                                  <div>
+                                      <label className="block text-xs font-bold text-gray-700 mb-1">อีเมล</label>
+                                      <input 
+                                          type="email"
+                                          className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
+                                          value={editingUser.email} 
+                                          onChange={e => setEditingUser({...editingUser, email: e.target.value})} 
+                                      />
+                                  </div>
+                              </div>
+                              
+                              {/* Show Connection Status in Edit Mode */}
+                              {editingUser.userid && (
+                                  <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                                      <div className="flex items-center justify-between text-sm">
+                                          <span className="font-bold text-gray-600">การเชื่อมต่อ LINE</span>
+                                          {editingUser.userline_id ? (
+                                              <span className="text-green-600 font-bold flex items-center">
+                                                  <MessageCircle className="w-4 h-4 mr-1 fill-current" /> เชื่อมต่อแล้ว
+                                              </span>
+                                          ) : (
+                                              <span className="text-gray-400 flex items-center">
+                                                  <LinkIcon className="w-3 h-3 mr-1" /> ไม่ได้เชื่อมต่อ
+                                              </span>
+                                          )}
+                                      </div>
+                                  </div>
                               )}
                           </div>
 
-                          <div className="grid grid-cols-2 gap-4">
-                              <div>
-                                  <label className="block text-xs font-bold text-gray-700 mb-1">เบอร์โทร</label>
-                                  <input 
-                                      className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
-                                      value={editingUser.tel} 
-                                      onChange={e => setEditingUser({...editingUser, tel: e.target.value})} 
-                                  />
+                          {/* Role & Permission */}
+                          <div className="space-y-4">
+                              <h4 className="text-sm font-bold text-gray-900 border-b pb-1 mb-2">สิทธิ์การใช้งาน</h4>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div>
+                                      <label className="block text-xs font-bold text-gray-700 mb-1">Role *</label>
+                                      <select 
+                                          className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                                          value={editingUser.level}
+                                          onChange={e => setEditingUser({...editingUser, level: e.target.value})}
+                                      >
+                                          {assignableRoles.length > 0 ? (
+                                              assignableRoles.map(r => <option key={r.value} value={r.value}>{r.label}</option>)
+                                          ) : (
+                                              <option value="" disabled>ไม่มีสิทธิ์สร้างผู้ใช้ใหม่</option>
+                                          )}
+                                      </select>
+                                  </div>
+                                  <div>
+                                      <label className="block text-xs font-bold text-gray-700 mb-1">สังกัดโรงเรียน</label>
+                                      {isSchoolAdmin ? (
+                                          <div className="w-full px-3 py-2 bg-gray-100 border border-gray-200 rounded-lg text-sm text-gray-600 cursor-not-allowed">
+                                              {data.schools.find(s => s.SchoolID === currentUser?.SchoolID)?.SchoolName} (Locked)
+                                          </div>
+                                      ) : (
+                                          <SearchableSelect 
+                                              options={schoolOptions}
+                                              value={editingUser.SchoolID || ''}
+                                              onChange={val => setEditingUser({...editingUser, SchoolID: val})}
+                                              placeholder="ค้นหาโรงเรียน..."
+                                              icon={<School className="w-3 h-3"/>}
+                                          />
+                                      )}
+                                  </div>
                               </div>
-                              <div>
-                                  <label className="block text-xs font-bold text-gray-700 mb-1">อีเมล</label>
-                                  <input 
-                                      type="email"
-                                      className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
-                                      value={editingUser.email} 
-                                      onChange={e => setEditingUser({...editingUser, email: e.target.value})} 
-                                  />
-                              </div>
-                          </div>
 
-                          <div className="pt-4 flex justify-end gap-2 border-t border-gray-100">
-                              <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg text-sm">ยกเลิก</button>
-                              <button 
-                                  type="submit" 
-                                  disabled={isSaving || availableRoles.length === 0}
-                                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-bold flex items-center disabled:opacity-70"
-                              >
-                                  {isSaving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-                                  บันทึก
-                              </button>
+                              {/* Activity Assignment Section (Only for Score Role) */}
+                              {editingUser.level === 'score' && (
+                                  <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
+                                      <label className="block text-xs font-bold text-orange-800 mb-3 flex items-center">
+                                          <CheckSquare className="w-4 h-4 mr-2" />
+                                          เลือกกิจกรรมที่รับผิดชอบ (Assigned Activities)
+                                      </label>
+                                      <div className="max-h-40 overflow-y-auto border border-orange-200 rounded-lg bg-white p-2 space-y-1">
+                                          {data.activities.map(act => (
+                                              <div key={act.id} className="flex items-center p-2 hover:bg-orange-50 rounded cursor-pointer" onClick={() => handleActivityToggle(act.id)}>
+                                                  <div className={`w-4 h-4 border rounded mr-3 flex items-center justify-center ${editingUser.assignedActivities?.includes(act.id) ? 'bg-orange-500 border-orange-500 text-white' : 'border-gray-300'}`}>
+                                                      {editingUser.assignedActivities?.includes(act.id) && <CheckCircle className="w-3 h-3" />}
+                                                  </div>
+                                                  <div className="text-xs text-gray-700">
+                                                      <span className="font-bold mr-1">{act.name}</span>
+                                                      <span className="text-gray-400">({act.category})</span>
+                                                  </div>
+                                              </div>
+                                          ))}
+                                      </div>
+                                      <p className="text-[10px] text-orange-600 mt-2 text-right">เลือก {editingUser.assignedActivities?.length || 0} รายการ</p>
+                                  </div>
+                              )}
                           </div>
-                      </form>
+                      </div>
+
+                      <div className="pt-4 p-6 bg-gray-50 border-t border-gray-100 flex justify-end gap-2 shrink-0">
+                          <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg text-sm">ยกเลิก</button>
+                          <button 
+                              type="button"
+                              onClick={handleSave} 
+                              disabled={isSaving || assignableRoles.length === 0}
+                              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-bold flex items-center disabled:opacity-70"
+                          >
+                              {isSaving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                              บันทึกข้อมูล
+                          </button>
+                      </div>
+                  </div>
+              </div>
+          )}
+
+          {/* Credentials Modal (Success) */}
+          {createdCredential && (
+              <div className="fixed inset-0 bg-black/60 z-[300] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+                  <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden text-center p-6">
+                      <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <CheckCircle className="w-8 h-8 text-green-600" />
+                      </div>
+                      <h3 className="text-xl font-bold text-gray-800 mb-2">บันทึกข้อมูลสำเร็จ</h3>
+                      <p className="text-sm text-gray-500 mb-6">กรุณาส่งข้อมูลการเข้าสู่ระบบให้ผู้ใช้งาน</p>
+                      
+                      <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-6 text-left">
+                          <div className="mb-2">
+                              <span className="text-xs text-gray-400 font-bold uppercase">Username</span>
+                              <div className="font-mono text-gray-800 font-bold text-lg">{createdCredential.username}</div>
+                          </div>
+                          <div>
+                              <span className="text-xs text-gray-400 font-bold uppercase">Password</span>
+                              <div className="font-mono text-gray-800 font-bold text-lg">{createdCredential.password}</div>
+                          </div>
+                      </div>
+
+                      <button 
+                          onClick={() => {
+                              navigator.clipboard.writeText(`Username: ${createdCredential.username}\nPassword: ${createdCredential.password}\nLogin at: ${window.location.origin}`);
+                              alert('คัดลอกเรียบร้อย');
+                          }}
+                          className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 flex items-center justify-center mb-3"
+                      >
+                          <Copy className="w-4 h-4 mr-2" /> คัดลอก (Copy)
+                      </button>
+                      <button onClick={() => setCreatedCredential(null)} className="text-gray-500 text-sm hover:underline">ปิดหน้าต่าง</button>
                   </div>
               </div>
           )}
 
           <ConfirmationModal 
               isOpen={confirmDelete.isOpen}
-              title="ยืนยันการลบผู้ใช้งาน"
-              description="คุณต้องการลบผู้ใช้งานรายนี้ใช่หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้"
-              confirmLabel="ลบผู้ใช้งาน"
+              title={`ยืนยันการลบ ${confirmDelete.ids.length} รายการ`}
+              description="คุณต้องการลบผู้ใช้งานเหล่านี้ใช่หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้"
+              confirmLabel="ลบข้อมูล"
               confirmColor="red"
-              onConfirm={handleDelete}
-              onCancel={() => setConfirmDelete({ isOpen: false, id: null })}
+              onConfirm={handleDeleteExecute}
+              onCancel={() => setConfirmDelete({ isOpen: false, ids: [] })}
               isLoading={isSaving}
           />
       </div>
