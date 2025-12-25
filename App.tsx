@@ -333,7 +333,7 @@ const App: React.FC = () => {
             </button>
         </div>
       );
-    }
+  }
     return null;
   };
 
@@ -366,7 +366,7 @@ const App: React.FC = () => {
                             <Route path="/activities" element={<ActivityList data={data} />} />
                             <Route path="/score" element={<ScoreEntry data={data} user={currentUser} onDataUpdate={() => fetchAppData(true)} />} />
                             <Route path="/judges" element={<JudgesView data={data} user={currentUser} onDataUpdate={() => fetchAppData(true)} />} />
-                            <Route path="/results" element={<ResultsView data={data} />} />
+                            <Route path="/results" element={<ResultsView data={data} user={currentUser} />} />
                             <Route path="/certificates" element={<DocumentsView data={data} type="certificate" user={currentUser} />} />
                             <Route path="/idcards" element={<DocumentsView data={data} type="idcard" user={currentUser} />} />
                             <Route path="/documents" element={<PrintDocumentsView data={data} user={currentUser} />} />
