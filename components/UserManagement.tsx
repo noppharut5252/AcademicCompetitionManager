@@ -1,4 +1,5 @@
 
+// ... existing imports
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { AppData, User, Activity } from '../types';
 import { getAllUsers, saveUserAdmin, deleteUser } from '../services/api';
@@ -139,22 +140,22 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, currentUser }) =>
 
   // --- Options ---
   const filterRoleOptions = [
-      { value: 'admin', label: 'Admin' },
-      { value: 'area', label: 'Area Admin' },
-      { value: 'group_admin', label: 'Group Admin' },
-      { value: 'school_admin', label: 'School Admin' },
+      { value: 'Admin', label: 'Admin' },
+      { value: 'Area', label: 'Area Admin' },
+      { value: 'Group_Admin', label: 'Group Admin' },
+      { value: 'School_Admin', label: 'School Admin' },
       { value: 'score', label: 'Score Entry' },
-      { value: 'user', label: 'User' }
+      { value: 'User', label: 'User' }
   ];
 
   const assignableRoles = useMemo(() => {
       const allRoles = [
-          { value: 'admin', label: 'Admin (ผู้ดูแลระบบสูงสุด)', color: 'bg-purple-100 text-purple-800' },
-          { value: 'area', label: 'Area Admin (เขตพื้นที่)', color: 'bg-indigo-100 text-indigo-800' },
-          { value: 'group_admin', label: 'Group Admin (ประธานกลุ่มฯ)', color: 'bg-blue-100 text-blue-800' },
-          { value: 'school_admin', label: 'School Admin (แอดมินโรงเรียน)', color: 'bg-cyan-100 text-cyan-800' },
+          { value: 'Admin', label: 'Admin (ผู้ดูแลระบบสูงสุด)', color: 'bg-purple-100 text-purple-800' },
+          { value: 'Area', label: 'Area Admin (เขตพื้นที่)', color: 'bg-indigo-100 text-indigo-800' },
+          { value: 'Group_Admin', label: 'Group Admin (ประธานกลุ่มฯ)', color: 'bg-blue-100 text-blue-800' },
+          { value: 'School_Admin', label: 'School Admin (แอดมินโรงเรียน)', color: 'bg-cyan-100 text-cyan-800' },
           { value: 'score', label: 'Score Entry (กรรมการบันทึกคะแนน)', color: 'bg-orange-100 text-orange-800' },
-          { value: 'user', label: 'User (ผู้ใช้งานทั่วไป)', color: 'bg-gray-100 text-gray-800' }
+          { value: 'User', label: 'User (ผู้ใช้งานทั่วไป)', color: 'bg-gray-100 text-gray-800' }
       ];
       return allRoles.filter(roleOption => getRoleLevel(roleOption.value) < myLevel);
   }, [myLevel]);
@@ -313,12 +314,6 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, currentUser }) =>
           const updatePromises = Array.from(selectedUserIds).map(userId => {
               const user = users.find(u => u.userid === userId);
               if (!user) return Promise.resolve();
-              
-              // Only update if user exists. 
-              // Note: We are overwriting or merging? Let's Merge to be safe, or Overwrite?
-              // The requirement usually implies "Assign these activities". 
-              // To support bulk setting up committees, "Set" (Overwrite) is often clearer, 
-              // but "Merge" is safer. Let's do Union (Merge).
               
               const currentActivities = new Set(user.assignedActivities || []);
               bulkActivities.forEach(id => currentActivities.add(id));
@@ -480,8 +475,8 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, currentUser }) =>
 
           {/* Controls & Filters */}
           <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
-              <div className="flex flex-col md:flex-row gap-3 mb-4">
-                  <div className="relative flex-1">
+              <div className="flex flex-col md:flex-row gap-3 mb-4 flex-wrap">
+                  <div className="relative flex-1 min-w-[200px]">
                       <Search className="absolute inset-y-0 left-3 flex items-center pointer-events-none h-4 w-4 text-gray-400" />
                       <input
                           type="text"
@@ -493,7 +488,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, currentUser }) =>
                   </div>
                   
                   {/* Cluster Filter */}
-                  <div className="w-full md:w-48">
+                  <div className="w-full md:w-72">
                       <SearchableSelect 
                           options={[{ label: 'ทุกกลุ่มเครือข่าย', value: 'All' }, ...data.clusters.map(c => ({ label: c.ClusterName, value: c.ClusterID }))]}
                           value={clusterFilter}
@@ -517,7 +512,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, currentUser }) =>
                   </div>
 
                   {/* Activity Filter (Conditional for Score Role Context mainly) */}
-                  <div className="w-full md:w-48">
+                  <div className="w-full md:w-72">
                       <SearchableSelect
                           options={[{ label: 'ทุกกิจกรรม (All Activities)', value: 'All' }, ...activityOptions]}
                           value={activityFilter}
@@ -528,7 +523,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, currentUser }) =>
                   </div>
 
                   {/* LINE Connection Filter */}
-                  <div className="w-full md:w-36">
+                  <div className="w-full md:w-40">
                       <select 
                           className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-blue-500 outline-none bg-white cursor-pointer"
                           value={lineFilter}
@@ -673,7 +668,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, currentUser }) =>
                       </div>
 
                       {/* Mobile Card View */}
-                      <div className="md:hidden grid grid-cols-1 gap-3 mt-4">
+                      <div className="md:hidden space-y-3 mt-4">
                           {paginatedUsers.map((u) => {
                               const schoolName = data.schools.find(s => s.SchoolID === u.SchoolID)?.SchoolName || u.SchoolID;
                               const isMe = u.userid === currentUser?.userid;
@@ -684,53 +679,69 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, currentUser }) =>
                               return (
                                   <div 
                                       key={u.userid} 
-                                      className={`bg-white p-4 rounded-xl shadow-sm border ${isSelected ? 'border-blue-400 ring-1 ring-blue-100' : 'border-gray-200'}`}
+                                      className={`bg-white rounded-xl border shadow-sm relative overflow-hidden transition-all ${isSelected ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-50/10' : 'border-gray-200'}`}
                                       onClick={() => canModify && handleSelectUser(u.userid)}
                                   >
-                                      <div className="flex items-start justify-between">
-                                          <div className="flex items-center gap-3">
-                                              {canModify && (
-                                                  <div className={`text-gray-300 ${isSelected ? 'text-blue-600' : ''}`}>
-                                                      {isSelected ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
-                                                  </div>
-                                              )}
-                                              <div className="h-10 w-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 font-bold border text-sm overflow-hidden">
+                                      <div className="p-4 flex items-start gap-4">
+                                          {/* Checkbox (Left side for list feel) */}
+                                          {canModify && (
+                                              <div className="shrink-0 mt-1">
+                                                  {isSelected ? <CheckSquare className="w-5 h-5 text-blue-600" /> : <Square className="w-5 h-5 text-gray-300" />}
+                                              </div>
+                                          )}
+                                          
+                                          {/* Avatar */}
+                                          <div className="shrink-0 relative">
+                                              <div className="h-12 w-12 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 font-bold border text-sm overflow-hidden">
                                                   {u.avatarFileId ? (
                                                       <img src={`https://drive.google.com/thumbnail?id=${u.avatarFileId}`} className="w-full h-full object-cover" />
                                                   ) : u.name?.charAt(0) || 'U'}
                                               </div>
-                                              <div>
-                                                  <div className="font-bold text-gray-900 text-sm flex items-center">
-                                                      {u.name} {u.surname}
-                                                      {isLineConnected && <MessageCircle className="w-3 h-3 ml-1 text-green-500 fill-current" />}
+                                              {isLineConnected && (
+                                                  <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-0.5 shadow-sm">
+                                                      <MessageCircle className="w-4 h-4 text-[#06C755] fill-current" />
                                                   </div>
-                                                  <div className="text-xs text-gray-500">@{u.username}</div>
-                                              </div>
+                                              )}
                                           </div>
-                                          {getRoleBadge(u.level)}
-                                      </div>
-                                      
-                                      <div className="mt-3 pl-8">
-                                          <p className="text-xs text-gray-600 flex items-center mb-1">
-                                              <School className="w-3 h-3 mr-1.5 text-gray-400"/> {schoolName || '-'}
-                                          </p>
-                                          {u.level === 'score' && (
-                                              <p className="text-xs text-orange-600 flex items-center bg-orange-50 w-fit px-2 py-0.5 rounded">
-                                                  <CheckSquare className="w-3 h-3 mr-1.5"/> รับผิดชอบ {u.assignedActivities?.length || 0} รายการ
-                                              </p>
-                                          )}
+
+                                          {/* Content */}
+                                          <div className="flex-1 min-w-0">
+                                              <div className="flex justify-between items-start">
+                                                  <div>
+                                                      <h4 className="font-bold text-gray-900 text-sm truncate pr-2">{u.name} {u.surname}</h4>
+                                                      <div className="text-xs text-gray-500">@{u.username}</div>
+                                                  </div>
+                                                  {/* Role Badge */}
+                                                  <div className="shrink-0">
+                                                      {getRoleBadge(u.level)}
+                                                  </div>
+                                              </div>
+                                              
+                                              <div className="mt-2 text-xs text-gray-600 flex items-center">
+                                                  <School className="w-3 h-3 mr-1.5 text-gray-400 shrink-0"/> 
+                                                  <span className="truncate">{schoolName || '-'}</span>
+                                              </div>
+                                              {u.level === 'score' && (
+                                                  <div className="mt-1.5 flex items-center">
+                                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-50 text-orange-700 border border-orange-100">
+                                                          <CheckSquare className="w-3 h-3 mr-1"/> รับผิดชอบ {u.assignedActivities?.length || 0} รายการ
+                                                      </span>
+                                                  </div>
+                                              )}
+                                          </div>
                                       </div>
 
+                                      {/* Actions Footer */}
                                       {canModify && (
-                                          <div className="flex justify-end gap-2 mt-3 pt-3 border-t border-gray-100">
-                                              <button onClick={(e) => { e.stopPropagation(); handleQuickReset(u); }} className="flex-1 py-1.5 text-orange-600 bg-orange-50 rounded text-xs font-bold border border-orange-100 flex items-center justify-center">
-                                                  <KeyRound className="w-3.5 h-3.5 mr-1.5" /> Reset Pwd
+                                          <div className="bg-gray-50 px-4 py-2 border-t border-gray-100 flex justify-end gap-2" onClick={e => e.stopPropagation()}>
+                                              <button onClick={() => handleQuickReset(u)} className="p-1.5 bg-white border border-gray-200 text-orange-500 rounded-lg hover:bg-orange-50 shadow-sm">
+                                                  <KeyRound className="w-4 h-4" />
                                               </button>
-                                              <button onClick={(e) => { e.stopPropagation(); handleEdit(u); }} className="flex-1 py-1.5 text-blue-600 bg-blue-50 rounded text-xs font-bold border border-blue-100 flex items-center justify-center">
-                                                  <Edit2 className="w-3.5 h-3.5 mr-1.5" /> Edit
+                                              <button onClick={() => handleEdit(u)} className="p-1.5 bg-white border border-gray-200 text-blue-600 rounded-lg hover:bg-blue-50 shadow-sm">
+                                                  <Edit2 className="w-4 h-4" />
                                               </button>
-                                              <button onClick={(e) => { e.stopPropagation(); setConfirmDelete({ isOpen: true, ids: [u.userid] }); }} className="flex-1 py-1.5 text-red-600 bg-red-50 rounded text-xs font-bold border border-red-100 flex items-center justify-center">
-                                                  <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Delete
+                                              <button onClick={() => setConfirmDelete({ isOpen: true, ids: [u.userid] })} className="p-1.5 bg-white border border-gray-200 text-red-600 rounded-lg hover:bg-red-50 shadow-sm">
+                                                  <Trash2 className="w-4 h-4" />
                                               </button>
                                           </div>
                                       )}
