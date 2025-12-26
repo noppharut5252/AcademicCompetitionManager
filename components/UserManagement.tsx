@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { AppData, User, Activity } from '../types';
 import { getAllUsers, saveUserAdmin, deleteUser } from '../services/api';
-import { Search, Plus, Edit2, Trash2, User as UserIcon, Shield, School, CheckCircle, X, Save, Lock, Loader2, RefreshCw, AlertTriangle, Phone, Mail, MoreHorizontal, Eye, EyeOff, Copy, Download, Upload, CheckSquare, Square, FileText, LayoutGrid, MessageCircle, Link as LinkIcon } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, User as UserIcon, Shield, School, CheckCircle, X, Save, Lock, Loader2, RefreshCw, AlertTriangle, Phone, Mail, MoreHorizontal, Eye, EyeOff, Copy, Download, Upload, CheckSquare, Square, FileText, LayoutGrid, MessageCircle, Link as LinkIcon, KeyRound, Filter, Smartphone, Monitor } from 'lucide-react';
 import SearchableSelect from './SearchableSelect';
 import ConfirmationModal from './ConfirmationModal';
 
@@ -30,22 +30,27 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, currentUser }) =>
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('All');
-  const [clusterFilter, setClusterFilter] = useState('All'); // New: Cluster Filter
-  const [lineFilter, setLineFilter] = useState<'All' | 'Connected' | 'NotConnected'>('All'); // New: Line Filter
+  const [clusterFilter, setClusterFilter] = useState('All'); 
+  const [lineFilter, setLineFilter] = useState<'All' | 'Connected' | 'NotConnected'>('All');
+  const [activityFilter, setActivityFilter] = useState('All'); // New: Activity Filter
   
   // Selection State (Bulk Actions)
   const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isBulkAssignOpen, setIsBulkAssignOpen] = useState(false); // New: Bulk Assign Modal
+  const [bulkActivities, setBulkActivities] = useState<string[]>([]); // New: Selected Activities for Bulk
+  
   const [editingUser, setEditingUser] = useState<Partial<User>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<{ isOpen: boolean, ids: string[] }>({ isOpen: false, ids: [] });
+  const [confirmReset, setConfirmReset] = useState<{ isOpen: boolean, user: User | null }>({ isOpen: false, user: null }); // New: Reset Confirm
   
   // Password Visibility
   const [showPassword, setShowPassword] = useState(false);
   
-  // Credential Modal (Post-Create)
+  // Credential Modal (Post-Create/Reset)
   const [createdCredential, setCreatedCredential] = useState<{username: string, password: string} | null>(null);
 
   // File Import Ref
@@ -119,34 +124,37 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, currentUser }) =>
               if (lineFilter === 'NotConnected') matchesLine = !hasLine;
           }
 
-          return matchesSearch && matchesRole && matchesCluster && matchesLine;
+          // Activity Filter (New)
+          let matchesActivity = true;
+          if (activityFilter !== 'All') {
+              matchesActivity = u.assignedActivities?.includes(activityFilter) || false;
+          }
+
+          return matchesSearch && matchesRole && matchesCluster && matchesLine && matchesActivity;
       });
-  }, [scopedUsers, searchTerm, roleFilter, clusterFilter, lineFilter, data.schools]);
+  }, [scopedUsers, searchTerm, roleFilter, clusterFilter, lineFilter, activityFilter, data.schools]);
 
   const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
   const paginatedUsers = filteredUsers.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   // --- Options ---
-  
-  // All possible roles for Filtering (Display all regardless of permission to see if they exist)
   const filterRoleOptions = [
-      { value: 'Admin', label: 'Admin' },
-      { value: 'Area', label: 'Area Admin' },
-      { value: 'Group_Admin', label: 'Group Admin' },
-      { value: 'School_Admin', label: 'School Admin' },
+      { value: 'admin', label: 'Admin' },
+      { value: 'area', label: 'Area Admin' },
+      { value: 'group_admin', label: 'Group Admin' },
+      { value: 'school_admin', label: 'School Admin' },
       { value: 'score', label: 'Score Entry' },
-      { value: 'User', label: 'User' }
+      { value: 'user', label: 'User' }
   ];
 
-  // Restricted roles for Creating/Editing
   const assignableRoles = useMemo(() => {
       const allRoles = [
-          { value: 'Admin', label: 'Admin (ผู้ดูแลระบบสูงสุด)', color: 'bg-purple-100 text-purple-800' },
-          { value: 'Area', label: 'Area Admin (เขตพื้นที่)', color: 'bg-indigo-100 text-indigo-800' },
-          { value: 'Group_Admin', label: 'Group Admin (แอดมินกลุ่มฯ)', color: 'bg-blue-100 text-blue-800' },
-          { value: 'School_Admin', label: 'School Admin (แอดมินโรงเรียน)', color: 'bg-cyan-100 text-cyan-800' },
+          { value: 'admin', label: 'Admin (ผู้ดูแลระบบสูงสุด)', color: 'bg-purple-100 text-purple-800' },
+          { value: 'area', label: 'Area Admin (เขตพื้นที่)', color: 'bg-indigo-100 text-indigo-800' },
+          { value: 'group_admin', label: 'Group Admin (ประธานกลุ่มฯ)', color: 'bg-blue-100 text-blue-800' },
+          { value: 'school_admin', label: 'School Admin (แอดมินโรงเรียน)', color: 'bg-cyan-100 text-cyan-800' },
           { value: 'score', label: 'Score Entry (กรรมการบันทึกคะแนน)', color: 'bg-orange-100 text-orange-800' },
-          { value: 'User', label: 'User (ผู้ใช้งานทั่วไป)', color: 'bg-gray-100 text-gray-800' }
+          { value: 'user', label: 'User (ผู้ใช้งานทั่วไป)', color: 'bg-gray-100 text-gray-800' }
       ];
       return allRoles.filter(roleOption => getRoleLevel(roleOption.value) < myLevel);
   }, [myLevel]);
@@ -157,6 +165,10 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, currentUser }) =>
       else if (isSchoolAdmin) list = list.filter(s => s.SchoolID === currentUser?.SchoolID);
       return list.map(s => ({ label: s.SchoolName, value: s.SchoolID }));
   }, [data.schools, isGroupAdmin, isSchoolAdmin, userClusterId, currentUser]);
+
+  const activityOptions = useMemo(() => {
+      return data.activities.map(a => ({ label: a.name, value: a.id }));
+  }, [data.activities]);
 
   // --- Handlers: Select ---
   const handleSelectAll = () => {
@@ -186,7 +198,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, currentUser }) =>
           SchoolID: isSchoolAdmin ? currentUser?.SchoolID : '',
           email: '',
           tel: '',
-          assignedActivities: [] // Init for Score role
+          assignedActivities: []
       });
       setShowPassword(false);
       setIsModalOpen(true);
@@ -223,14 +235,12 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, currentUser }) =>
           if (res.status === 'success') {
               setIsModalOpen(false);
               
-              // Show Credentials if new user or password changed
               if (editingUser.password) {
                   setCreatedCredential({
                       username: editingUser.username,
                       password: editingUser.password
                   });
               }
-              
               fetchUsers();
           } else {
               alert('บันทึกไม่สำเร็จ: ' + res.message);
@@ -242,11 +252,105 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, currentUser }) =>
       }
   };
 
+  // --- Quick Password Reset ---
+  const handleQuickReset = (user: User) => {
+      if (getRoleLevel(user.level) >= myLevel) {
+          alert("คุณไม่มีสิทธิ์รีเซ็ตรหัสผ่านผู้ใช้งานที่มีระดับเท่ากันหรือสูงกว่า");
+          return;
+      }
+      setConfirmReset({ isOpen: true, user });
+  };
+
+  const executeQuickReset = async () => {
+      const user = confirmReset.user;
+      if (!user) return;
+
+      setIsSaving(true);
+      const newPassword = Math.random().toString(36).slice(-8); // Generate 8 char random password
+      
+      try {
+          const res = await saveUserAdmin({ ...user, password: newPassword });
+          if (res.status === 'success') {
+              setConfirmReset({ isOpen: false, user: null });
+              setCreatedCredential({
+                  username: user.username,
+                  password: newPassword
+              });
+              fetchUsers();
+          } else {
+              alert('รีเซ็ตไม่สำเร็จ: ' + res.message);
+          }
+      } catch (err) {
+          alert('เกิดข้อผิดพลาด');
+      } finally {
+          setIsSaving(false);
+      }
+  };
+
+  // --- Bulk Assign Activities ---
+  const handleBulkAssignOpen = () => {
+      setBulkActivities([]);
+      setIsBulkAssignOpen(true);
+  };
+
+  const handleBulkAssignToggle = (actId: string) => {
+      if (bulkActivities.includes(actId)) {
+          setBulkActivities(bulkActivities.filter(id => id !== actId));
+      } else {
+          setBulkActivities([...bulkActivities, actId]);
+      }
+  };
+
+  const executeBulkAssign = async () => {
+      if (bulkActivities.length === 0) {
+          alert('กรุณาเลือกกิจกรรมอย่างน้อย 1 รายการ');
+          return;
+      }
+      
+      setIsSaving(true);
+      try {
+          // Iterate selected users and update assignedActivities
+          const updatePromises = Array.from(selectedUserIds).map(userId => {
+              const user = users.find(u => u.userid === userId);
+              if (!user) return Promise.resolve();
+              
+              // Only update if user exists. 
+              // Note: We are overwriting or merging? Let's Merge to be safe, or Overwrite?
+              // The requirement usually implies "Assign these activities". 
+              // To support bulk setting up committees, "Set" (Overwrite) is often clearer, 
+              // but "Merge" is safer. Let's do Union (Merge).
+              
+              const currentActivities = new Set(user.assignedActivities || []);
+              bulkActivities.forEach(id => currentActivities.add(id));
+              
+              const updatedUser = { 
+                  ...user, 
+                  assignedActivities: Array.from(currentActivities),
+                  password: '' // Ensure we don't accidentally reset password
+              };
+              
+              return saveUserAdmin(updatedUser);
+          });
+
+          await Promise.all(updatePromises);
+          
+          setIsBulkAssignOpen(false);
+          setBulkActivities([]);
+          setSelectedUserIds(new Set()); // Clear selection
+          alert(`กำหนดกิจกรรมให้ผู้ใช้ ${selectedUserIds.size} คน เรียบร้อยแล้ว`);
+          fetchUsers();
+
+      } catch (err) {
+          alert('เกิดข้อผิดพลาดในการบันทึกแบบกลุ่ม');
+      } finally {
+          setIsSaving(false);
+      }
+  };
+
   const handleDeleteConfirm = () => {
       const ids = Array.from(selectedUserIds);
       if (ids.length === 0) return;
       
-      // Permission Check for Bulk
       const forbidden = users.filter(u => ids.includes(u.userid) && getRoleLevel(u.level) >= myLevel);
       if (forbidden.length > 0) {
           alert("มีผู้ใช้งานบางคนที่คุณไม่มีสิทธิ์ลบ กรุณาตรวจสอบ");
@@ -258,7 +362,6 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, currentUser }) =>
 
   const handleDeleteExecute = async () => {
       setIsSaving(true);
-      // Sequential delete (Simulated bulk)
       for (const id of confirmDelete.ids) {
           await deleteUser(id);
       }
@@ -267,7 +370,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, currentUser }) =>
       fetchUsers();
   };
 
-  // --- Handlers: Import/Export ---
+  // --- Handlers: Import/Export (Existing) ---
   const handleExportCSV = () => {
       const headers = ['Username', 'Name', 'Surname', 'Role', 'SchoolID', 'Phone', 'Email', 'LineStatus'];
       const rows = filteredUsers.map(u => [
@@ -295,17 +398,14 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, currentUser }) =>
       reader.onload = async (evt) => {
           const text = evt.target?.result as string;
           const lines = text.split('\n');
-          // Skip header, start from index 1
           const promises = [];
           
-          setIsSaving(true); // Show loading
+          setIsSaving(true); 
           
           for (let i = 1; i < lines.length; i++) {
               const line = lines[i].trim();
               if (!line) continue;
-              // Simple CSV parse (assuming no commas in values for simplicity, otherwise use a lib)
               const cols = line.split(',').map(c => c.replace(/"/g, '').trim());
-              // Expected: Username, Password, Name, Surname, Role, SchoolID, Email, Tel
               if (cols.length < 5) continue;
 
               const newUser: Partial<User> = {
@@ -319,7 +419,6 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, currentUser }) =>
                   tel: cols[7] || ''
               };
               
-              // Validate Level
               if (getRoleLevel(newUser.level) < myLevel) {
                   promises.push(saveUserAdmin(newUser));
               }
@@ -334,7 +433,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, currentUser }) =>
       reader.readAsText(file);
   };
 
-  const handleActivityToggle = (actId: string) => {
+  const handleActivityToggleEdit = (actId: string) => {
       const current = new Set(editingUser.assignedActivities || []);
       if (current.has(actId)) current.delete(actId);
       else current.add(actId);
@@ -342,9 +441,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, currentUser }) =>
   };
 
   const getRoleBadge = (role: string) => {
-      // Find from assignable list first for color, otherwise fallback
       const r = assignableRoles.find(ar => ar.value === role) || { label: role, color: 'bg-gray-100 text-gray-600' };
-      // Fallback color logic if role not in assignable list (e.g. higher roles viewing list)
       let colorClass = r.color;
       if (role === 'admin') colorClass = 'bg-purple-100 text-purple-800';
       else if (role === 'area') colorClass = 'bg-indigo-100 text-indigo-800';
@@ -402,48 +499,84 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, currentUser }) =>
                           value={clusterFilter}
                           onChange={(val) => { setClusterFilter(val); setCurrentPage(1); }}
                           placeholder="กรองกลุ่มเครือข่าย"
-                          disabled={isGroupAdmin} // Group Admin locked to their cluster
+                          disabled={isGroupAdmin} 
                           icon={<LayoutGrid className="w-3 h-3" />}
                       />
                   </div>
 
                   {/* Role Filter */}
-                  <div className="w-full md:w-40">
+                  <div className="w-full md:w-36">
                       <select 
                           className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-blue-500 outline-none bg-white cursor-pointer"
                           value={roleFilter}
                           onChange={(e) => { setRoleFilter(e.target.value); setCurrentPage(1); }}
                       >
-                          <option value="All">ทุกสิทธิ์การใช้งาน</option>
+                          <option value="All">ทุกสิทธิ์</option>
                           {filterRoleOptions.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                       </select>
                   </div>
 
+                  {/* Activity Filter (Conditional for Score Role Context mainly) */}
+                  <div className="w-full md:w-48">
+                      <SearchableSelect
+                          options={[{ label: 'ทุกกิจกรรม (All Activities)', value: 'All' }, ...activityOptions]}
+                          value={activityFilter}
+                          onChange={(val) => { setActivityFilter(val); setCurrentPage(1); }}
+                          placeholder="กรองตามกิจกรรมที่รับผิดชอบ"
+                          icon={<Filter className="w-3 h-3" />}
+                      />
+                  </div>
+
                   {/* LINE Connection Filter */}
-                  <div className="w-full md:w-40">
+                  <div className="w-full md:w-36">
                       <select 
                           className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-blue-500 outline-none bg-white cursor-pointer"
                           value={lineFilter}
                           onChange={(e) => { setLineFilter(e.target.value as any); setCurrentPage(1); }}
                       >
-                          <option value="All">การเชื่อมต่อ LINE</option>
-                          <option value="Connected">เชื่อมต่อแล้ว</option>
-                          <option value="NotConnected">ยังไม่เชื่อมต่อ</option>
+                          <option value="All">LINE Status</option>
+                          <option value="Connected">Connected</option>
+                          <option value="NotConnected">Not Connected</option>
                       </select>
                   </div>
+              </div>
 
-                  <div className="flex gap-2 items-center justify-end md:w-auto">
-                        {selectedUserIds.size > 0 && (
-                            <button 
-                                onClick={handleDeleteConfirm}
-                                className="flex items-center px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 text-sm font-bold border border-red-100 transition-all animate-in fade-in whitespace-nowrap"
-                            >
-                                <Trash2 className="w-4 h-4 mr-2" /> ลบ ({selectedUserIds.size})
-                            </button>
-                        )}
-                        <button onClick={fetchUsers} className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg border border-gray-200" title="Refresh">
-                            <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-                        </button>
+              {/* Bulk Action Bar */}
+              <div className="flex justify-between items-center bg-gray-50 p-2 rounded-lg border border-gray-200">
+                  <div className="flex items-center gap-2">
+                      <button onClick={handleSelectAll} className="flex items-center text-gray-600 hover:text-blue-600 font-medium text-sm px-2">
+                          {selectedUserIds.size === paginatedUsers.length && paginatedUsers.length > 0 ? <CheckSquare className="w-5 h-5 mr-1 text-blue-600"/> : <Square className="w-5 h-5 mr-1"/>}
+                          เลือกทั้งหมดในหน้านี้
+                      </button>
+                      {selectedUserIds.size > 0 && (
+                          <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-bold">
+                              {selectedUserIds.size} รายการ
+                          </span>
+                      )}
+                  </div>
+                  
+                  <div className="flex gap-2">
+                      {selectedUserIds.size > 0 && (
+                          <>
+                              <button 
+                                  onClick={handleBulkAssignOpen}
+                                  className="flex items-center px-3 py-1.5 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 text-xs font-bold transition-all shadow-sm"
+                              >
+                                  <CheckSquare className="w-4 h-4 mr-1.5 text-orange-500" />
+                                  กำหนดกิจกรรม (Assign)
+                              </button>
+                              <button 
+                                  onClick={handleDeleteConfirm}
+                                  className="flex items-center px-3 py-1.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 text-xs font-bold border border-red-100 transition-all"
+                              >
+                                  <Trash2 className="w-4 h-4 mr-1.5" /> 
+                                  ลบ ({selectedUserIds.size})
+                              </button>
+                          </>
+                      )}
+                      <button onClick={fetchUsers} className="p-1.5 text-gray-500 hover:bg-gray-200 rounded-lg border border-gray-300 bg-white" title="Refresh">
+                          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                      </button>
                   </div>
               </div>
 
@@ -452,84 +585,160 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, currentUser }) =>
                       <Loader2 className="w-10 h-10 animate-spin" />
                   </div>
               ) : (
-                  <div className="overflow-x-auto">
-                      <table className="min-w-full divide-y divide-gray-200">
-                          <thead className="bg-gray-50">
-                              <tr>
-                                  <th className="px-4 py-3 w-10 text-center">
-                                      <button onClick={handleSelectAll} className="text-gray-400 hover:text-blue-600">
-                                          {selectedUserIds.size === paginatedUsers.length && paginatedUsers.length > 0 ? <CheckSquare className="w-5 h-5 text-blue-600"/> : <Square className="w-5 h-5"/>}
-                                      </button>
-                                  </th>
-                                  <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">ผู้ใช้งาน</th>
-                                  <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">บทบาท</th>
-                                  <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">โรงเรียน</th>
-                                  <th className="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">จัดการ</th>
-                              </tr>
-                          </thead>
-                          <tbody className="bg-white divide-y divide-gray-200">
-                              {paginatedUsers.map((u) => {
-                                  const schoolName = data.schools.find(s => s.SchoolID === u.SchoolID)?.SchoolName || u.SchoolID;
-                                  const isMe = u.userid === currentUser?.userid;
-                                  const canModify = !isMe && getRoleLevel(u.level) < myLevel;
-                                  const isSelected = selectedUserIds.has(u.userid);
-                                  const isLineConnected = !!u.userline_id;
+                  <>
+                      {/* Desktop Table View */}
+                      <div className="hidden md:block overflow-x-auto mt-4">
+                          <table className="min-w-full divide-y divide-gray-200">
+                              <thead className="bg-gray-50">
+                                  <tr>
+                                      <th className="px-4 py-3 w-10 text-center">#</th>
+                                      <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">ผู้ใช้งาน</th>
+                                      <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">บทบาท</th>
+                                      <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">โรงเรียน</th>
+                                      <th className="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">จัดการ</th>
+                                  </tr>
+                              </thead>
+                              <tbody className="bg-white divide-y divide-gray-200">
+                                  {paginatedUsers.map((u) => {
+                                      const schoolName = data.schools.find(s => s.SchoolID === u.SchoolID)?.SchoolName || u.SchoolID;
+                                      const isMe = u.userid === currentUser?.userid;
+                                      const canModify = !isMe && getRoleLevel(u.level) < myLevel;
+                                      const isSelected = selectedUserIds.has(u.userid);
+                                      const isLineConnected = !!u.userline_id;
 
-                                  return (
-                                      <tr key={u.userid} className={`hover:bg-gray-50 transition-colors ${isSelected ? 'bg-blue-50/40' : ''}`}>
-                                          <td className="px-4 py-4 text-center">
-                                              {!isMe && canModify && (
-                                                  <button onClick={() => handleSelectUser(u.userid)} className="text-gray-400 hover:text-blue-600">
-                                                      {isSelected ? <CheckSquare className="w-5 h-5 text-blue-600"/> : <Square className="w-5 h-5"/>}
-                                                  </button>
-                                              )}
-                                          </td>
-                                          <td className="px-6 py-4 whitespace-nowrap">
-                                              <div className="flex items-center">
-                                                  <div className="h-9 w-9 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 font-bold border mr-3 text-sm overflow-hidden">
-                                                      {u.avatarFileId ? (
-                                                          <img src={`https://drive.google.com/thumbnail?id=${u.avatarFileId}`} className="w-full h-full object-cover" />
-                                                      ) : u.name?.charAt(0) || 'U'}
-                                                  </div>
-                                                  <div>
-                                                      <div className="text-sm font-bold text-gray-900 flex items-center">
-                                                          {u.name} {u.surname} 
-                                                          {isMe && <span className="text-[10px] text-blue-600 bg-blue-100 px-1 rounded ml-1">(You)</span>}
-                                                          {isLineConnected && (
-                                                              <span className="ml-1.5 text-[#06C755]" title="Linked with LINE">
-                                                                  <MessageCircle className="w-3.5 h-3.5 fill-current" />
-                                                              </span>
-                                                          )}
+                                      return (
+                                          <tr key={u.userid} className={`hover:bg-gray-50 transition-colors ${isSelected ? 'bg-blue-50/40' : ''}`}>
+                                              <td className="px-4 py-4 text-center" onClick={() => canModify && handleSelectUser(u.userid)}>
+                                                  {canModify ? (
+                                                      <div className={`cursor-pointer ${isSelected ? 'text-blue-600' : 'text-gray-300'}`}>
+                                                          {isSelected ? <CheckSquare className="w-5 h-5"/> : <Square className="w-5 h-5"/>}
                                                       </div>
-                                                      <div className="text-xs text-gray-500">@{u.username}</div>
+                                                  ) : (
+                                                      <div className="w-5 h-5 mx-auto"></div>
+                                                  )}
+                                              </td>
+                                              <td className="px-6 py-4 whitespace-nowrap">
+                                                  <div className="flex items-center">
+                                                      <div className="h-9 w-9 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 font-bold border mr-3 text-sm overflow-hidden">
+                                                          {u.avatarFileId ? (
+                                                              <img src={`https://drive.google.com/thumbnail?id=${u.avatarFileId}`} className="w-full h-full object-cover" />
+                                                          ) : u.name?.charAt(0) || 'U'}
+                                                      </div>
+                                                      <div>
+                                                          <div className="text-sm font-bold text-gray-900 flex items-center">
+                                                              {u.name} {u.surname} 
+                                                              {isMe && <span className="text-[10px] text-blue-600 bg-blue-100 px-1 rounded ml-1">(You)</span>}
+                                                              {isLineConnected && (
+                                                                  <span className="ml-1.5 text-[#06C755]" title="Linked with LINE">
+                                                                      <MessageCircle className="w-3.5 h-3.5 fill-current" />
+                                                                  </span>
+                                                              )}
+                                                          </div>
+                                                          <div className="text-xs text-gray-500">@{u.username}</div>
+                                                      </div>
                                                   </div>
-                                              </div>
-                                          </td>
-                                          <td className="px-6 py-4 whitespace-nowrap">
-                                              {getRoleBadge(u.level)}
-                                              {u.level === 'score' && (
-                                                  <div className="text-[10px] text-gray-400 mt-1">
-                                                      {u.assignedActivities?.length || 0} รายการ
-                                                  </div>
-                                              )}
-                                          </td>
-                                          <td className="px-6 py-4 text-sm text-gray-600">
-                                              <div className="truncate max-w-[200px]">{schoolName || '-'}</div>
-                                          </td>
-                                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                              </td>
+                                              <td className="px-6 py-4 whitespace-nowrap">
+                                                  {getRoleBadge(u.level)}
+                                                  {u.level === 'score' && (
+                                                      <div className="text-[10px] text-gray-400 mt-1 flex items-center">
+                                                          <CheckSquare className="w-3 h-3 mr-1" />
+                                                          {u.assignedActivities?.length || 0} activities
+                                                      </div>
+                                                  )}
+                                              </td>
+                                              <td className="px-6 py-4 text-sm text-gray-600">
+                                                  <div className="truncate max-w-[200px]">{schoolName || '-'}</div>
+                                              </td>
+                                              <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                                  {canModify && (
+                                                      <div className="flex justify-end gap-2">
+                                                          <button onClick={() => handleQuickReset(u)} className="p-1.5 text-orange-500 bg-orange-50 rounded hover:bg-orange-100 border border-orange-200" title="Reset Password">
+                                                              <KeyRound className="w-4 h-4" />
+                                                          </button>
+                                                          <button onClick={() => handleEdit(u)} className="p-1.5 text-blue-600 bg-blue-50 rounded hover:bg-blue-100 border border-blue-200" title="Edit">
+                                                              <Edit2 className="w-4 h-4" />
+                                                          </button>
+                                                          <button onClick={() => setConfirmDelete({ isOpen: true, ids: [u.userid] })} className="p-1.5 text-red-600 bg-red-50 rounded hover:bg-red-100 border border-red-200" title="Delete">
+                                                              <Trash2 className="w-4 h-4" />
+                                                          </button>
+                                                      </div>
+                                                  )}
+                                              </td>
+                                          </tr>
+                                      );
+                                  })}
+                              </tbody>
+                          </table>
+                      </div>
+
+                      {/* Mobile Card View */}
+                      <div className="md:hidden grid grid-cols-1 gap-3 mt-4">
+                          {paginatedUsers.map((u) => {
+                              const schoolName = data.schools.find(s => s.SchoolID === u.SchoolID)?.SchoolName || u.SchoolID;
+                              const isMe = u.userid === currentUser?.userid;
+                              const canModify = !isMe && getRoleLevel(u.level) < myLevel;
+                              const isSelected = selectedUserIds.has(u.userid);
+                              const isLineConnected = !!u.userline_id;
+
+                              return (
+                                  <div 
+                                      key={u.userid} 
+                                      className={`bg-white p-4 rounded-xl shadow-sm border ${isSelected ? 'border-blue-400 ring-1 ring-blue-100' : 'border-gray-200'}`}
+                                      onClick={() => canModify && handleSelectUser(u.userid)}
+                                  >
+                                      <div className="flex items-start justify-between">
+                                          <div className="flex items-center gap-3">
                                               {canModify && (
-                                                  <div className="flex justify-end gap-2">
-                                                      <button onClick={() => handleEdit(u)} className="p-1.5 text-blue-600 bg-blue-50 rounded hover:bg-blue-100"><Edit2 className="w-4 h-4" /></button>
-                                                      <button onClick={() => setConfirmDelete({ isOpen: true, ids: [u.userid] })} className="p-1.5 text-red-600 bg-red-50 rounded hover:bg-red-100"><Trash2 className="w-4 h-4" /></button>
+                                                  <div className={`text-gray-300 ${isSelected ? 'text-blue-600' : ''}`}>
+                                                      {isSelected ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
                                                   </div>
                                               )}
-                                          </td>
-                                      </tr>
-                                  );
-                              })}
-                          </tbody>
-                      </table>
-                  </div>
+                                              <div className="h-10 w-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 font-bold border text-sm overflow-hidden">
+                                                  {u.avatarFileId ? (
+                                                      <img src={`https://drive.google.com/thumbnail?id=${u.avatarFileId}`} className="w-full h-full object-cover" />
+                                                  ) : u.name?.charAt(0) || 'U'}
+                                              </div>
+                                              <div>
+                                                  <div className="font-bold text-gray-900 text-sm flex items-center">
+                                                      {u.name} {u.surname}
+                                                      {isLineConnected && <MessageCircle className="w-3 h-3 ml-1 text-green-500 fill-current" />}
+                                                  </div>
+                                                  <div className="text-xs text-gray-500">@{u.username}</div>
+                                              </div>
+                                          </div>
+                                          {getRoleBadge(u.level)}
+                                      </div>
+                                      
+                                      <div className="mt-3 pl-8">
+                                          <p className="text-xs text-gray-600 flex items-center mb-1">
+                                              <School className="w-3 h-3 mr-1.5 text-gray-400"/> {schoolName || '-'}
+                                          </p>
+                                          {u.level === 'score' && (
+                                              <p className="text-xs text-orange-600 flex items-center bg-orange-50 w-fit px-2 py-0.5 rounded">
+                                                  <CheckSquare className="w-3 h-3 mr-1.5"/> รับผิดชอบ {u.assignedActivities?.length || 0} รายการ
+                                              </p>
+                                          )}
+                                      </div>
+
+                                      {canModify && (
+                                          <div className="flex justify-end gap-2 mt-3 pt-3 border-t border-gray-100">
+                                              <button onClick={(e) => { e.stopPropagation(); handleQuickReset(u); }} className="flex-1 py-1.5 text-orange-600 bg-orange-50 rounded text-xs font-bold border border-orange-100 flex items-center justify-center">
+                                                  <KeyRound className="w-3.5 h-3.5 mr-1.5" /> Reset Pwd
+                                              </button>
+                                              <button onClick={(e) => { e.stopPropagation(); handleEdit(u); }} className="flex-1 py-1.5 text-blue-600 bg-blue-50 rounded text-xs font-bold border border-blue-100 flex items-center justify-center">
+                                                  <Edit2 className="w-3.5 h-3.5 mr-1.5" /> Edit
+                                              </button>
+                                              <button onClick={(e) => { e.stopPropagation(); setConfirmDelete({ isOpen: true, ids: [u.userid] }); }} className="flex-1 py-1.5 text-red-600 bg-red-50 rounded text-xs font-bold border border-red-100 flex items-center justify-center">
+                                                  <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Delete
+                                              </button>
+                                          </div>
+                                      )}
+                                  </div>
+                              );
+                          })}
+                      </div>
+                  </>
               )}
               
               {/* Pagination */}
@@ -700,7 +909,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, currentUser }) =>
                                       </label>
                                       <div className="max-h-40 overflow-y-auto border border-orange-200 rounded-lg bg-white p-2 space-y-1">
                                           {data.activities.map(act => (
-                                              <div key={act.id} className="flex items-center p-2 hover:bg-orange-50 rounded cursor-pointer" onClick={() => handleActivityToggle(act.id)}>
+                                              <div key={act.id} className="flex items-center p-2 hover:bg-orange-50 rounded cursor-pointer" onClick={() => handleActivityToggleEdit(act.id)}>
                                                   <div className={`w-4 h-4 border rounded mr-3 flex items-center justify-center ${editingUser.assignedActivities?.includes(act.id) ? 'bg-orange-500 border-orange-500 text-white' : 'border-gray-300'}`}>
                                                       {editingUser.assignedActivities?.includes(act.id) && <CheckCircle className="w-3 h-3" />}
                                                   </div>
@@ -733,6 +942,59 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, currentUser }) =>
               </div>
           )}
 
+          {/* Bulk Assign Modal */}
+          {isBulkAssignOpen && (
+              <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+                  <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh]">
+                      <div className="p-4 border-b border-gray-100 bg-orange-50 flex justify-between items-center">
+                          <div>
+                              <h3 className="font-bold text-orange-800 flex items-center">
+                                  <CheckSquare className="w-5 h-5 mr-2" />
+                                  กำหนดกิจกรรมแบบกลุ่ม ({selectedUserIds.size} คน)
+                              </h3>
+                              <p className="text-xs text-orange-600 mt-1">เลือกกิจกรรมที่ต้องการมอบหมายให้ผู้ใช้ที่เลือกทั้งหมด</p>
+                          </div>
+                          <button onClick={() => setIsBulkAssignOpen(false)} className="p-1 hover:bg-orange-100 rounded-full text-orange-800 transition-colors"><X className="w-5 h-5"/></button>
+                      </div>
+                      
+                      <div className="flex-1 overflow-y-auto p-4">
+                          <div className="grid grid-cols-1 gap-2">
+                              {data.activities.map(act => (
+                                  <div 
+                                      key={act.id} 
+                                      className={`flex items-center p-3 rounded-lg border cursor-pointer transition-all ${bulkActivities.includes(act.id) ? 'bg-orange-50 border-orange-300' : 'bg-white border-gray-200 hover:border-orange-200'}`}
+                                      onClick={() => handleBulkAssignToggle(act.id)}
+                                  >
+                                      <div className={`w-5 h-5 border rounded mr-3 flex items-center justify-center shrink-0 ${bulkActivities.includes(act.id) ? 'bg-orange-500 border-orange-500 text-white' : 'border-gray-300 bg-white'}`}>
+                                          {bulkActivities.includes(act.id) && <CheckCircle className="w-3.5 h-3.5" />}
+                                      </div>
+                                      <div>
+                                          <div className="text-sm font-bold text-gray-800">{act.name}</div>
+                                          <div className="text-xs text-gray-500">{act.category}</div>
+                                      </div>
+                                  </div>
+                              ))}
+                          </div>
+                      </div>
+
+                      <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-between items-center">
+                          <span className="text-xs text-gray-500">เลือกแล้ว {bulkActivities.length} กิจกรรม</span>
+                          <div className="flex gap-2">
+                              <button onClick={() => setIsBulkAssignOpen(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded-lg text-sm">ยกเลิก</button>
+                              <button 
+                                  onClick={executeBulkAssign}
+                                  disabled={isSaving || bulkActivities.length === 0}
+                                  className="px-6 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 text-sm font-bold flex items-center disabled:opacity-50"
+                              >
+                                  {isSaving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
+                                  บันทึกข้อมูล ({selectedUserIds.size})
+                              </button>
+                          </div>
+                      </div>
+                  </div>
+              </div>
+          )}
+
           {/* Credentials Modal (Success) */}
           {createdCredential && (
               <div className="fixed inset-0 bg-black/60 z-[300] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
@@ -740,8 +1002,8 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, currentUser }) =>
                       <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
                           <CheckCircle className="w-8 h-8 text-green-600" />
                       </div>
-                      <h3 className="text-xl font-bold text-gray-800 mb-2">บันทึกข้อมูลสำเร็จ</h3>
-                      <p className="text-sm text-gray-500 mb-6">กรุณาส่งข้อมูลการเข้าสู่ระบบให้ผู้ใช้งาน</p>
+                      <h3 className="text-xl font-bold text-gray-800 mb-2">ดำเนินการสำเร็จ</h3>
+                      <p className="text-sm text-gray-500 mb-6">กรุณาส่งข้อมูลการเข้าสู่ระบบใหม่ให้ผู้ใช้งาน</p>
                       
                       <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-6 text-left">
                           <div className="mb-2">
@@ -749,7 +1011,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, currentUser }) =>
                               <div className="font-mono text-gray-800 font-bold text-lg">{createdCredential.username}</div>
                           </div>
                           <div>
-                              <span className="text-xs text-gray-400 font-bold uppercase">Password</span>
+                              <span className="text-xs text-gray-400 font-bold uppercase">New Password</span>
                               <div className="font-mono text-gray-800 font-bold text-lg">{createdCredential.password}</div>
                           </div>
                       </div>
@@ -767,6 +1029,18 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, currentUser }) =>
                   </div>
               </div>
           )}
+
+          {/* Confirm Reset Modal */}
+          <ConfirmationModal 
+              isOpen={confirmReset.isOpen}
+              title="รีเซ็ตรหัสผ่าน"
+              description={`คุณต้องการรีเซ็ตรหัสผ่านของ "${confirmReset.user?.name}" ใช่หรือไม่? รหัสผ่านใหม่จะถูกสุ่มและแสดงให้คุณเห็น`}
+              confirmLabel="ยืนยันการรีเซ็ต"
+              confirmColor="orange"
+              onConfirm={executeQuickReset}
+              onCancel={() => setConfirmReset({ isOpen: false, user: null })}
+              isLoading={isSaving}
+          />
 
           <ConfirmationModal 
               isOpen={confirmDelete.isOpen}
