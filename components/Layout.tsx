@@ -120,7 +120,7 @@ const ScannerModal = ({
             console.warn("Back camera access failed, trying fallback...", err);
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: true 
+                    video: { facingMode: 'user' } // Fallback to front camera if environment fails
                 });
                 handleStream(stream);
             } catch (fallbackErr: any) {
@@ -331,11 +331,14 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
 
   const userRole = userProfile?.level?.toLowerCase();
   const isAdminOrArea = ['admin', 'area'].includes(userRole);
+  const isGroupAdmin = userRole === 'group_admin';
   const canScore = ['admin', 'area', 'group_admin', 'score'].includes(userRole);
   const canManageAnnouncements = ['admin', 'area', 'group_admin'].includes(userRole);
   const canViewPrintDocs = true; 
-  // Add User Management permission check
   const canManageUsers = ['admin', 'area', 'group_admin', 'school_admin'].includes(userRole);
+  
+  // Updated: Allow Group Admin to view summary
+  const canViewSummary = isAdminOrArea || isGroupAdmin;
   
   // Robust config defaults merging
   const defaults: AppConfig = {
@@ -368,7 +371,7 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
     { id: 'announcements', label: 'ข่าว/คู่มือ', icon: Megaphone, visible: showMenu('menu_announcements', canManageAnnouncements) },
     { id: 'schools', label: 'โรงเรียน', icon: School, visible: showMenu('menu_schools') },
     { id: 'users', label: 'ผู้ใช้งาน', icon: UserCog, visible: canManageUsers },
-    { id: 'summary', label: 'Smart Summary & AI', icon: BrainCircuit, visible: showMenu('menu_summary', isAdminOrArea) },
+    { id: 'summary', label: 'Smart Summary & AI', icon: BrainCircuit, visible: showMenu('menu_summary', canViewSummary) },
     { id: 'settings', label: 'ตั้งค่า', icon: Settings, visible: isAdminOrArea }, 
   ];
 
@@ -383,7 +386,6 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
         data={data}
         user={userProfile}
         onSearch={(scannedValue) => {
-            // ... (Existing scanner logic)
             setShowScanner(false);
             const lowerVal = scannedValue.toLowerCase();
             if (lowerVal.includes('score-input') && lowerVal.includes('activityid=')) {
