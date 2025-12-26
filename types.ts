@@ -266,7 +266,8 @@ export interface AppConfig {
   menu_judges: boolean;
   menu_announcements: boolean;
   menu_schools: boolean;
-  menu_users: boolean; // New: User Management Menu
+  menu_users: boolean;
+  menu_summary: boolean; // New: AI Summary Menu
 }
 
 export interface AppData {
