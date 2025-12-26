@@ -18,7 +18,7 @@ import LiveScoreView from './components/LiveScoreView';
 import PublicResultView from './components/PublicResultView'; 
 import SettingsView from './components/SettingsView';
 import UserManagement from './components/UserManagement'; 
-import SchoolManagement from './components/SchoolManagement'; // New Component
+import SchoolManagement from './components/SchoolManagement'; 
 import LoginScreen from './components/LoginScreen';
 import { AppData, User } from './types';
 import { fetchData, checkUserPermission, verifyAndLinkLine } from './services/api';
