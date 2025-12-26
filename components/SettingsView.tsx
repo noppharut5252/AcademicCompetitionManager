@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { AppData, User, AppConfig } from '../types';
-import { Save, Loader2, Lock, Eye, EyeOff, LayoutDashboard, MonitorPlay, Users, MapPin, Trophy, Edit3, Award, Printer, FileBadge, IdCard, Gavel, Megaphone, School, UserCog } from 'lucide-react';
+import { Save, Loader2, Lock, Eye, EyeOff, LayoutDashboard, MonitorPlay, Users, MapPin, Trophy, Edit3, Award, Printer, FileBadge, IdCard, Gavel, Megaphone, School, UserCog, BrainCircuit } from 'lucide-react';
 import { saveAppConfig } from '../services/api';
 
 interface SettingsViewProps {
@@ -15,7 +15,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ data, user, onDataUpdate })
   const defaults: AppConfig = {
       menu_live: true, menu_teams: true, menu_venues: true, menu_activities: true,
       menu_score: true, menu_results: true, menu_documents: true, menu_certificates: true,
-      menu_idcards: true, menu_judges: true, menu_announcements: true, menu_schools: true, menu_users: true
+      menu_idcards: true, menu_judges: true, menu_announcements: true, menu_schools: true, menu_users: true, menu_summary: true
   };
 
   const [config, setConfig] = useState<AppConfig>({ ...defaults, ...(data.appConfig || {}) });
@@ -78,6 +78,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ data, user, onDataUpdate })
       { key: 'menu_announcements', label: 'ข่าว/คู่มือ (Announcements)', icon: Megaphone },
       { key: 'menu_schools', label: 'โรงเรียน (Schools)', icon: School },
       { key: 'menu_users', label: 'ผู้ใช้งาน (Users)', icon: UserCog },
+      { key: 'menu_summary', label: 'Smart Summary (AI)', icon: BrainCircuit },
   ];
 
   return (
