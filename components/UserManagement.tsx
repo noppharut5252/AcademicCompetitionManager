@@ -1,9 +1,8 @@
 
-// ... existing imports
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { AppData, User, Activity } from '../types';
 import { getAllUsers, saveUserAdmin, deleteUser } from '../services/api';
-import { Search, Plus, Edit2, Trash2, User as UserIcon, Shield, School, CheckCircle, X, Save, Lock, Loader2, RefreshCw, AlertTriangle, Phone, Mail, MoreHorizontal, Eye, EyeOff, Copy, Download, Upload, CheckSquare, Square, FileText, LayoutGrid, MessageCircle, Link as LinkIcon, KeyRound, Filter, Smartphone, Monitor } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, User as UserIcon, Shield, School, CheckCircle, X, Save, Lock, Loader2, RefreshCw, AlertTriangle, Phone, Mail, MoreHorizontal, Eye, EyeOff, Copy, Download, Upload, CheckSquare, Square, FileText, LayoutGrid, MessageCircle, Link as LinkIcon, KeyRound, Filter, Smartphone, Monitor, Wand2, ClipboardCopy } from 'lucide-react';
 import SearchableSelect from './SearchableSelect';
 import ConfirmationModal from './ConfirmationModal';
 
@@ -140,22 +139,22 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, currentUser }) =>
 
   // --- Options ---
   const filterRoleOptions = [
-      { value: 'Admin', label: 'Admin' },
-      { value: 'Area', label: 'Area Admin' },
-      { value: 'Group_Admin', label: 'Group Admin' },
-      { value: 'School_Admin', label: 'School Admin' },
+      { value: 'admin', label: 'Admin' },
+      { value: 'area', label: 'Area Admin' },
+      { value: 'group_admin', label: 'Group Admin' },
+      { value: 'school_admin', label: 'School Admin' },
       { value: 'score', label: 'Score Entry' },
-      { value: 'User', label: 'User' }
+      { value: 'user', label: 'User' }
   ];
 
   const assignableRoles = useMemo(() => {
       const allRoles = [
-          { value: 'Admin', label: 'Admin (ผู้ดูแลระบบสูงสุด)', color: 'bg-purple-100 text-purple-800' },
-          { value: 'Area', label: 'Area Admin (เขตพื้นที่)', color: 'bg-indigo-100 text-indigo-800' },
-          { value: 'Group_Admin', label: 'Group Admin (ประธานกลุ่มฯ)', color: 'bg-blue-100 text-blue-800' },
-          { value: 'School_Admin', label: 'School Admin (แอดมินโรงเรียน)', color: 'bg-cyan-100 text-cyan-800' },
+          { value: 'admin', label: 'Admin (ผู้ดูแลระบบสูงสุด)', color: 'bg-purple-100 text-purple-800' },
+          { value: 'area', label: 'Area Admin (เขตพื้นที่)', color: 'bg-indigo-100 text-indigo-800' },
+          { value: 'group_admin', label: 'Group Admin (ประธานกลุ่มฯ)', color: 'bg-blue-100 text-blue-800' },
+          { value: 'school_admin', label: 'School Admin (แอดมินโรงเรียน)', color: 'bg-cyan-100 text-cyan-800' },
           { value: 'score', label: 'Score Entry (กรรมการบันทึกคะแนน)', color: 'bg-orange-100 text-orange-800' },
-          { value: 'User', label: 'User (ผู้ใช้งานทั่วไป)', color: 'bg-gray-100 text-gray-800' }
+          { value: 'user', label: 'User (ผู้ใช้งานทั่วไป)', color: 'bg-gray-100 text-gray-800' }
       ];
       return allRoles.filter(roleOption => getRoleLevel(roleOption.value) < myLevel);
   }, [myLevel]);
@@ -288,6 +287,12 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, currentUser }) =>
       }
   };
 
+  const handleGeneratePassword = () => {
+      const randomPass = Math.random().toString(36).slice(-8);
+      setEditingUser({...editingUser, password: randomPass});
+      setShowPassword(true);
+  };
+
   // --- Bulk Assign Activities ---
   const handleBulkAssignOpen = () => {
       setBulkActivities([]);
@@ -383,6 +388,21 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, currentUser }) =>
       document.body.removeChild(link);
   };
 
+  const handleCopyContacts = (type: 'email' | 'phone') => {
+      const list = filteredUsers
+          .map(u => type === 'email' ? u.email : u.tel)
+          .filter(val => val && val.trim() !== '')
+          .join(', '); // Comma separated for easy copy-paste to email clients
+      
+      if (!list) {
+          alert(`ไม่พบข้อมูล ${type === 'email' ? 'อีเมล' : 'เบอร์โทร'} ในรายการที่แสดง`);
+          return;
+      }
+
+      navigator.clipboard.writeText(list);
+      alert(`คัดลอก ${type === 'email' ? 'อีเมล' : 'เบอร์โทร'} จำนวน ${list.split(',').length} รายการแล้ว`);
+  };
+
   const handleImportClick = () => fileInputRef.current?.click();
 
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -461,8 +481,11 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, currentUser }) =>
               </div>
               <div className="flex flex-wrap gap-2 w-full lg:w-auto">
                   <input type="file" ref={fileInputRef} className="hidden" accept=".csv" onChange={handleImportFile} />
+                  <button onClick={() => handleCopyContacts('email')} className="flex items-center px-3 py-2 bg-white text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium border border-gray-200" title="Copy Emails">
+                      <Mail className="w-4 h-4 mr-2" /> Emails
+                  </button>
                   <button onClick={handleImportClick} className="flex items-center px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium border border-gray-200">
-                      <Upload className="w-4 h-4 mr-2" /> Import CSV
+                      <Upload className="w-4 h-4 mr-2" /> Import
                   </button>
                   <button onClick={handleExportCSV} className="flex items-center px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium border border-gray-200">
                       <Download className="w-4 h-4 mr-2" /> Export CSV
@@ -584,13 +607,13 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, currentUser }) =>
                       {/* Desktop Table View */}
                       <div className="hidden md:block overflow-x-auto mt-4">
                           <table className="min-w-full divide-y divide-gray-200">
-                              <thead className="bg-gray-50">
+                              <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
                                   <tr>
-                                      <th className="px-4 py-3 w-10 text-center">#</th>
-                                      <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">ผู้ใช้งาน</th>
-                                      <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">บทบาท</th>
-                                      <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">โรงเรียน</th>
-                                      <th className="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">จัดการ</th>
+                                      <th className="px-4 py-3 w-10 text-center bg-gray-50">#</th>
+                                      <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider bg-gray-50">ผู้ใช้งาน</th>
+                                      <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider bg-gray-50">บทบาท</th>
+                                      <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider bg-gray-50">โรงเรียน</th>
+                                      <th className="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider bg-gray-50">จัดการ</th>
                                   </tr>
                               </thead>
                               <tbody className="bg-white divide-y divide-gray-200">
@@ -802,13 +825,18 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, currentUser }) =>
                                               placeholder={editingUser.userid ? "New Password" : "Password"}
                                               required={!editingUser.userid}
                                           />
-                                          <button 
-                                              type="button"
-                                              onClick={() => setShowPassword(!showPassword)}
-                                              className="absolute right-2 top-2 text-gray-400 hover:text-gray-600"
-                                          >
-                                              {showPassword ? <EyeOff className="w-4 h-4"/> : <Eye className="w-4 h-4"/>}
-                                          </button>
+                                          <div className="absolute right-2 top-2 flex items-center gap-1">
+                                              <button type="button" onClick={handleGeneratePassword} className="text-gray-400 hover:text-blue-600" title="Generate Random Password">
+                                                  <Wand2 className="w-4 h-4"/>
+                                              </button>
+                                              <button 
+                                                  type="button"
+                                                  onClick={() => setShowPassword(!showPassword)}
+                                                  className="text-gray-400 hover:text-gray-600"
+                                              >
+                                                  {showPassword ? <EyeOff className="w-4 h-4"/> : <Eye className="w-4 h-4"/>}
+                                              </button>
+                                          </div>
                                       </div>
                                   </div>
                               </div>
