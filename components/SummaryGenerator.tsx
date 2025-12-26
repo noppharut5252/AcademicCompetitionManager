@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { AppData, User, Team, AreaStageInfo, School } from '../types';
 import { BrainCircuit, Copy, FileText, LayoutGrid, Trophy, Check, Sparkles, MessageSquare, MonitorPlay, Crown, Flame, Zap, Target, BarChart3, TrendingUp, Filter, Ghost } from 'lucide-react';
 
@@ -10,8 +10,24 @@ interface SummaryGeneratorProps {
 
 const SummaryGenerator: React.FC<SummaryGeneratorProps> = ({ data, user }) => {
   const [viewScope, setViewScope] = useState<'cluster' | 'area'>('area');
-  const [selectedCluster, setSelectedCluster] = useState<string>(''); // New: Cluster Filter
+  const [selectedCluster, setSelectedCluster] = useState<string>('');
   const [copiedSection, setCopiedSection] = useState<string | null>(null);
+
+  // --- Group Admin Logic ---
+  const userRole = user?.level?.toLowerCase();
+  const isGroupAdmin = userRole === 'group_admin';
+  const userSchool = data.schools.find(s => s.SchoolID === user?.SchoolID);
+  const userClusterID = userSchool?.SchoolCluster;
+
+  // Auto-lock cluster filter for group admin when in cluster mode
+  useEffect(() => {
+      if (isGroupAdmin && userClusterID) {
+          // If viewing cluster scope, force select own cluster
+          if (viewScope === 'cluster') {
+              setSelectedCluster(userClusterID);
+          }
+      }
+  }, [viewScope, isGroupAdmin, userClusterID]);
 
   // --- Helper to parse Area Info ---
   const getAreaInfo = (team: Team): AreaStageInfo | null => {
@@ -41,12 +57,22 @@ const SummaryGenerator: React.FC<SummaryGeneratorProps> = ({ data, user }) => {
               String(t.flag).toUpperCase() === 'TRUE' && 
               t.stageStatus === 'Area'
           );
-      } else if (viewScope === 'cluster' && selectedCluster) {
-          // Filter by Specific Cluster
-          targetTeams = data.teams.filter(t => {
-              const s = data.schools.find(sc => sc.SchoolID === t.schoolId || sc.SchoolName === t.schoolId);
-              return s?.SchoolCluster === selectedCluster;
-          });
+      } else if (viewScope === 'cluster') {
+          // Cluster Scope Logic
+          if (isGroupAdmin && userClusterID) {
+              // Group Admin: Force own cluster
+              targetTeams = data.teams.filter(t => {
+                  const s = data.schools.find(sc => sc.SchoolID === t.schoolId || sc.SchoolName === t.schoolId);
+                  return s?.SchoolCluster === userClusterID;
+              });
+          } else if (selectedCluster) {
+              // Admin selected specific cluster
+              targetTeams = data.teams.filter(t => {
+                  const s = data.schools.find(sc => sc.SchoolID === t.schoolId || sc.SchoolName === t.schoolId);
+                  return s?.SchoolCluster === selectedCluster;
+              });
+          }
+          // If Admin and no cluster selected ('All'), targetTeams remains all teams
       }
 
       // Map to a richer format for calculation
@@ -89,10 +115,13 @@ const SummaryGenerator: React.FC<SummaryGeneratorProps> = ({ data, user }) => {
       let content = `# ข้อมูลสรุปผลการแข่งขันงานศิลปหัตถกรรมนักเรียน\n`;
       content += `วันที่ดึงข้อมูล: ${today}\n`;
       content += `ขอบเขตข้อมูล: ${viewScope === 'area' ? 'ระดับเขตพื้นที่การศึกษา' : 'ระดับกลุ่มเครือข่ายโรงเรียน'}\n`;
-      if (selectedCluster) {
-          const cName = data.clusters.find(c => c.ClusterID === selectedCluster)?.ClusterName;
+      
+      const effectiveCluster = isGroupAdmin ? userClusterID : selectedCluster;
+      if (viewScope === 'cluster' && effectiveCluster) {
+          const cName = data.clusters.find(c => c.ClusterID === effectiveCluster)?.ClusterName;
           content += `เจาะจงกลุ่มเครือข่าย: ${cName}\n`;
       }
+      
       content += `จำนวนทีมที่นำมาวิเคราะห์: ${processedTeams.length} ทีม\n\n`;
 
       // --- 1. Popular Activities ---
@@ -267,7 +296,7 @@ const SummaryGenerator: React.FC<SummaryGeneratorProps> = ({ data, user }) => {
 
       content += `\n---\nสร้างโดยระบบ CompManager AI Generator`;
       return content;
-  }, [data, viewScope, selectedCluster]);
+  }, [data, viewScope, selectedCluster, isGroupAdmin, userClusterID]);
 
   // --- 2. Prompts Templates ---
   const PROMPTS = {
@@ -332,7 +361,7 @@ const SummaryGenerator: React.FC<SummaryGeneratorProps> = ({ data, user }) => {
             
             <div className="flex bg-white/20 p-1 rounded-xl backdrop-blur-md">
                 <button
-                    onClick={() => { setViewScope('cluster'); setSelectedCluster(''); }}
+                    onClick={() => { setViewScope('cluster'); if (!isGroupAdmin) setSelectedCluster(''); }}
                     className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center ${viewScope === 'cluster' ? 'bg-white text-indigo-600 shadow' : 'text-white/80 hover:bg-white/10'}`}
                 >
                     <LayoutGrid className="w-4 h-4 mr-2" /> ระดับกลุ่มฯ
@@ -352,15 +381,21 @@ const SummaryGenerator: React.FC<SummaryGeneratorProps> = ({ data, user }) => {
                 <Filter className="w-5 h-5 text-gray-400" />
                 <span className="text-sm font-bold text-gray-700 whitespace-nowrap">เจาะจงกลุ่มเครือข่าย:</span>
                 <select 
-                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                    className={`flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none ${isGroupAdmin ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''}`}
                     value={selectedCluster}
                     onChange={(e) => setSelectedCluster(e.target.value)}
+                    disabled={isGroupAdmin}
                 >
                     <option value="">-- แสดงรวมทุกกลุ่ม --</option>
                     {data.clusters.map(c => (
                         <option key={c.ClusterID} value={c.ClusterID}>{c.ClusterName}</option>
                     ))}
                 </select>
+                {isGroupAdmin && (
+                    <span className="text-xs text-indigo-600 font-bold bg-indigo-50 px-2 py-1 rounded">
+                        ล็อกตามสิทธิ์ของคุณ
+                    </span>
+                )}
             </div>
         )}
 
