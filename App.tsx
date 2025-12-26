@@ -19,6 +19,7 @@ import PublicResultView from './components/PublicResultView';
 import SettingsView from './components/SettingsView';
 import UserManagement from './components/UserManagement'; 
 import SchoolManagement from './components/SchoolManagement'; 
+import SummaryGenerator from './components/SummaryGenerator';
 import LoginScreen from './components/LoginScreen';
 import { AppData, User } from './types';
 import { fetchData, checkUserPermission, verifyAndLinkLine } from './services/api';
@@ -368,6 +369,7 @@ const App: React.FC = () => {
                             <Route path="/schools" element={<SchoolManagement data={data} user={currentUser} onDataUpdate={() => fetchAppData(true)} />} />
                             <Route path="/users" element={<UserManagement data={data} currentUser={currentUser} />} />
                             <Route path="/settings" element={<SettingsView data={data} user={currentUser} onDataUpdate={() => fetchAppData(true)} />} />
+                            <Route path="/summary" element={<SummaryGenerator data={data} user={currentUser} />} />
                             <Route 
                                 path="/profile" 
                                 element={currentUser && !currentUser.isGuest ? <ProfileView user={currentUser} data={data} onUpdateUser={setCurrentUser} /> : <Navigate to="/login" />} 
