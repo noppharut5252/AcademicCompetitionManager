@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { LayoutDashboard, Users, Trophy, School, Settings, LogOut, Award, FileBadge, IdCard, LogIn, UserCircle, Edit3, ScanLine, X, Camera, Search, ChevronRight, LayoutGrid, RotateCcw, Loader2, Zap, MapPin, Gavel, Megaphone, Printer, Hash, MonitorPlay, Menu, PanelLeftClose, PanelLeft, UserCog } from 'lucide-react';
+import { LayoutDashboard, Users, Trophy, School, Settings, LogOut, Award, FileBadge, IdCard, LogIn, UserCircle, Edit3, ScanLine, X, Camera, Search, ChevronRight, LayoutGrid, RotateCcw, Loader2, Zap, MapPin, Gavel, Megaphone, Printer, Hash, MonitorPlay, Menu, PanelLeftClose, PanelLeft, UserCog, BrainCircuit } from 'lucide-react';
 import { logoutLiff } from '../services/liff';
 import { User, AppData, AppConfig } from '../types';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
@@ -14,6 +14,7 @@ interface LayoutProps {
   data?: AppData;
 }
 
+// ... (Keep ScannerModal Component as is)
 const ScannerModal = ({ 
     isOpen, 
     onClose, 
@@ -27,7 +28,7 @@ const ScannerModal = ({
     data?: AppData;
     user?: User | any;
 }) => {
-    // ... (ScannerModal code remains unchanged)
+    // ... (ScannerModal implementation identical to previous)
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [mode, setMode] = useState<'scan' | 'manual'>('scan');
@@ -40,7 +41,6 @@ const ScannerModal = ({
 
     const myTeams = useMemo(() => {
         if (!data || !user) return [];
-        // Ensure arrays exist
         let teams = data.teams || [];
         let activities = data.activities || [];
         let schools = data.schools || [];
@@ -341,7 +341,7 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
   const defaults: AppConfig = {
       menu_live: true, menu_teams: true, menu_venues: true, menu_activities: true,
       menu_score: true, menu_results: true, menu_documents: true, menu_certificates: true,
-      menu_idcards: true, menu_judges: true, menu_announcements: true, menu_schools: true, menu_users: true
+      menu_idcards: true, menu_judges: true, menu_announcements: true, menu_schools: true, menu_users: true, menu_summary: true
   };
   
   // Merge loaded config with defaults to ensure keys exist
@@ -367,9 +367,8 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
     { id: 'judges', label: 'ทำเนียบกรรมการ', icon: Gavel, visible: showMenu('menu_judges') },
     { id: 'announcements', label: 'ข่าว/คู่มือ', icon: Megaphone, visible: showMenu('menu_announcements', canManageAnnouncements) },
     { id: 'schools', label: 'โรงเรียน', icon: School, visible: showMenu('menu_schools') },
-    // Explicitly use canManageUsers for users menu, overriding config to ensure admins see it
-    { id: 'users', label: 'ผู้ใช้งาน', icon: UserCog, visible: canManageUsers }, 
-    // Settings logic specific: Only Admin/Area see it anyway, but let's keep it visible for them always
+    { id: 'users', label: 'ผู้ใช้งาน', icon: UserCog, visible: canManageUsers },
+    { id: 'summary', label: 'Smart Summary & AI', icon: BrainCircuit, visible: showMenu('menu_summary', isAdminOrArea) },
     { id: 'settings', label: 'ตั้งค่า', icon: Settings, visible: isAdminOrArea }, 
   ];
 
@@ -384,21 +383,16 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
         data={data}
         user={userProfile}
         onSearch={(scannedValue) => {
+            // ... (Existing scanner logic)
             setShowScanner(false);
-            
-            // 1. Check for Score Input URL (contains 'score-input' and 'activityId')
-            // Using case insensitive check and more robust regex
             const lowerVal = scannedValue.toLowerCase();
             if (lowerVal.includes('score-input') && lowerVal.includes('activityid=')) {
-                // Try to extract ID using flexible regex
                 const match = scannedValue.match(/[?&][aA]ctivity[iI]d=([^&]+)/);
                 if (match && match[1]) {
                     setTimeout(() => navigate(`/score-input?activityId=${match[1]}`), 100);
                     return;
                 }
             }
-
-            // 2. Default ID Card Logic
             let teamId = scannedValue;
             let levelParam = '';
             try {
