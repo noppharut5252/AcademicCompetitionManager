@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { CertificateTemplate, AppData, User } from '../types';
-import { Save, X, Image as ImageIcon, Plus, Trash2, LayoutTemplate, PenTool, CheckCircle, Upload, Loader2, AlertCircle, Hash, Info, Type, BoxSelect, ArrowUpFromLine, ArrowDownToLine, Scaling } from 'lucide-react';
+import { Save, X, Image as ImageIcon, Plus, Trash2, LayoutTemplate, PenTool, CheckCircle, Upload, Loader2, AlertCircle, Hash, Info, Type, BoxSelect, ArrowUpFromLine, ArrowDownToLine, Scaling, MoveVertical, QrCode } from 'lucide-react';
 import { uploadImage, saveCertificateConfig } from '../services/api';
 import { resizeImage, fileToBase64 } from '../services/utils';
 
@@ -34,7 +34,12 @@ const DEFAULT_TEMPLATE: CertificateTemplate = {
     serialStart: 1,
     contentTop: 25,
     footerBottom: 25,
-    logoHeight: 35
+    logoHeight: 35,
+    signatureSpacing: 3,
+    serialTop: 10,
+    serialRight: 10,
+    qrBottom: 10,
+    qrRight: 10
 };
 
 const CertificateConfigModal: React.FC<CertificateConfigModalProps> = ({ isOpen, onClose, data, onSave, initialTemplates, currentUser }) => {
@@ -51,7 +56,18 @@ const CertificateConfigModal: React.FC<CertificateConfigModalProps> = ({ isOpen,
   const [isSaving, setIsSaving] = useState(false);
   const [uploadingState, setUploadingState] = useState<{ field: string, loading: boolean }>({ field: '', loading: false });
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [targetFieldForUpload, setTargetFieldForUpload] = useState<string>(''); // 'backgroundUrl' | 'logoLeftUrl' | 'signatory-0'
+  const [targetFieldForUpload, setTargetFieldForUpload] = useState<string>('');
+  
+  // Loading state for fetching configs
+  const [isLoadingConfig, setIsLoadingConfig] = useState(false);
+
+  // Effect to handle initial loading if needed, or sync with props
+  useEffect(() => {
+     if (isOpen && Object.keys(templates).length === 0) {
+         setIsLoadingConfig(true);
+         setTimeout(() => setIsLoadingConfig(false), 500); 
+     }
+  }, [isOpen]);
 
   useEffect(() => {
       // Sync on mount or context change
@@ -113,16 +129,13 @@ const CertificateConfigModal: React.FC<CertificateConfigModalProps> = ({ isOpen,
           let base64 = '';
           
           if (targetFieldForUpload === 'backgroundUrl') {
-              // Special handling for Background: Allow up to 1MB without resize
               if (file.size > 1024 * 1024) {
                   alert('ไฟล์พื้นหลังมีขนาดเกิน 1MB ระบบจะทำการย่อขนาดอัตโนมัติเพื่อให้สามารถบันทึกได้');
-                  base64 = await resizeImage(file, 1920, 1080, 0.9); // High quality resize
+                  base64 = await resizeImage(file, 1920, 1080, 0.9);
               } else {
-                  // Use original file
                   base64 = await fileToBase64(file);
               }
           } else {
-              // Logos and Signatures: Resize to reasonable limits
               base64 = await resizeImage(file, 800, 800, 0.8);
           }
 
@@ -135,7 +148,6 @@ const CertificateConfigModal: React.FC<CertificateConfigModalProps> = ({ isOpen,
                   const idx = parseInt(targetFieldForUpload.split('-')[1]);
                   updateSignatory(idx, 'signatureUrl', url);
               } else {
-                  // Direct field
                   updateField(targetFieldForUpload as keyof CertificateTemplate, url);
               }
           } else {
@@ -146,26 +158,23 @@ const CertificateConfigModal: React.FC<CertificateConfigModalProps> = ({ isOpen,
           alert('Error uploading file');
       } finally {
           setUploadingState({ field: '', loading: false });
-          e.target.value = ''; // Reset input
+          e.target.value = ''; 
       }
   };
 
   const handleSaveAll = async () => {
       setIsSaving(true);
-      
-      // 1. Update Map locally
       const finalTemplates = {
           ...templates,
           [currentTemplate.id]: currentTemplate
       };
       setTemplates(finalTemplates);
 
-      // 2. Save to Backend
       const success = await saveCertificateConfig(currentTemplate.id, currentTemplate);
       
       setIsSaving(false);
       if (success) {
-          onSave(finalTemplates); // Update parent state
+          onSave(finalTemplates);
           onClose();
       } else {
           alert('บันทึกข้อมูลไม่สำเร็จ กรุณาลองใหม่');
@@ -183,7 +192,6 @@ const CertificateConfigModal: React.FC<CertificateConfigModalProps> = ({ isOpen,
       }
   };
 
-  // Serial Number Preview
   const getSerialPreview = () => {
       const fmt = currentTemplate.serialFormat || '{activityId}-{year}-{run:4}';
       const start = currentTemplate.serialStart || 1;
@@ -221,8 +229,9 @@ const CertificateConfigModal: React.FC<CertificateConfigModalProps> = ({ isOpen,
             onChange={handleFileChange}
         />
 
-        <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col relative">
             
+            {/* Header */}
             <div className="bg-blue-600 px-6 py-4 flex justify-between items-center text-white shrink-0">
                 <h3 className="text-lg font-bold flex items-center">
                     <LayoutTemplate className="w-5 h-5 mr-2" />
@@ -233,347 +242,416 @@ const CertificateConfigModal: React.FC<CertificateConfigModalProps> = ({ isOpen,
                 </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
-                
-                {/* Context Selector */}
-                <div className="mb-6 bg-white p-4 rounded-xl border border-blue-100 shadow-sm">
-                    <label className="block text-sm font-bold text-gray-700 mb-2">เลือกรูปแบบที่ต้องการแก้ไข</label>
-                    <select 
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                        value={selectedContext}
-                        onChange={handleContextChange}
-                        disabled={isGroupAdmin && !isAdminOrArea} // Group admin locked to own cluster
-                    >
-                        {isAdminOrArea && <option value="area">ระดับเขตพื้นที่การศึกษา (District Level)</option>}
-                        <optgroup label="ระดับกลุ่มเครือข่าย (Cluster Level)">
-                            {data.clusters.map(c => {
-                                // Filter for Group Admin
-                                if (isGroupAdmin && c.ClusterID !== userClusterID) return null;
-                                return <option key={c.ClusterID} value={c.ClusterID}>{c.ClusterName}</option>
-                            })}
-                        </optgroup>
-                    </select>
-                    <p className="text-xs text-gray-500 mt-2">
-                        * คุณสามารถตั้งค่าพื้นหลัง โลโก้ และลายเซ็นต์ แยกกันสำหรับเขตพื้นที่และแต่ละกลุ่มเครือข่ายได้
-                    </p>
+            {isLoadingConfig ? (
+                <div className="flex-1 flex flex-col items-center justify-center min-h-[300px]">
+                    <Loader2 className="w-10 h-10 text-blue-500 animate-spin mb-3" />
+                    <p className="text-gray-500 font-medium">กำลังโหลดการตั้งค่า...</p>
                 </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Visual Settings */}
-                    <div className="space-y-4">
-                        <h4 className="font-bold text-gray-800 border-b pb-2 mb-2 flex items-center">
-                            <ImageIcon className="w-4 h-4 mr-2" /> ตั้งค่าพื้นหลังและโลโก้
-                        </h4>
-                        
-                        {/* Background */}
-                        <div>
-                            <label className="block text-xs font-medium text-gray-600 mb-1">รูปพื้นหลัง (Background)</label>
-                            <div className="flex gap-2">
-                                <input 
-                                    type="text" 
-                                    className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm"
-                                    placeholder="URL..."
-                                    value={currentTemplate.backgroundUrl}
-                                    onChange={(e) => updateField('backgroundUrl', e.target.value)}
-                                />
-                                <button 
-                                    onClick={() => triggerUpload('backgroundUrl')}
-                                    disabled={uploadingState.loading}
-                                    className="px-3 py-2 bg-gray-100 rounded border border-gray-300 hover:bg-gray-200"
-                                >
-                                    {uploadingState.loading && uploadingState.field === 'backgroundUrl' ? <Loader2 className="w-4 h-4 animate-spin"/> : <Upload className="w-4 h-4"/>}
-                                </button>
-                            </div>
-                            <p className="text-[10px] text-gray-400 mt-1">แนะนำขนาด A4 แนวนอน (1123 x 794 px). หากไฟล์ &lt; 1MB จะไม่มีการย่อขนาด</p>
-                        </div>
-
-                        {/* Frame Selection */}
-                        <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
-                            <label className="block text-xs font-medium text-gray-600 mb-2 flex items-center">
-                                <BoxSelect className="w-3.5 h-3.5 mr-1" /> รูปแบบกรอบ (Frame Style)
-                            </label>
-                            <div className="grid grid-cols-2 gap-2">
-                                <button 
-                                    className={`p-2 rounded border text-xs text-center transition-colors ${currentTemplate.frameStyle === 'simple-gold' ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold' : 'bg-white border-gray-200 hover:bg-gray-100'}`}
-                                    onClick={() => updateField('frameStyle', 'simple-gold')}
-                                >
-                                    เส้นเดี่ยว (Gold)
-                                </button>
-                                <button 
-                                    className={`p-2 rounded border text-xs text-center transition-colors ${currentTemplate.frameStyle === 'infinite-wave' ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold' : 'bg-white border-gray-200 hover:bg-gray-100'}`}
-                                    onClick={() => updateField('frameStyle', 'infinite-wave')}
-                                >
-                                    คลื่น (Wave)
-                                </button>
-                                <button 
-                                    className={`p-2 rounded border text-xs text-center transition-colors ${currentTemplate.frameStyle === 'ornamental-corners' ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold' : 'bg-white border-gray-200 hover:bg-gray-100'}`}
-                                    onClick={() => updateField('frameStyle', 'ornamental-corners')}
-                                >
-                                    ขอบลายไทย
-                                </button>
-                                <button 
-                                    className={`p-2 rounded border text-xs text-center transition-colors ${currentTemplate.frameStyle === 'none' ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold' : 'bg-white border-gray-200 hover:bg-gray-100'}`}
-                                    onClick={() => updateField('frameStyle', 'none')}
-                                >
-                                    ไม่มีกรอบ
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Logos */}
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-xs font-medium text-gray-600 mb-1">โลโก้ซ้าย / กลาง</label>
-                                <div className="flex gap-1">
-                                    <input 
-                                        type="text" 
-                                        className="flex-1 border border-gray-300 rounded px-2 py-2 text-sm min-w-0"
-                                        placeholder="URL..."
-                                        value={currentTemplate.logoLeftUrl}
-                                        onChange={(e) => updateField('logoLeftUrl', e.target.value)}
-                                    />
-                                    <button 
-                                        onClick={() => triggerUpload('logoLeftUrl')}
-                                        disabled={uploadingState.loading}
-                                        className="px-2 py-2 bg-gray-100 rounded border border-gray-300 hover:bg-gray-200"
-                                    >
-                                        {uploadingState.loading && uploadingState.field === 'logoLeftUrl' ? <Loader2 className="w-4 h-4 animate-spin"/> : <Upload className="w-4 h-4"/>}
-                                    </button>
-                                </div>
-                            </div>
-                            <div>
-                                <label className="block text-xs font-medium text-gray-600 mb-1">โลโก้ขวา (ถ้ามี)</label>
-                                <div className="flex gap-1">
-                                    <input 
-                                        type="text" 
-                                        className="flex-1 border border-gray-300 rounded px-2 py-2 text-sm min-w-0"
-                                        placeholder="URL..."
-                                        value={currentTemplate.logoRightUrl}
-                                        onChange={(e) => updateField('logoRightUrl', e.target.value)}
-                                    />
-                                    <button 
-                                        onClick={() => triggerUpload('logoRightUrl')}
-                                        disabled={uploadingState.loading}
-                                        className="px-2 py-2 bg-gray-100 rounded border border-gray-300 hover:bg-gray-200"
-                                    >
-                                        {uploadingState.loading && uploadingState.field === 'logoRightUrl' ? <Loader2 className="w-4 h-4 animate-spin"/> : <Upload className="w-4 h-4"/>}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div>
-                            <label className="block text-xs font-medium text-gray-600 mb-1">ข้อความหัวเรื่อง (Header)</label>
-                            <input 
-                                type="text" 
-                                className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
-                                value={currentTemplate.headerText}
-                                onChange={(e) => updateField('headerText', e.target.value)}
-                            />
-                        </div>
-                        <div>
-                             <label className="block text-xs font-medium text-gray-600 mb-1">ข้อความรอง (Sub Header)</label>
-                             <input 
-                                type="text" 
-                                className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
-                                value={currentTemplate.subHeaderText}
-                                onChange={(e) => updateField('subHeaderText', e.target.value)}
-                            />
-                        </div>
-                        <div>
-                             <label className="block text-xs font-medium text-gray-600 mb-1">ชื่องาน (Event Name)</label>
-                             <input 
-                                type="text" 
-                                className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
-                                placeholder="เว้นว่างเพื่อใช้ค่าเริ่มต้นของระบบ"
-                                value={currentTemplate.eventName || ''}
-                                onChange={(e) => updateField('eventName', e.target.value)}
-                            />
-                            <p className="text-[10px] text-gray-400 mt-1">เช่น: งานศิลปหัตถกรรมนักเรียน ครั้งที่ 71</p>
-                        </div>
-                        <div>
-                             <label className="block text-xs font-medium text-gray-600 mb-1">ข้อความวันที่</label>
-                             <input 
-                                type="text" 
-                                className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
-                                value={currentTemplate.dateText}
-                                onChange={(e) => updateField('dateText', e.target.value)}
-                            />
-                        </div>
+            ) : (
+                <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
+                    
+                    {/* Context Selector */}
+                    <div className="mb-6 bg-white p-4 rounded-xl border border-blue-100 shadow-sm">
+                        <label className="block text-sm font-bold text-gray-700 mb-2">เลือกรูปแบบที่ต้องการแก้ไข</label>
+                        <select 
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                            value={selectedContext}
+                            onChange={handleContextChange}
+                            disabled={isGroupAdmin && !isAdminOrArea}
+                        >
+                            {isAdminOrArea && <option value="area">ระดับเขตพื้นที่การศึกษา (District Level)</option>}
+                            <optgroup label="ระดับกลุ่มเครือข่าย (Cluster Level)">
+                                {data.clusters.map(c => {
+                                    if (isGroupAdmin && c.ClusterID !== userClusterID) return null;
+                                    return <option key={c.ClusterID} value={c.ClusterID}>{c.ClusterName}</option>
+                                })}
+                            </optgroup>
+                        </select>
+                        <p className="text-xs text-gray-500 mt-2">
+                            * คุณสามารถตั้งค่าพื้นหลัง โลโก้ และลายเซ็นต์ แยกกันสำหรับเขตพื้นที่และแต่ละกลุ่มเครือข่ายได้
+                        </p>
                     </div>
 
-                    <div className="space-y-6">
-                        {/* Layout Config */}
-                        <div className="bg-white p-3 rounded-lg border border-blue-200 shadow-sm">
-                            <h4 className="font-bold text-gray-800 border-b pb-2 mb-2 flex items-center text-sm">
-                                <Scaling className="w-4 h-4 mr-2 text-blue-500" /> การจัดวาง (Layout & Sizing)
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* Visual Settings */}
+                        <div className="space-y-4">
+                            <h4 className="font-bold text-gray-800 border-b pb-2 mb-2 flex items-center">
+                                <ImageIcon className="w-4 h-4 mr-2" /> ตั้งค่าพื้นหลังและโลโก้
                             </h4>
-                            <div className="grid grid-cols-3 gap-3">
-                                <div>
-                                    <label className="block text-[10px] font-medium text-gray-600 mb-1 flex items-center" title="ระยะห่างจากขอบบนกระดาษถึงเนื้อหา">
-                                        <ArrowDownToLine className="w-3 h-3 mr-1"/> ขอบบน (mm)
-                                    </label>
-                                    <input 
-                                        type="number" 
-                                        className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
-                                        value={currentTemplate.contentTop || 25}
-                                        onChange={(e) => updateField('contentTop', parseInt(e.target.value))}
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-medium text-gray-600 mb-1 flex items-center" title="ระยะห่างจากขอบล่างกระดาษถึงลายเซ็น">
-                                        <ArrowUpFromLine className="w-3 h-3 mr-1"/> ขอบล่าง (mm)
-                                    </label>
-                                    <input 
-                                        type="number" 
-                                        className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
-                                        value={currentTemplate.footerBottom || 25}
-                                        onChange={(e) => updateField('footerBottom', parseInt(e.target.value))}
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-medium text-gray-600 mb-1 flex items-center" title="ความสูงของโลโก้">
-                                        <Scaling className="w-3 h-3 mr-1"/> สูงโลโก้ (mm)
-                                    </label>
-                                    <input 
-                                        type="number" 
-                                        className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
-                                        value={currentTemplate.logoHeight || 35}
-                                        onChange={(e) => updateField('logoHeight', parseInt(e.target.value))}
-                                    />
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Serial Number Configuration */}
-                        <div className="bg-white p-3 rounded-lg border border-orange-100 shadow-sm">
-                            <h4 className="font-bold text-gray-800 border-b pb-2 mb-2 flex items-center text-sm">
-                                <Hash className="w-4 h-4 mr-2 text-orange-500" /> ตั้งค่าเลขทะเบียน (Serial Number)
-                            </h4>
-                            <div className="space-y-3">
-                                <div>
-                                    <label className="block text-xs font-medium text-gray-600 mb-1">รูปแบบ (Format)</label>
+                            
+                            {/* Background */}
+                            <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-1">รูปพื้นหลัง (Background)</label>
+                                <div className="flex gap-2">
                                     <input 
                                         type="text" 
-                                        className="w-full border border-gray-300 rounded px-3 py-2 text-sm font-mono"
-                                        placeholder="{activityId}-{year}-{run:4}"
-                                        value={currentTemplate.serialFormat}
-                                        onChange={(e) => updateField('serialFormat', e.target.value)}
+                                        className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm"
+                                        placeholder="URL..."
+                                        value={currentTemplate.backgroundUrl}
+                                        onChange={(e) => updateField('backgroundUrl', e.target.value)}
                                     />
-                                    <div className="flex items-center mt-2">
+                                    <button 
+                                        onClick={() => triggerUpload('backgroundUrl')}
+                                        disabled={uploadingState.loading}
+                                        className="px-3 py-2 bg-gray-100 rounded border border-gray-300 hover:bg-gray-200"
+                                    >
+                                        {uploadingState.loading && uploadingState.field === 'backgroundUrl' ? <Loader2 className="w-4 h-4 animate-spin"/> : <Upload className="w-4 h-4"/>}
+                                    </button>
+                                </div>
+                                <p className="text-[10px] text-gray-400 mt-1">แนะนำขนาด A4 แนวนอน (1123 x 794 px). หากไฟล์ &lt; 1MB จะไม่มีการย่อขนาด</p>
+                            </div>
+
+                            {/* Frame Selection */}
+                            <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                                <label className="block text-xs font-medium text-gray-600 mb-2 flex items-center">
+                                    <BoxSelect className="w-3.5 h-3.5 mr-1" /> รูปแบบกรอบ (Frame Style)
+                                </label>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <button 
+                                        className={`p-2 rounded border text-xs text-center transition-colors ${currentTemplate.frameStyle === 'simple-gold' ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold' : 'bg-white border-gray-200 hover:bg-gray-100'}`}
+                                        onClick={() => updateField('frameStyle', 'simple-gold')}
+                                    >
+                                        เส้นเดี่ยว (Gold)
+                                    </button>
+                                    <button 
+                                        className={`p-2 rounded border text-xs text-center transition-colors ${currentTemplate.frameStyle === 'infinite-wave' ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold' : 'bg-white border-gray-200 hover:bg-gray-100'}`}
+                                        onClick={() => updateField('frameStyle', 'infinite-wave')}
+                                    >
+                                        เส้นคลื่น (Wave)
+                                    </button>
+                                    <button 
+                                        className={`p-2 rounded border text-xs text-center transition-colors ${currentTemplate.frameStyle === 'ornamental-corners' ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold' : 'bg-white border-gray-200 hover:bg-gray-100'}`}
+                                        onClick={() => updateField('frameStyle', 'ornamental-corners')}
+                                    >
+                                        ขอบลายไทย
+                                    </button>
+                                    {selectedContext === 'area' && (
+                                        <button 
+                                            className={`p-2 rounded border text-xs text-center transition-colors ${currentTemplate.frameStyle === 'thai-premium' ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold' : 'bg-white border-gray-200 hover:bg-gray-100'}`}
+                                            onClick={() => updateField('frameStyle', 'thai-premium')}
+                                        >
+                                            ลายไทยพรีเมียม
+                                        </button>
+                                    )}
+                                    <button 
+                                        className={`p-2 rounded border text-xs text-center transition-colors ${currentTemplate.frameStyle === 'none' ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold' : 'bg-white border-gray-200 hover:bg-gray-100'}`}
+                                        onClick={() => updateField('frameStyle', 'none')}
+                                    >
+                                        ไม่มีกรอบ
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Logos */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-600 mb-1">โลโก้ซ้าย / กลาง</label>
+                                    <div className="flex gap-1">
                                         <input 
-                                            type="checkbox" 
-                                            id="includeTeamId" 
-                                            className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                                            checked={currentTemplate.serialFormat?.includes('{id}')}
-                                            onChange={(e) => toggleIncludeTeamId(e.target.checked)}
+                                            type="text" 
+                                            className="flex-1 border border-gray-300 rounded px-2 py-2 text-sm min-w-0"
+                                            placeholder="URL..."
+                                            value={currentTemplate.logoLeftUrl}
+                                            onChange={(e) => updateField('logoLeftUrl', e.target.value)}
                                         />
-                                        <label htmlFor="includeTeamId" className="ml-2 text-xs text-gray-600">
-                                            รวม Team ID ในเลขทะเบียน (Include Team ID)
-                                        </label>
-                                    </div>
-                                    <div className="text-[10px] text-gray-400 mt-1 flex flex-wrap gap-1">
-                                        <span className="bg-gray-100 px-1 rounded">{"{activityId}"}: ACT01</span>
-                                        <span className="bg-gray-100 px-1 rounded">{"{year}"}: 2024</span>
-                                        <span className="bg-gray-100 px-1 rounded">{"{th_year}"}: 2567</span>
-                                        <span className="bg-gray-100 px-1 rounded">{"{run:4}"}: 0001</span>
+                                        <button 
+                                            onClick={() => triggerUpload('logoLeftUrl')}
+                                            disabled={uploadingState.loading}
+                                            className="px-2 py-2 bg-gray-100 rounded border border-gray-300 hover:bg-gray-200"
+                                        >
+                                            {uploadingState.loading && uploadingState.field === 'logoLeftUrl' ? <Loader2 className="w-4 h-4 animate-spin"/> : <Upload className="w-4 h-4"/>}
+                                        </button>
                                     </div>
                                 </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-xs font-medium text-gray-600 mb-1">เลขเริ่มต้น (Start At)</label>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-600 mb-1">โลโก้ขวา (ถ้ามี)</label>
+                                    <div className="flex gap-1">
                                         <input 
-                                            type="number" 
-                                            className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
-                                            value={currentTemplate.serialStart}
-                                            onChange={(e) => updateField('serialStart', parseInt(e.target.value))}
+                                            type="text" 
+                                            className="flex-1 border border-gray-300 rounded px-2 py-2 text-sm min-w-0"
+                                            placeholder="URL..."
+                                            value={currentTemplate.logoRightUrl}
+                                            onChange={(e) => updateField('logoRightUrl', e.target.value)}
                                         />
-                                    </div>
-                                    <div className="bg-gray-50 rounded p-2 flex flex-col justify-center">
-                                        <label className="text-[10px] text-gray-500 font-medium">ตัวอย่าง (Preview):</label>
-                                        <div className="text-sm font-bold text-blue-600 font-mono">
-                                            {getSerialPreview()}
-                                        </div>
+                                        <button 
+                                            onClick={() => triggerUpload('logoRightUrl')}
+                                            disabled={uploadingState.loading}
+                                            className="px-2 py-2 bg-gray-100 rounded border border-gray-300 hover:bg-gray-200"
+                                        >
+                                            {uploadingState.loading && uploadingState.field === 'logoRightUrl' ? <Loader2 className="w-4 h-4 animate-spin"/> : <Upload className="w-4 h-4"/>}
+                                        </button>
                                     </div>
                                 </div>
                             </div>
+
+                            <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-1">ข้อความหัวเรื่อง (Header)</label>
+                                <input 
+                                    type="text" 
+                                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                                    value={currentTemplate.headerText}
+                                    onChange={(e) => updateField('headerText', e.target.value)}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-1">ข้อความรอง (Sub Header)</label>
+                                <input 
+                                    type="text" 
+                                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                                    value={currentTemplate.subHeaderText}
+                                    onChange={(e) => updateField('subHeaderText', e.target.value)}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-1">ชื่องาน (Event Name)</label>
+                                <input 
+                                    type="text" 
+                                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                                    placeholder="เว้นว่างเพื่อใช้ค่าเริ่มต้นของระบบ"
+                                    value={currentTemplate.eventName || ''}
+                                    onChange={(e) => updateField('eventName', e.target.value)}
+                                />
+                                <p className="text-[10px] text-gray-400 mt-1">เช่น: งานศิลปหัตถกรรมนักเรียน ครั้งที่ 71</p>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-1">ข้อความวันที่</label>
+                                <input 
+                                    type="text" 
+                                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                                    value={currentTemplate.dateText}
+                                    onChange={(e) => updateField('dateText', e.target.value)}
+                                />
+                            </div>
                         </div>
 
-                        {/* Signatories */}
-                        <div>
-                            <div className="flex justify-between items-center border-b pb-2 mb-2">
-                                <h4 className="font-bold text-gray-800 flex items-center">
-                                    <PenTool className="w-4 h-4 mr-2" /> ผู้ลงนาม (Signatories)
+                        <div className="space-y-6">
+                            {/* Layout Config */}
+                            <div className="bg-white p-3 rounded-lg border border-blue-200 shadow-sm">
+                                <h4 className="font-bold text-gray-800 border-b pb-2 mb-2 flex items-center text-sm">
+                                    <Scaling className="w-4 h-4 mr-2 text-blue-500" /> การจัดวาง (Layout & Sizing)
                                 </h4>
-                                <div className="flex items-center">
-                                    <input 
-                                        type="checkbox" 
-                                        id="showSigLine" 
-                                        className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                                        checked={currentTemplate.showSignatureLine !== false} // Default true
-                                        onChange={(e) => updateField('showSignatureLine', e.target.checked)}
-                                    />
-                                    <label htmlFor="showSigLine" className="ml-2 text-xs text-gray-600 cursor-pointer select-none">
-                                        แสดงเส้นบรรทัด
-                                    </label>
+                                <div className="grid grid-cols-2 gap-3 mb-3">
+                                    <div>
+                                        <label className="block text-[10px] font-medium text-gray-600 mb-1 flex items-center" title="ระยะห่างจากขอบบนกระดาษถึงเนื้อหา">
+                                            <ArrowDownToLine className="w-3 h-3 mr-1"/> ขอบบน (mm)
+                                        </label>
+                                        <input 
+                                            type="number" 
+                                            className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                                            value={currentTemplate.contentTop || 25}
+                                            onChange={(e) => updateField('contentTop', parseInt(e.target.value))}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-medium text-gray-600 mb-1 flex items-center" title="ระยะห่างจากขอบล่างกระดาษถึงลายเซ็น">
+                                            <ArrowUpFromLine className="w-3 h-3 mr-1"/> ขอบล่าง (mm)
+                                        </label>
+                                        <input 
+                                            type="number" 
+                                            className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                                            value={currentTemplate.footerBottom || 25}
+                                            onChange={(e) => updateField('footerBottom', parseInt(e.target.value))}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-medium text-gray-600 mb-1 flex items-center" title="ความสูงของโลโก้">
+                                            <Scaling className="w-3 h-3 mr-1"/> สูงโลโก้ (mm)
+                                        </label>
+                                        <input 
+                                            type="number" 
+                                            className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                                            value={currentTemplate.logoHeight || 35}
+                                            onChange={(e) => updateField('logoHeight', parseInt(e.target.value))}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-medium text-gray-600 mb-1 flex items-center" title="ระยะห่างระหว่างรูปลายเซ็นต์และชื่อ">
+                                            <MoveVertical className="w-3 h-3 mr-1"/> ห่างลายเซ็น (mm)
+                                        </label>
+                                        <input 
+                                            type="number" 
+                                            className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                                            value={currentTemplate.signatureSpacing || 3}
+                                            onChange={(e) => updateField('signatureSpacing', parseInt(e.target.value))}
+                                        />
+                                    </div>
                                 </div>
                             </div>
                             
-                            <div className="space-y-4 max-h-[250px] overflow-y-auto pr-2 custom-scrollbar">
-                                {currentTemplate.signatories.map((sig, idx) => (
-                                    <div key={idx} className="bg-white p-3 rounded-lg border border-gray-200 relative">
-                                        <button 
-                                            onClick={() => removeSignatory(idx)}
-                                            className="absolute top-2 right-2 text-red-400 hover:text-red-600"
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                        </button>
-                                        <div className="space-y-2">
+                            {/* Positioning Config for Serial/QR */}
+                            <div className="bg-white p-3 rounded-lg border border-purple-200 shadow-sm">
+                                <h4 className="font-bold text-gray-800 border-b pb-2 mb-2 flex items-center text-sm">
+                                    <QrCode className="w-4 h-4 mr-2 text-purple-500" /> ตำแหน่งเลขที่ & QR (mm)
+                                </h4>
+                                <div className="grid grid-cols-2 gap-3 mb-3">
+                                    <div>
+                                        <label className="block text-[10px] font-medium text-gray-600 mb-1">เลขทะเบียน (บน)</label>
+                                        <input 
+                                            type="number" 
+                                            className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                                            value={currentTemplate.serialTop || 10}
+                                            onChange={(e) => updateField('serialTop', parseInt(e.target.value))}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-600 mb-1">เลขทะเบียน (ขวา)</label>
+                                        <input 
+                                            type="number" 
+                                            className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                                            value={currentTemplate.serialRight || 10}
+                                            onChange={(e) => updateField('serialRight', parseInt(e.target.value))}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-medium text-gray-600 mb-1">QR Code (ล่าง)</label>
+                                        <input 
+                                            type="number" 
+                                            className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                                            value={currentTemplate.qrBottom || 10}
+                                            onChange={(e) => updateField('qrBottom', parseInt(e.target.value))}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-600 mb-1">QR Code (ขวา)</label>
+                                        <input 
+                                            type="number" 
+                                            className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                                            value={currentTemplate.qrRight || 10}
+                                            onChange={(e) => updateField('qrRight', parseInt(e.target.value))}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Serial Number Configuration */}
+                            <div className="bg-white p-3 rounded-lg border border-orange-100 shadow-sm">
+                                <h4 className="font-bold text-gray-800 border-b pb-2 mb-2 flex items-center text-sm">
+                                    <Hash className="w-4 h-4 mr-2 text-orange-500" /> ตั้งค่าเลขทะเบียน (Serial Number)
+                                </h4>
+                                <div className="space-y-3">
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-600 mb-1">รูปแบบ (Format)</label>
+                                        <input 
+                                            type="text" 
+                                            className="w-full border border-gray-300 rounded px-3 py-2 text-sm font-mono"
+                                            placeholder="{activityId}-{year}-{run:4}"
+                                            value={currentTemplate.serialFormat}
+                                            onChange={(e) => updateField('serialFormat', e.target.value)}
+                                        />
+                                        <div className="flex items-center mt-2">
                                             <input 
-                                                type="text" 
-                                                className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
-                                                placeholder="ชื่อ-นามสกุล"
-                                                value={sig.name}
-                                                onChange={(e) => updateSignatory(idx, 'name', e.target.value)}
+                                                type="checkbox" 
+                                                id="includeTeamId" 
+                                                className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                                                checked={currentTemplate.serialFormat?.includes('{id}')}
+                                                onChange={(e) => toggleIncludeTeamId(e.target.checked)}
                                             />
-                                            <textarea 
-                                                className="w-full border border-gray-300 rounded px-2 py-1 text-sm resize-none"
-                                                placeholder="ตำแหน่ง (รองรับหลายบรรทัด)"
-                                                rows={2}
-                                                value={sig.position}
-                                                onChange={(e) => updateSignatory(idx, 'position', e.target.value)}
+                                            <label htmlFor="includeTeamId" className="ml-2 text-xs text-gray-600">
+                                                รวม Team ID ในเลขทะเบียน (Include Team ID)
+                                            </label>
+                                        </div>
+                                        <div className="text-[10px] text-gray-400 mt-1 flex flex-wrap gap-1">
+                                            <span className="bg-gray-100 px-1 rounded">{"{activityId}"}: ACT01</span>
+                                            <span className="bg-gray-100 px-1 rounded">{"{year}"}: 2024</span>
+                                            <span className="bg-gray-100 px-1 rounded">{"{th_year}"}: 2567</span>
+                                            <span className="bg-gray-100 px-1 rounded">{"{run:4}"}: 0001</span>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-600 mb-1">เลขเริ่มต้น (Start At)</label>
+                                            <input 
+                                                type="number" 
+                                                className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                                                value={currentTemplate.serialStart}
+                                                onChange={(e) => updateField('serialStart', parseInt(e.target.value))}
                                             />
-                                            <div className="flex gap-2">
-                                                <input 
-                                                    type="text" 
-                                                    className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
-                                                    placeholder="URL ลายเซ็นต์ (ถ้ามี)"
-                                                    value={sig.signatureUrl}
-                                                    onChange={(e) => updateSignatory(idx, 'signatureUrl', e.target.value)}
-                                                />
-                                                <button 
-                                                    onClick={() => triggerUpload(`signatory-${idx}`)}
-                                                    disabled={uploadingState.loading}
-                                                    className="px-2 py-1 bg-gray-100 rounded border border-gray-300 hover:bg-gray-200"
-                                                >
-                                                    {uploadingState.loading && uploadingState.field === `signatory-${idx}` ? <Loader2 className="w-4 h-4 animate-spin"/> : <Upload className="w-4 h-4"/>}
-                                                </button>
+                                        </div>
+                                        <div className="bg-gray-50 rounded p-2 flex flex-col justify-center">
+                                            <label className="text-[10px] text-gray-500 font-medium">ตัวอย่าง (Preview):</label>
+                                            <div className="text-sm font-bold text-blue-600 font-mono">
+                                                {getSerialPreview()}
                                             </div>
                                         </div>
                                     </div>
-                                ))}
+                                </div>
                             </div>
-                            <button 
-                                onClick={addSignatory}
-                                className="w-full mt-3 py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-blue-500 hover:text-blue-500 transition-colors flex items-center justify-center text-sm font-medium"
-                            >
-                                <Plus className="w-4 h-4 mr-1" /> เพิ่มผู้ลงนาม
-                            </button>
+
+                            {/* Signatories */}
+                            <div>
+                                <div className="flex justify-between items-center border-b pb-2 mb-2">
+                                    <h4 className="font-bold text-gray-800 flex items-center">
+                                        <PenTool className="w-4 h-4 mr-2" /> ผู้ลงนาม (Signatories)
+                                    </h4>
+                                    <div className="flex items-center">
+                                        <input 
+                                            type="checkbox" 
+                                            id="showSigLine" 
+                                            className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                                            checked={currentTemplate.showSignatureLine !== false} // Default true
+                                            onChange={(e) => updateField('showSignatureLine', e.target.checked)}
+                                        />
+                                        <label htmlFor="showSigLine" className="ml-2 text-xs text-gray-600 cursor-pointer select-none">
+                                            แสดงเส้นบรรทัด
+                                        </label>
+                                    </div>
+                                </div>
+                                
+                                <div className="space-y-4 max-h-[250px] overflow-y-auto pr-2 custom-scrollbar">
+                                    {currentTemplate.signatories.map((sig, idx) => (
+                                        <div key={idx} className="bg-white p-3 rounded-lg border border-gray-200 relative">
+                                            <button 
+                                                onClick={() => removeSignatory(idx)}
+                                                className="absolute top-2 right-2 text-red-400 hover:text-red-600"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                            <div className="space-y-2">
+                                                <input 
+                                                    type="text" 
+                                                    className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
+                                                    placeholder="ชื่อ-นามสกุล"
+                                                    value={sig.name}
+                                                    onChange={(e) => updateSignatory(idx, 'name', e.target.value)}
+                                                />
+                                                <textarea 
+                                                    className="w-full border border-gray-300 rounded px-2 py-1 text-sm resize-none"
+                                                    placeholder="ตำแหน่ง (รองรับหลายบรรทัด)"
+                                                    rows={2}
+                                                    value={sig.position}
+                                                    onChange={(e) => updateSignatory(idx, 'position', e.target.value)}
+                                                />
+                                                <div className="flex gap-2">
+                                                    <input 
+                                                        type="text" 
+                                                        className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
+                                                        placeholder="URL ลายเซ็นต์ (ถ้ามี)"
+                                                        value={sig.signatureUrl}
+                                                        onChange={(e) => updateSignatory(idx, 'signatureUrl', e.target.value)}
+                                                    />
+                                                    <button 
+                                                        onClick={() => triggerUpload(`signatory-${idx}`)}
+                                                        disabled={uploadingState.loading}
+                                                        className="px-2 py-1 bg-gray-100 rounded border border-gray-300 hover:bg-gray-200"
+                                                    >
+                                                        {uploadingState.loading && uploadingState.field === `signatory-${idx}` ? <Loader2 className="w-4 h-4 animate-spin"/> : <Upload className="w-4 h-4"/>}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <button 
+                                    onClick={addSignatory}
+                                    className="w-full mt-3 py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-blue-500 hover:text-blue-500 transition-colors flex items-center justify-center text-sm font-medium"
+                                >
+                                    <Plus className="w-4 h-4 mr-1" /> เพิ่มผู้ลงนาม
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
-
-            </div>
+            )}
 
             <div className="bg-gray-100 px-6 py-4 flex justify-end gap-3 shrink-0">
                 <button 
@@ -584,7 +662,7 @@ const CertificateConfigModal: React.FC<CertificateConfigModalProps> = ({ isOpen,
                 </button>
                 <button 
                     onClick={handleSaveAll}
-                    disabled={isSaving}
+                    disabled={isSaving || isLoadingConfig}
                     className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium flex items-center shadow-sm disabled:opacity-70"
                 >
                     {isSaving ? 'กำลังบันทึก...' : <><Save className="w-4 h-4 mr-2" /> บันทึกการตั้งค่า</>}
