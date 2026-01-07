@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { AppData, Team, TeamStatus, User, CertificateTemplate } from '../types';
-import { Search, Printer, IdCard, Smartphone, CheckCircle, X, ChevronLeft, ChevronRight, User as UserIcon, GraduationCap, School, MapPin, LayoutGrid, Trophy, Lock, QrCode, Maximize2, Minimize2, Share2, Download, Settings, FileBadge, Loader2, Calendar, Clock, Sparkles, Filter, CheckSquare, Square, Check, AlertTriangle } from 'lucide-react';
+import { Search, Printer, IdCard, Smartphone, CheckCircle, X, ChevronLeft, ChevronRight, User as UserIcon, GraduationCap, School, MapPin, LayoutGrid, Trophy, Lock, QrCode, Maximize2, Minimize2, Share2, Download, Settings, FileBadge, Loader2, Calendar, Clock, Sparkles, Filter, CheckSquare, Square, Check } from 'lucide-react';
 import CertificateConfigModal from './CertificateConfigModal';
 import { getCertificateConfig } from '../services/api';
 import { useSearchParams } from 'react-router-dom';
@@ -14,7 +14,7 @@ interface DocumentsViewProps {
   user?: User | null;
 }
 
-// --- Helper Functions & Icons (Defined at Top to prevent ReferenceError) ---
+// --- Helper Functions & Icons (Defined at Top) ---
 
 const safeJsonParse = (str: string, fallback: any = []) => {
     if (!str || typeof str !== 'string') return fallback;
@@ -37,24 +37,16 @@ const QRCodeImage = ({ text, size = 150, className }: { text: string, size?: num
 
     useEffect(() => {
         if (!text) return;
-        
-        // Defensive check: Ensure QRCode library is loaded and has toDataURL method
-        // This prevents white-screen crashes in some preview environments
-        if (QRCode && typeof QRCode.toDataURL === 'function') {
-            QRCode.toDataURL(text, { width: size, margin: 1 })
-                .then((url) => setSrc(url))
-                .catch((err) => {
-                    console.error("QR Error", err);
-                    setSrc(''); // Clear on error
-                });
-        } else {
-            console.warn("QRCode library not ready or invalid");
-            // Fallback placeholder to prevent crash
-            setSrc("https://placehold.co/150x150?text=QR");
-        }
+        // Generate QR as Data URL
+        QRCode.toDataURL(text, { width: size, margin: 1 })
+            .then((url) => setSrc(url))
+            .catch((err) => {
+                console.error("QR Error", err);
+                setSrc(''); // Clear on error
+            });
     }, [text, size]);
 
-    if (!src) return <div className={`bg-gray-100 flex items-center justify-center text-xs text-gray-400 ${className}`}>QR</div>;
+    if (!src) return <div className={`bg-gray-100 animate-pulse ${className}`} />;
     return <img src={src} alt="QR Code" className={className} />;
 };
 
@@ -93,10 +85,7 @@ const ExpandedIdCard = ({
 
     // Safety check for members
     if (!members || members.length === 0) return null;
-    
-    // Ensure index is within bounds (defensive)
-    const safeIndex = Math.max(0, Math.min(currentIndex, members.length - 1));
-    const currentMember = members[safeIndex] || members[0];
+    const currentMember = members[currentIndex] || members[0];
     const role = currentMember.role;
 
     const getPhotoUrl = (urlOrId: string) => {
@@ -138,18 +127,13 @@ const ExpandedIdCard = ({
 
     const toggleFullscreen = () => {
         if (!document.fullscreenElement) {
-            // Check if API exists (defensive for preview environments)
-            if (cardRef.current?.requestFullscreen) {
-                cardRef.current.requestFullscreen().catch(err => {
-                    console.log(`Error attempting to enable full-screen mode: ${err.message}`);
-                });
-                setIsFullscreen(true);
-            }
+            cardRef.current?.requestFullscreen().catch(err => {
+                console.log(`Error attempting to enable full-screen mode: ${err.message}`);
+            });
+            setIsFullscreen(true);
         } else {
-            if (document.exitFullscreen) {
-                document.exitFullscreen();
-                setIsFullscreen(false);
-            }
+            document.exitFullscreen();
+            setIsFullscreen(false);
         }
     };
 
@@ -343,7 +327,7 @@ const ExpandedIdCard = ({
 
                 {/* Member Counter Badge */}
                 <div className="absolute top-4 right-4 z-20 bg-black/40 text-white text-[10px] px-2.5 py-1 rounded-full font-bold backdrop-blur-sm border border-white/20">
-                    {safeIndex + 1} / {members.length}
+                    {currentIndex + 1} / {members.length}
                 </div>
 
                 {/* 1. Header Section */}
@@ -419,13 +403,13 @@ const ExpandedIdCard = ({
                 <div className="p-4 bg-gray-50 border-t border-gray-100 shrink-0">
                     <div className="flex items-center justify-center gap-4">
                         <span className="text-xs font-bold text-gray-400 w-12 text-right">
-                            {safeIndex + 1}
+                            {currentIndex + 1}
                         </span>
                         <div className="flex gap-1.5">
                             {members.map((_, idx) => (
                                 <div 
                                     key={idx} 
-                                    className={`h-1.5 rounded-full transition-all duration-300 ${idx === safeIndex ? `w-6 ${isArea ? 'bg-purple-600' : 'bg-blue-600'}` : 'w-1.5 bg-gray-300'}`}
+                                    className={`h-1.5 rounded-full transition-all duration-300 ${idx === currentIndex ? `w-6 ${isArea ? 'bg-purple-600' : 'bg-blue-600'}` : 'w-1.5 bg-gray-300'}`}
                                 />
                             ))}
                         </div>
@@ -797,9 +781,6 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
     });
   }, [data.teams, data.schools, data.activities, searchTerm, type, user, viewLevel, selectedCategory, selectedMedal, selectedRank]);
 
-  // Check if templates are configured
-  const hasTemplates = useMemo(() => Object.keys(certificateTemplates).length > 0, [certificateTemplates]);
-
   // Pagination
   const totalPages = Math.ceil(filteredTeams.length / itemsPerPage);
   const paginatedTeams = filteredTeams.slice(
@@ -847,17 +828,9 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
       await Promise.all(targetTeams.map(async (t) => {
           try {
               const url = type === 'certificate' ? `${verifyBase}${t.teamId}` : `${appBase}${t.teamId}`;
-              
-              // Defensive check for QRCode library (for preview/sandboxed env)
-              if (QRCode && typeof QRCode.toDataURL === 'function') {
-                   qrMap[t.teamId] = await QRCode.toDataURL(url, { margin: 1, width: 300 });
-              } else {
-                  console.warn("QRCode lib unavailable");
-                  qrMap[t.teamId] = ''; // Fallback empty string
-              }
+              qrMap[t.teamId] = await QRCode.toDataURL(url, { margin: 1, width: 300 });
           } catch (e) {
               console.error("QR Gen Error", e);
-              qrMap[t.teamId] = '';
           }
       }));
 
@@ -911,7 +884,6 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
               }
 
               if (!template) {
-                  // Fallback default
                   template = {
                       id: 'default',
                       name: 'Default',
@@ -992,9 +964,6 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
                   }
 
                   const logoStyle = !template.logoRightUrl ? 'justify-content: center;' : 'justify-content: space-between;';
-                  
-                  // Use placeholder if QR not generated
-                  const qrSrc = qrCodeBase64 || "https://placehold.co/100x100?text=QR";
 
                   return `
                     <div class="page">
@@ -1026,7 +995,7 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
                                 `).join('')}
                             </div>
                             <div class="qr-verify" style="bottom:${qBottom}mm; right:${qRight}mm;">
-                                <img src="${qrSrc}" class="qr-img" />
+                                <img src="${qrCodeBase64}" class="qr-img" />
                                 <div class="qr-text">Scan for Verify</div>
                             </div>
                         </div>
@@ -1068,9 +1037,6 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
                         let img = m.image;
                         if (!img && m.photoDriveId) img = `https://drive.google.com/thumbnail?id=${m.photoDriveId}`;
                         if (!img) img = "https://cdn-icons-png.flaticon.com/512/3135/3135768.png";
-                        
-                        // Fallback QR
-                        const qrSrc = qrCodeBase64 || "https://placehold.co/100x100?text=QR";
 
                         return `
                           <div class="id-card">
@@ -1118,7 +1084,7 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
                             <!-- Footer -->
                             <div class="id-footer">
                                 <div class="id-qr-box">
-                                    <img src="${qrSrc}" class="id-qr" />
+                                    <img src="${qrCodeBase64}" class="id-qr" />
                                 </div>
                                 <div class="id-footer-text">
                                     SCAN FOR DIGITAL ID & VERIFICATION<br/>
@@ -1409,12 +1375,6 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
       handlePrintTeams(selectedTeams);
   };
 
-  // Check if templates are configured for current scope
-  // If templates exist (Object.keys > 0) OR if we are just viewing ID Cards (no template needed for ID card logic here), proceed
-  // But for Certificates, we need to check if templates match the scope? 
-  // Simplified: If type is certificate AND config is empty, show warning.
-  const hasCertificateConfig = type === 'idcard' || (certificateTemplates && Object.keys(certificateTemplates).length > 0);
-
   return (
     <div className="space-y-6 animate-in fade-in duration-500 relative">
       
@@ -1497,355 +1457,333 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
         </div>
       </div>
 
-      {!hasCertificateConfig ? (
-         <div className="p-12 text-center bg-white rounded-xl border-2 border-dashed border-gray-200 flex flex-col items-center">
-             <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mb-6">
-                <FileBadge className="w-10 h-10 text-gray-400 opacity-50" />
-             </div>
-             <h3 className="text-xl font-bold text-gray-800 mb-2">ยังไม่มีการตั้งค่ารูปแบบเกียรติบัตร</h3>
-             <p className="text-gray-500 max-w-md mx-auto mb-6">
-                 ระบบไม่พบการตั้งค่ารูปแบบเกียรติบัตร กรุณาทำการตั้งค่ารูปแบบก่อนจึงจะสามารถพิมพ์เอกสารได้
-             </p>
-             {canConfigureCert && (
-                 <button 
-                    onClick={() => setShowConfigModal(true)}
-                    className="px-6 py-2.5 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition-colors shadow-md flex items-center"
-                 >
-                     <Settings className="w-4 h-4 mr-2" /> ตั้งค่ารูปแบบเกียรติบัตร
-                 </button>
-             )}
-         </div>
-      ) : (
-          <>
-            {/* Filter Section - Enhanced */}
-            <div className="flex flex-col gap-4 bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-                <div className="flex flex-col md:flex-row gap-4 items-center flex-wrap">
-                    <div className="flex items-center gap-2">
-                        <Filter className="w-4 h-4 text-gray-500" />
-                        <span className="text-sm font-bold text-gray-700">Filter:</span>
-                    </div>
-                    
-                    {/* Category Filter */}
-                    <select 
-                        className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer w-full md:w-auto"
-                        value={selectedCategory}
-                        onChange={(e) => setSelectedCategory(e.target.value)}
-                    >
-                        <option value="All">ทุกหมวดหมู่</option>
-                        {categories.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
+      {/* Filter Section - Enhanced */}
+      <div className="flex flex-col gap-4 bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+          <div className="flex flex-col md:flex-row gap-4 items-center flex-wrap">
+              <div className="flex items-center gap-2">
+                  <Filter className="w-4 h-4 text-gray-500" />
+                  <span className="text-sm font-bold text-gray-700">Filter:</span>
+              </div>
+              
+              {/* Category Filter */}
+              <select 
+                  className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer w-full md:w-auto"
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
+              >
+                  <option value="All">ทุกหมวดหมู่</option>
+                  {categories.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
 
-                    {/* Medal Filter */}
-                    <select 
-                        className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer w-full md:w-auto"
-                        value={selectedMedal}
-                        onChange={(e) => setSelectedMedal(e.target.value)}
-                    >
-                        <option value="All">ทุกรางวัล</option>
-                        <option value="Gold">เหรียญทอง (Gold)</option>
-                        <option value="Silver">เหรียญเงิน (Silver)</option>
-                        <option value="Bronze">เหรียญทองแดง (Bronze)</option>
-                        <option value="Participant">เข้าร่วม (Participant)</option>
-                    </select>
+              {/* Medal Filter */}
+              <select 
+                  className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer w-full md:w-auto"
+                  value={selectedMedal}
+                  onChange={(e) => setSelectedMedal(e.target.value)}
+              >
+                  <option value="All">ทุกรางวัล</option>
+                  <option value="Gold">เหรียญทอง (Gold)</option>
+                  <option value="Silver">เหรียญเงิน (Silver)</option>
+                  <option value="Bronze">เหรียญทองแดง (Bronze)</option>
+                  <option value="Participant">เข้าร่วม (Participant)</option>
+              </select>
 
-                    {/* Rank Filter */}
-                    <select 
-                        className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer w-full md:w-auto"
-                        value={selectedRank}
-                        onChange={(e) => setSelectedRank(e.target.value)}
-                    >
-                        <option value="All">ทุกลำดับ</option>
-                        <option value="1">ลำดับที่ 1 (Winner)</option>
-                        <option value="1-3">ลำดับที่ 1-3 (Top 3)</option>
-                    </select>
-                    
-                    {/* Clear Filters */}
-                    {(selectedCategory !== 'All' || selectedMedal !== 'All' || selectedRank !== 'All') && (
-                        <button 
-                            onClick={() => { setSelectedCategory('All'); setSelectedMedal('All'); setSelectedRank('All'); }}
-                            className="text-xs text-red-500 hover:underline flex items-center ml-auto md:ml-2"
-                        >
-                            <X className="w-3 h-3 mr-1" /> ล้างตัวกรอง
-                        </button>
-                    )}
-                </div>
-                
-                <div className="flex justify-between items-center text-xs text-gray-500 border-t border-gray-100 pt-2">
-                    <div className="flex items-center gap-2">
-                        {/* User Info Badge if School Admin */}
-                        {(user?.level === 'school_admin' || user?.level === 'user') && user.SchoolID && (
-                            <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded flex items-center">
-                                <School className="w-3 h-3 mr-1" />
-                                {data.schools.find(s => s.SchoolID === user.SchoolID)?.SchoolName || user.SchoolID}
-                            </span>
-                        )}
-                        {/* Area Level Warning */}
-                        {viewLevel === 'area' && (
-                            <span className="bg-purple-50 text-purple-700 px-2 py-0.5 rounded flex items-center">
-                                <Trophy className="w-3 h-3 mr-1" />
-                                ระดับเขตพื้นที่: แสดงเฉพาะทีมที่เป็นตัวแทน (Representative) และได้ลำดับที่ 1
-                            </span>
-                        )}
-                    </div>
-                    <div className="font-bold">
-                        พบ {filteredTeams.length} รายการ
-                    </div>
-                </div>
-            </div>
+              {/* Rank Filter */}
+              <select 
+                  className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer w-full md:w-auto"
+                  value={selectedRank}
+                  onChange={(e) => setSelectedRank(e.target.value)}
+              >
+                  <option value="All">ทุกลำดับ</option>
+                  <option value="1">ลำดับที่ 1 (Winner)</option>
+                  <option value="1-3">ลำดับที่ 1-3 (Top 3)</option>
+              </select>
+              
+              {/* Clear Filters */}
+              {(selectedCategory !== 'All' || selectedMedal !== 'All' || selectedRank !== 'All') && (
+                  <button 
+                      onClick={() => { setSelectedCategory('All'); setSelectedMedal('All'); setSelectedRank('All'); }}
+                      className="text-xs text-red-500 hover:underline flex items-center ml-auto md:ml-2"
+                  >
+                      <X className="w-3 h-3 mr-1" /> ล้างตัวกรอง
+                  </button>
+              )}
+          </div>
+          
+          <div className="flex justify-between items-center text-xs text-gray-500 border-t border-gray-100 pt-2">
+              <div className="flex items-center gap-2">
+                  {/* User Info Badge if School Admin */}
+                  {(user?.level === 'school_admin' || user?.level === 'user') && user.SchoolID && (
+                      <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded flex items-center">
+                           <School className="w-3 h-3 mr-1" />
+                           {data.schools.find(s => s.SchoolID === user.SchoolID)?.SchoolName || user.SchoolID}
+                      </span>
+                  )}
+                  {/* Area Level Warning */}
+                  {viewLevel === 'area' && (
+                      <span className="bg-purple-50 text-purple-700 px-2 py-0.5 rounded flex items-center">
+                           <Trophy className="w-3 h-3 mr-1" />
+                           ระดับเขตพื้นที่: แสดงเฉพาะทีมที่เป็นตัวแทน (Representative) และได้ลำดับที่ 1
+                      </span>
+                  )}
+              </div>
+              <div className="font-bold">
+                  พบ {filteredTeams.length} รายการ
+              </div>
+          </div>
+      </div>
 
-            {/* Batch Action Bar (Floating) */}
-            {selectedTeamIds.size > 0 && (
-                <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white px-6 py-3 rounded-full shadow-2xl z-40 flex items-center gap-4 animate-in slide-in-from-bottom-4">
-                    <div className="text-sm font-bold flex items-center">
-                        <CheckSquare className="w-4 h-4 mr-2 text-green-400" />
-                        เลือกแล้ว {selectedTeamIds.size} รายการ
-                    </div>
-                    <div className="h-6 w-px bg-gray-600"></div>
-                    <button 
-                        onClick={handleBatchPrint}
-                        className="flex items-center text-sm font-bold bg-white text-gray-900 px-4 py-1.5 rounded-full hover:bg-gray-200 transition-colors"
-                    >
-                        <Printer className="w-4 h-4 mr-2" />
-                        พิมพ์ที่เลือก
-                    </button>
-                    <button 
-                        onClick={() => setSelectedTeamIds(new Set())}
-                        className="p-1 hover:bg-gray-700 rounded-full"
-                    >
-                        <X className="w-4 h-4" />
-                    </button>
-                </div>
-            )}
-
-            {/* Mobile View (Cards) */}
-            <div className="grid grid-cols-1 gap-4 md:hidden">
-                {paginatedTeams.map(team => {
-                    const activity = data.activities.find(a => a.id === team.activityId);
-                    const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
-                    const { tCount, sCount } = getMemberCounts(team);
-                    
-                    // Score Check
-                    const score = viewLevel === 'area' ? (safeJsonParse(team.stageInfo || '{}', {}).score || 0) : team.score;
-                    const hasScore = score > 0;
-                    const isSelected = selectedTeamIds.has(team.teamId);
-
-                    return (
-                        <div key={team.teamId} className={`bg-white p-4 rounded-xl shadow-sm border ${isSelected ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-50/10' : 'border-gray-100'} relative overflow-hidden transition-all`} onClick={() => handleSelectTeam(team.teamId)}>
-                            <div className={`absolute left-0 top-0 bottom-0 w-1 ${viewLevel === 'area' ? 'bg-purple-500' : 'bg-blue-500'}`}></div>
-                            
-                            <div className="flex justify-between items-start mb-2 pl-2">
-                                <div className="flex items-center gap-2">
-                                    <div className={`shrink-0 ${isSelected ? 'text-blue-600' : 'text-gray-300'}`}>
-                                        {isSelected ? <CheckSquare className="w-5 h-5"/> : <Square className="w-5 h-5"/>}
-                                    </div>
-                                    <h3 className="font-bold text-gray-900 line-clamp-1 font-kanit">{team.teamName}</h3>
-                                </div>
-                                <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-mono">{team.teamId}</span>
-                            </div>
-                            <p className="text-sm text-gray-600 mb-1 flex items-center pl-2 ml-7"><School className="w-3 h-3 mr-1.5"/> {school?.SchoolName}</p>
-                            <p className="text-xs text-gray-500 mb-3 line-clamp-1 pl-2 ml-7">{activity?.name}</p>
-                            
-                            <div className="flex items-center gap-3 mb-4 text-xs text-gray-500 bg-gray-50 p-2 rounded-lg ml-9">
-                                <div className="flex items-center"><UserIcon className="w-3 h-3 mr-1 text-indigo-500"/> ครู: {tCount}</div>
-                                <div className="flex items-center"><GraduationCap className="w-3 h-3 mr-1 text-green-500"/> นักเรียน: {sCount}</div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-2 pl-2 ml-7">
-                                {type === 'idcard' && (
-                                    <button 
-                                        onClick={(e) => { e.stopPropagation(); setSelectedTeamForDigital(team); }}
-                                        className={`flex items-center justify-center px-3 py-2 rounded-lg text-xs font-bold transition-colors ${viewLevel === 'area' ? 'bg-purple-50 text-purple-700 hover:bg-purple-100' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}
-                                    >
-                                        <Smartphone className="w-4 h-4 mr-1.5" /> Digital ID
-                                    </button>
-                                )}
-                                {/* Print Button - Conditional */}
-                                {type === 'certificate' ? (
-                                    hasScore ? (
-                                        <button 
-                                            onClick={(e) => { e.stopPropagation(); handlePrintTeams([team]); }}
-                                            className="flex items-center justify-center px-3 py-2 rounded-lg text-xs font-bold text-white transition-colors bg-green-600 hover:bg-green-700 col-span-2"
-                                        >
-                                            <Printer className="w-4 h-4 mr-1.5" /> พิมพ์เกียรติบัตร
-                                        </button>
-                                    ) : (
-                                        <div className="col-span-2 text-center text-xs text-gray-400 py-2 border border-dashed rounded bg-gray-50">
-                                            ยังไม่มีผลคะแนน
-                                        </div>
-                                    )
-                                ) : (
-                                    <button 
-                                        onClick={(e) => { e.stopPropagation(); handlePrintTeams([team]); }}
-                                        className={`flex items-center justify-center px-3 py-2 rounded-lg text-xs font-bold text-white transition-colors ${viewLevel === 'area' ? 'bg-purple-600 hover:bg-purple-700 col-span-1' : 'bg-blue-600 hover:bg-blue-700 col-span-1'}`}
-                                    >
-                                        <Printer className="w-4 h-4 mr-1.5" /> พิมพ์บัตร
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-                    );
-                })}
-            </div>
-
-            {/* Desktop View (Table) */}
-            <div className="hidden md:block bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                        <thead className={viewLevel === 'area' ? 'bg-purple-50' : 'bg-gray-50'}>
-                            <tr>
-                                <th className="px-4 py-3 w-10 text-center">
-                                    <button onClick={handleSelectAll} className="text-gray-500 hover:text-blue-600">
-                                        {selectedTeamIds.size === paginatedTeams.length && paginatedTeams.length > 0 ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
-                                    </button>
-                                </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ทีม (Team)</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">รายการแข่งขัน</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">โรงเรียน</th>
-                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">สมาชิก ({viewLevel === 'area' ? 'เขต' : 'กลุ่ม'})</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">ดำเนินการ</th>
-                            </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                            {paginatedTeams.map((team) => {
-                                const activity = data.activities.find(a => a.id === team.activityId);
-                                const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
-                                const { tCount, sCount } = getMemberCounts(team);
-                                const score = viewLevel === 'area' ? (safeJsonParse(team.stageInfo || '{}', {}).score || 0) : team.score;
-                                const hasScore = score > 0;
-                                const isSelected = selectedTeamIds.has(team.teamId);
-
-                                return (
-                                    <tr key={team.teamId} className={`hover:bg-gray-50 transition-colors ${isSelected ? 'bg-blue-50/30' : ''}`} onClick={() => handleSelectTeam(team.teamId)}>
-                                        <td className="px-4 py-4 text-center">
-                                            <div className={`cursor-pointer ${isSelected ? 'text-blue-600' : 'text-gray-300'}`}>
-                                                {isSelected ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="text-sm font-medium text-gray-900 font-kanit">{team.teamName}</div>
-                                            <div className="text-xs text-gray-500 font-mono">{team.teamId}</div>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <div className="text-sm text-gray-900 max-w-[200px] truncate" title={activity?.name}>{activity?.name}</div>
-                                            <div className="text-xs text-gray-500">{team.level}</div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="text-sm text-gray-900">{school?.SchoolName}</div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-center">
-                                            <div className="text-xs text-gray-600 flex justify-center gap-3">
-                                                <span className="flex items-center bg-indigo-50 px-2 py-1 rounded border border-indigo-100 text-indigo-700" title="ครู"><UserIcon className="w-3 h-3 mr-1"/> {tCount}</span>
-                                                <span className="flex items-center bg-green-50 px-2 py-1 rounded border border-green-100 text-green-700" title="นักเรียน"><GraduationCap className="w-3 h-3 mr-1"/> {sCount}</span>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                            <div className="flex items-center justify-end gap-2" onClick={e => e.stopPropagation()}>
-                                                {type === 'idcard' && (
-                                                    <button 
-                                                        onClick={() => setSelectedTeamForDigital(team)}
-                                                        className={`flex items-center px-3 py-1.5 border rounded-lg transition-colors shadow-sm ${viewLevel === 'area' ? 'bg-white border-purple-200 text-purple-600 hover:bg-purple-50' : 'bg-white border-blue-200 text-blue-600 hover:bg-blue-50'}`}
-                                                    >
-                                                        <Smartphone className="w-4 h-4 mr-1.5" />
-                                                        Digital ID
-                                                    </button>
-                                                )}
-                                                
-                                                {type === 'certificate' ? (
-                                                    hasScore ? (
-                                                        <button 
-                                                            onClick={() => handlePrintTeams([team])}
-                                                            className="flex items-center px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-sm"
-                                                        >
-                                                            <Printer className="w-4 h-4 mr-1.5" />
-                                                            พิมพ์
-                                                        </button>
-                                                    ) : (
-                                                        <span className="text-xs text-gray-400 italic pr-2">รอผลคะแนน</span>
-                                                    )
-                                                ) : (
-                                                    <button 
-                                                        onClick={() => handlePrintTeams([team])}
-                                                        className="flex items-center px-3 py-1.5 bg-gray-800 text-white rounded-lg hover:bg-gray-900 transition-colors shadow-sm"
-                                                    >
-                                                        <Printer className="w-4 h-4 mr-1.5" />
-                                                        พิมพ์
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                            {paginatedTeams.length === 0 && (
-                                <tr>
-                                    <td colSpan={6} className="px-6 py-12 text-center text-gray-500 border-2 border-dashed border-gray-100 rounded-lg bg-gray-50/50">
-                                        <Printer className="w-12 h-12 mx-auto text-gray-300 mb-3" />
-                                        <p>ไม่พบข้อมูลทีมสำหรับพิมพ์เอกสาร</p>
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-            
-            {/* Pagination Controls */}
-            <div className="flex items-center justify-between border-t border-gray-200 bg-white px-4 py-3 sm:px-6 rounded-b-xl shadow-sm">
-                <div className="flex flex-1 justify-between sm:hidden">
-                    <button
-                        onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                        disabled={currentPage === 1}
-                        className="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                    >
-                        ก่อนหน้า
-                    </button>
-                    <button
-                        onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                        disabled={currentPage === totalPages}
-                        className="relative ml-3 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                    >
-                        ถัดไป
-                    </button>
-                </div>
-                <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
-                    <div>
-                        <p className="text-sm text-gray-700">
-                            แสดง <span className="font-medium">{(currentPage - 1) * itemsPerPage + 1}</span> ถึง <span className="font-medium">{Math.min(currentPage * itemsPerPage, filteredTeams.length)}</span> จาก <span className="font-medium">{filteredTeams.length}</span> รายการ
-                        </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <select
-                            className="block rounded-md border-gray-300 py-1.5 text-base focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
-                            value={itemsPerPage}
-                            onChange={(e) => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}
-                        >
-                            <option value={12}>12 / หน้า</option>
-                            <option value={24}>24 / หน้า</option>
-                            <option value={48}>48 / หน้า</option>
-                        </select>
-                        <nav className="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
-                            <button
-                                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                                disabled={currentPage === 1}
-                                className="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50"
-                            >
-                                <span className="sr-only">Previous</span>
-                                <ChevronLeft className="h-5 w-5" aria-hidden="true" />
-                            </button>
-                            <button
-                                onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                                disabled={currentPage === totalPages}
-                                className="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50"
-                            >
-                                <span className="sr-only">Next</span>
-                                <ChevronRight className="h-5 w-5" aria-hidden="true" />
-                            </button>
-                        </nav>
-                    </div>
-                </div>
-            </div>
-          </>
+      {/* Batch Action Bar (Floating) */}
+      {selectedTeamIds.size > 0 && (
+          <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white px-6 py-3 rounded-full shadow-2xl z-40 flex items-center gap-4 animate-in slide-in-from-bottom-4">
+              <div className="text-sm font-bold flex items-center">
+                  <CheckSquare className="w-4 h-4 mr-2 text-green-400" />
+                  เลือกแล้ว {selectedTeamIds.size} รายการ
+              </div>
+              <div className="h-6 w-px bg-gray-600"></div>
+              <button 
+                  onClick={handleBatchPrint}
+                  className="flex items-center text-sm font-bold bg-white text-gray-900 px-4 py-1.5 rounded-full hover:bg-gray-200 transition-colors"
+              >
+                  <Printer className="w-4 h-4 mr-2" />
+                  พิมพ์ที่เลือก
+              </button>
+              <button 
+                  onClick={() => setSelectedTeamIds(new Set())}
+                  className="p-1 hover:bg-gray-700 rounded-full"
+              >
+                  <X className="w-4 h-4" />
+              </button>
+          </div>
       )}
+
+      {/* Mobile View (Cards) */}
+      <div className="grid grid-cols-1 gap-4 md:hidden">
+          {paginatedTeams.map(team => {
+              const activity = data.activities.find(a => a.id === team.activityId);
+              const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
+              const { tCount, sCount } = getMemberCounts(team);
+              
+              // Score Check
+              const score = viewLevel === 'area' ? (safeJsonParse(team.stageInfo || '{}', {}).score || 0) : team.score;
+              const hasScore = score > 0;
+              const isSelected = selectedTeamIds.has(team.teamId);
+
+              return (
+                  <div key={team.teamId} className={`bg-white p-4 rounded-xl shadow-sm border ${isSelected ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-50/10' : 'border-gray-100'} relative overflow-hidden transition-all`} onClick={() => handleSelectTeam(team.teamId)}>
+                      <div className={`absolute left-0 top-0 bottom-0 w-1 ${viewLevel === 'area' ? 'bg-purple-500' : 'bg-blue-500'}`}></div>
+                      
+                      <div className="flex justify-between items-start mb-2 pl-2">
+                          <div className="flex items-center gap-2">
+                              <div className={`shrink-0 ${isSelected ? 'text-blue-600' : 'text-gray-300'}`}>
+                                  {isSelected ? <CheckSquare className="w-5 h-5"/> : <Square className="w-5 h-5"/>}
+                              </div>
+                              <h3 className="font-bold text-gray-900 line-clamp-1 font-kanit">{team.teamName}</h3>
+                          </div>
+                          <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-mono">{team.teamId}</span>
+                      </div>
+                      <p className="text-sm text-gray-600 mb-1 flex items-center pl-2 ml-7"><School className="w-3 h-3 mr-1.5"/> {school?.SchoolName}</p>
+                      <p className="text-xs text-gray-500 mb-3 line-clamp-1 pl-2 ml-7">{activity?.name}</p>
+                      
+                      <div className="flex items-center gap-3 mb-4 text-xs text-gray-500 bg-gray-50 p-2 rounded-lg ml-9">
+                          <div className="flex items-center"><UserIcon className="w-3 h-3 mr-1 text-indigo-500"/> ครู: {tCount}</div>
+                          <div className="flex items-center"><GraduationCap className="w-3 h-3 mr-1 text-green-500"/> นักเรียน: {sCount}</div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 pl-2 ml-7">
+                          {type === 'idcard' && (
+                              <button 
+                                onClick={(e) => { e.stopPropagation(); setSelectedTeamForDigital(team); }}
+                                className={`flex items-center justify-center px-3 py-2 rounded-lg text-xs font-bold transition-colors ${viewLevel === 'area' ? 'bg-purple-50 text-purple-700 hover:bg-purple-100' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}
+                              >
+                                  <Smartphone className="w-4 h-4 mr-1.5" /> Digital ID
+                              </button>
+                          )}
+                          {/* Print Button - Conditional */}
+                          {type === 'certificate' ? (
+                              hasScore ? (
+                                  <button 
+                                    onClick={(e) => { e.stopPropagation(); handlePrintTeams([team]); }}
+                                    className="flex items-center justify-center px-3 py-2 rounded-lg text-xs font-bold text-white transition-colors bg-green-600 hover:bg-green-700 col-span-2"
+                                  >
+                                      <Printer className="w-4 h-4 mr-1.5" /> พิมพ์เกียรติบัตร
+                                  </button>
+                              ) : (
+                                  <div className="col-span-2 text-center text-xs text-gray-400 py-2 border border-dashed rounded bg-gray-50">
+                                      ยังไม่มีผลคะแนน
+                                  </div>
+                              )
+                          ) : (
+                              <button 
+                                onClick={(e) => { e.stopPropagation(); handlePrintTeams([team]); }}
+                                className={`flex items-center justify-center px-3 py-2 rounded-lg text-xs font-bold text-white transition-colors ${viewLevel === 'area' ? 'bg-purple-600 hover:bg-purple-700 col-span-1' : 'bg-blue-600 hover:bg-blue-700 col-span-1'}`}
+                              >
+                                  <Printer className="w-4 h-4 mr-1.5" /> พิมพ์บัตร
+                              </button>
+                          )}
+                      </div>
+                  </div>
+              );
+          })}
+      </div>
+
+      {/* Desktop View (Table) */}
+      <div className="hidden md:block bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                  <thead className={viewLevel === 'area' ? 'bg-purple-50' : 'bg-gray-50'}>
+                      <tr>
+                          <th className="px-4 py-3 w-10 text-center">
+                              <button onClick={handleSelectAll} className="text-gray-500 hover:text-blue-600">
+                                  {selectedTeamIds.size === paginatedTeams.length && paginatedTeams.length > 0 ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
+                              </button>
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ทีม (Team)</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">รายการแข่งขัน</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">โรงเรียน</th>
+                          <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">สมาชิก ({viewLevel === 'area' ? 'เขต' : 'กลุ่ม'})</th>
+                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">ดำเนินการ</th>
+                      </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                      {paginatedTeams.map((team) => {
+                          const activity = data.activities.find(a => a.id === team.activityId);
+                          const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
+                          const { tCount, sCount } = getMemberCounts(team);
+                          const score = viewLevel === 'area' ? (safeJsonParse(team.stageInfo || '{}', {}).score || 0) : team.score;
+                          const hasScore = score > 0;
+                          const isSelected = selectedTeamIds.has(team.teamId);
+
+                          return (
+                              <tr key={team.teamId} className={`hover:bg-gray-50 transition-colors ${isSelected ? 'bg-blue-50/30' : ''}`} onClick={() => handleSelectTeam(team.teamId)}>
+                                  <td className="px-4 py-4 text-center">
+                                      <div className={`cursor-pointer ${isSelected ? 'text-blue-600' : 'text-gray-300'}`}>
+                                          {isSelected ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
+                                      </div>
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                      <div className="text-sm font-medium text-gray-900 font-kanit">{team.teamName}</div>
+                                      <div className="text-xs text-gray-500 font-mono">{team.teamId}</div>
+                                  </td>
+                                  <td className="px-6 py-4">
+                                      <div className="text-sm text-gray-900 max-w-[200px] truncate" title={activity?.name}>{activity?.name}</div>
+                                      <div className="text-xs text-gray-500">{team.level}</div>
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                      <div className="text-sm text-gray-900">{school?.SchoolName}</div>
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-center">
+                                      <div className="text-xs text-gray-600 flex justify-center gap-3">
+                                          <span className="flex items-center bg-indigo-50 px-2 py-1 rounded border border-indigo-100 text-indigo-700" title="ครู"><UserIcon className="w-3 h-3 mr-1"/> {tCount}</span>
+                                          <span className="flex items-center bg-green-50 px-2 py-1 rounded border border-green-100 text-green-700" title="นักเรียน"><GraduationCap className="w-3 h-3 mr-1"/> {sCount}</span>
+                                      </div>
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                      <div className="flex items-center justify-end gap-2" onClick={e => e.stopPropagation()}>
+                                          {type === 'idcard' && (
+                                              <button 
+                                                onClick={() => setSelectedTeamForDigital(team)}
+                                                className={`flex items-center px-3 py-1.5 border rounded-lg transition-colors shadow-sm ${viewLevel === 'area' ? 'bg-white border-purple-200 text-purple-600 hover:bg-purple-50' : 'bg-white border-blue-200 text-blue-600 hover:bg-blue-50'}`}
+                                              >
+                                                  <Smartphone className="w-4 h-4 mr-1.5" />
+                                                  Digital ID
+                                              </button>
+                                          )}
+                                          
+                                          {type === 'certificate' ? (
+                                              hasScore ? (
+                                                  <button 
+                                                    onClick={() => handlePrintTeams([team])}
+                                                    className="flex items-center px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-sm"
+                                                  >
+                                                      <Printer className="w-4 h-4 mr-1.5" />
+                                                      พิมพ์
+                                                  </button>
+                                              ) : (
+                                                  <span className="text-xs text-gray-400 italic pr-2">รอผลคะแนน</span>
+                                              )
+                                          ) : (
+                                              <button 
+                                                onClick={() => handlePrintTeams([team])}
+                                                className="flex items-center px-3 py-1.5 bg-gray-800 text-white rounded-lg hover:bg-gray-900 transition-colors shadow-sm"
+                                              >
+                                                  <Printer className="w-4 h-4 mr-1.5" />
+                                                  พิมพ์
+                                              </button>
+                                          )}
+                                      </div>
+                                  </td>
+                              </tr>
+                          );
+                      })}
+                      {paginatedTeams.length === 0 && (
+                          <tr>
+                              <td colSpan={6} className="px-6 py-12 text-center text-gray-500 border-2 border-dashed border-gray-100 rounded-lg bg-gray-50/50">
+                                  <Printer className="w-12 h-12 mx-auto text-gray-300 mb-3" />
+                                  <p>ไม่พบข้อมูลทีมสำหรับพิมพ์เอกสาร</p>
+                              </td>
+                          </tr>
+                      )}
+                  </tbody>
+              </table>
+          </div>
+      </div>
+
+      {/* Pagination */}
+      <div className="flex items-center justify-between border-t border-gray-200 bg-white px-4 py-3 sm:px-6 rounded-b-xl shadow-sm">
+          <div className="flex flex-1 justify-between sm:hidden">
+              <button
+                  onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                  disabled={currentPage === 1}
+                  className="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                  ก่อนหน้า
+              </button>
+              <button
+                  onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                  disabled={currentPage === totalPages}
+                  className="relative ml-3 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                  ถัดไป
+              </button>
+          </div>
+          <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+              <div>
+                  <p className="text-sm text-gray-700">
+                      แสดง <span className="font-medium">{(currentPage - 1) * itemsPerPage + 1}</span> ถึง <span className="font-medium">{Math.min(currentPage * itemsPerPage, filteredTeams.length)}</span> จาก <span className="font-medium">{filteredTeams.length}</span> รายการ
+                  </p>
+              </div>
+              <div className="flex items-center gap-2">
+                  <select
+                      className="block rounded-md border-gray-300 py-1.5 text-base focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
+                      value={itemsPerPage}
+                      onChange={(e) => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}
+                  >
+                      <option value={12}>12 / หน้า</option>
+                      <option value={24}>24 / หน้า</option>
+                      <option value={48}>48 / หน้า</option>
+                  </select>
+                  <nav className="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
+                      <button
+                          onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                          disabled={currentPage === 1}
+                          className="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50"
+                      >
+                          <span className="sr-only">Previous</span>
+                          <ChevronLeft className="h-5 w-5" aria-hidden="true" />
+                      </button>
+                      <button
+                          onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                          disabled={currentPage === totalPages}
+                          className="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50"
+                      >
+                          <span className="sr-only">Next</span>
+                          <ChevronRight className="h-5 w-5" aria-hidden="true" />
+                      </button>
+                  </nav>
+              </div>
+          </div>
+      </div>
     </div>
   );
 };
