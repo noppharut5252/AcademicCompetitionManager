@@ -14,6 +14,23 @@ interface DocumentsViewProps {
   user?: User | null;
 }
 
+// --- Helper Functions & Icons (Defined at Top) ---
+
+const safeJsonParse = (str: string, fallback: any = []) => {
+    if (!str || typeof str !== 'string') return fallback;
+    try {
+        return JSON.parse(str);
+    } catch (e) {
+        return fallback;
+    }
+};
+
+const ArrowLeftRightIcon = ({className}:{className?:string}) => (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+    </svg>
+);
+
 // --- Component to render QR Code Image safely ---
 const QRCodeImage = ({ text, size = 150, className }: { text: string, size?: number, className?: string }) => {
     const [src, setSrc] = useState<string>('');
@@ -66,7 +83,9 @@ const ExpandedIdCard = ({
     // Minimum swipe distance (in px) 
     const minSwipeDistance = 80; 
 
-    const currentMember = members[currentIndex];
+    // Safety check for members
+    if (!members || members.length === 0) return null;
+    const currentMember = members[currentIndex] || members[0];
     const role = currentMember.role;
 
     const getPhotoUrl = (urlOrId: string) => {
@@ -407,12 +426,6 @@ const ExpandedIdCard = ({
     );
 };
 
-const ArrowLeftRightIcon = ({className}:{className?:string}) => (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-    </svg>
-);
-
 // --- DigitalIdCard (Preview Card) ---
 interface DigitalIdCardProps {
     member: any;
@@ -502,13 +515,13 @@ const DigitalIdModal = ({ team, data, onClose, viewLevel }: { team: Team, data: 
     let memberSource = team.members;
     if (viewLevel === 'area' && team.stageInfo) {
         try {
-            const areaInfo = JSON.parse(team.stageInfo);
+            const areaInfo = safeJsonParse(team.stageInfo, {});
             if (areaInfo.members) memberSource = areaInfo.members;
         } catch {}
     }
 
     try {
-        const rawMembers = typeof memberSource === 'string' ? JSON.parse(memberSource) : memberSource;
+        const rawMembers = typeof memberSource === 'string' ? safeJsonParse(memberSource, []) : memberSource;
         if (rawMembers) {
             if (Array.isArray(rawMembers)) {
                 students = rawMembers;
@@ -609,8 +622,8 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
 
   // NEW: Filter & Selection States
   const [selectedCategory, setSelectedCategory] = useState('All');
-  const [selectedMedal, setSelectedMedal] = useState('All'); // NEW
-  const [selectedRank, setSelectedRank] = useState('All'); // NEW
+  const [selectedMedal, setSelectedMedal] = useState('All'); 
+  const [selectedRank, setSelectedRank] = useState('All'); 
   const [selectedTeamIds, setSelectedTeamIds] = useState<Set<string>>(new Set());
 
   // URL Params for Auto-Opening ID Card
@@ -628,14 +641,17 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
   }, [type]);
 
   // Derived Categories
-  const categories = useMemo(() => Array.from(new Set(data.activities.map(a => a.category))).sort(), [data.activities]);
+  const categories = useMemo(() => {
+      if (!data || !data.activities) return [];
+      return Array.from(new Set(data.activities.map(a => a.category))).sort();
+  }, [data.activities]);
 
   // Auto-Open ID Card from URL
   useEffect(() => {
       const teamIdParam = searchParams.get('id');
       const levelParam = searchParams.get('level');
 
-      if (teamIdParam && type === 'idcard' && data.teams.length > 0) {
+      if (teamIdParam && type === 'idcard' && data && data.teams) {
           const foundTeam = data.teams.find(t => t.teamId === teamIdParam);
           if (foundTeam) {
               if (levelParam === 'area' || levelParam === 'cluster') {
@@ -668,6 +684,8 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
 
   // Filter Logic
   const filteredTeams = useMemo(() => {
+    if (!data || !data.teams) return [];
+    
     return data.teams.filter(team => {
         // User Permission Check
         if (user) {
@@ -695,7 +713,7 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
             if (!isRep || !isRank1) return false;
 
             try {
-                const info = JSON.parse(team.stageInfo || '{}');
+                const info = safeJsonParse(team.stageInfo || '{}', {});
                 rankStr = String(info.rank || '');
                 medalStr = info.medal || '';
                 // Fallback medal calc if area score exists
@@ -777,12 +795,12 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
       let memberSource = team.members;
       if (viewLevel === 'area' && team.stageInfo) {
           try {
-              const areaInfo = JSON.parse(team.stageInfo);
+              const areaInfo = safeJsonParse(team.stageInfo, {});
               if (areaInfo.members) memberSource = areaInfo.members;
           } catch {}
       }
       try {
-          const raw = typeof memberSource === 'string' ? JSON.parse(memberSource) : memberSource;
+          const raw = typeof memberSource === 'string' ? safeJsonParse(memberSource, []) : memberSource;
           if (Array.isArray(raw)) {
               sCount = raw.length;
           } else if (raw && typeof raw === 'object') {
@@ -841,12 +859,12 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
           let memberSource = team.members;
           if (viewLevel === 'area' && team.stageInfo) {
               try {
-                  const areaInfo = JSON.parse(team.stageInfo);
+                  const areaInfo = safeJsonParse(team.stageInfo, {});
                   if (areaInfo.members) memberSource = areaInfo.members;
               } catch {}
           }
           try {
-              const raw = typeof memberSource === 'string' ? JSON.parse(memberSource) : memberSource;
+              const raw = typeof memberSource === 'string' ? safeJsonParse(memberSource, []) : memberSource;
               if (Array.isArray(raw)) {
                   allMembers = raw.map(m => ({ ...m, role: 'Student' }));
               } else if (raw && typeof raw === 'object') {
@@ -857,8 +875,7 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
           } catch {}
 
           if (type === 'certificate') {
-              // ... existing certificate logic (kept simplified here for brevity, assume updated version from prev step) ...
-              // Re-injecting certificate logic briefly to maintain functionality
+              // ... existing certificate logic ...
               let template: CertificateTemplate;
               if (viewLevel === 'area') {
                   template = certificateTemplates['area'];
@@ -924,8 +941,8 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
 
                   let awardText = "เข้าร่วมการแข่งขัน";
                   if (template.showRank) {
-                      const rank = viewLevel === 'area' ? (JSON.parse(team.stageInfo || '{}').rank || team.rank) : team.rank;
-                      const medal = viewLevel === 'area' ? (JSON.parse(team.stageInfo || '{}').medal || team.medalOverride) : team.medalOverride;
+                      const rank = viewLevel === 'area' ? (safeJsonParse(team.stageInfo || '{}', {}).rank || team.rank) : team.rank;
+                      const medal = viewLevel === 'area' ? (safeJsonParse(team.stageInfo || '{}', {}).medal || team.medalOverride) : team.medalOverride;
                       let medalThai = "";
                       if (medal === 'Gold') medalThai = "เหรียญทอง";
                       else if (medal === 'Silver') medalThai = "เหรียญเงิน";
@@ -1548,7 +1565,7 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
               const { tCount, sCount } = getMemberCounts(team);
               
               // Score Check
-              const score = viewLevel === 'area' ? (JSON.parse(team.stageInfo || '{}').score || 0) : team.score;
+              const score = viewLevel === 'area' ? (safeJsonParse(team.stageInfo || '{}', {}).score || 0) : team.score;
               const hasScore = score > 0;
               const isSelected = selectedTeamIds.has(team.teamId);
 
@@ -1633,7 +1650,7 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ data, type, user }) => {
                           const activity = data.activities.find(a => a.id === team.activityId);
                           const school = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
                           const { tCount, sCount } = getMemberCounts(team);
-                          const score = viewLevel === 'area' ? (JSON.parse(team.stageInfo || '{}').score || 0) : team.score;
+                          const score = viewLevel === 'area' ? (safeJsonParse(team.stageInfo || '{}', {}).score || 0) : team.score;
                           const hasScore = score > 0;
                           const isSelected = selectedTeamIds.has(team.teamId);
 
