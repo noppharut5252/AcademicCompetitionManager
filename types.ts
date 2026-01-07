@@ -184,7 +184,7 @@ export interface CertificateTemplate {
   headerText: string;
   subHeaderText: string;
   eventName?: string; // New: Custom Event Name
-  frameStyle?: 'simple-gold' | 'infinite-wave' | 'ornamental-corners' | 'none'; // New: Frame Style
+  frameStyle?: 'simple-gold' | 'infinite-wave' | 'ornamental-corners' | 'thai-premium' | 'none'; // New: Frame Style
   logoLeftUrl: string;
   logoRightUrl: string;
   signatories: CertificateSignatory[];
@@ -200,6 +200,13 @@ export interface CertificateTemplate {
   contentTop?: number; 
   footerBottom?: number;
   logoHeight?: number;
+  signatureSpacing?: number; // New field for vertical gap
+  
+  // New Positioning Config (mm)
+  serialTop?: number;
+  serialRight?: number;
+  qrBottom?: number;
+  qrRight?: number;
 }
 
 export interface PrintConfig {
