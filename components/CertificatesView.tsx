@@ -381,26 +381,48 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
 
       const htmlContent = await generateCertificateHtmlContent(team, prep.template, prep.qrCodeBase64);
       
-      // Create a temporary container
+      // Create a temporary container attached to DOM to ensure rendering
       const container = document.createElement('div');
       container.innerHTML = htmlContent;
       // Strip the print button
       const btn = container.querySelector('.no-print');
       if (btn) btn.remove();
       
-      // Set width/height explicitly for PDF generator
-      container.style.width = '297mm';
+      // FIX: Use fixed position at top-left but behind everything, with explicit dimensions
+      container.style.position = 'fixed';
+      container.style.top = '0';
+      container.style.left = '0';
+      container.style.width = '297mm'; // A4 Landscape width
+      container.style.height = '210mm'; // A4 Landscape height
+      container.style.zIndex = '-9999'; // Behind other content
+      container.style.background = 'white'; // Ensure visible background
       
-      // We need to append to body to render fonts correctly, but hide it
-      container.style.position = 'absolute';
-      container.style.left = '-9999px';
       document.body.appendChild(container);
+
+      // Wait for all images inside container to load
+      const images = Array.from(container.querySelectorAll('img'));
+      await Promise.all(images.map(img => {
+          if (img.complete) return Promise.resolve();
+          return new Promise(resolve => {
+              img.onload = resolve;
+              img.onerror = resolve; // Resolve even on error to prevent hanging
+          });
+      }));
+      
+      // Slight delay for fonts/styles
+      await new Promise(resolve => setTimeout(resolve, 500));
 
       const opt = {
           margin: 0,
           filename: `certificate_${team.teamId}.pdf`,
           image: { type: 'jpeg' as const, quality: 0.98 },
-          html2canvas: { scale: 2, useCORS: true, logging: false },
+          html2canvas: { 
+              scale: 2, 
+              useCORS: true, 
+              logging: false,
+              windowWidth: 1123, // Approx px width for A4 landscape
+              windowHeight: 794 
+          },
           jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
       };
 
