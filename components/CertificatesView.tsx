@@ -7,20 +7,6 @@ import { getCertificateConfig, getProxyImage } from '../services/api';
 import QRCode from 'qrcode';
 import SearchableSelect from './SearchableSelect';
 
-// Define PDFMake types globally
-declare global {
-  interface Window {
-    pdfMake: any;
-  }
-}
-
-// 1mm = 2.83465pt
-const mmToPt = (mm: number) => mm * 2.83465;
-
-// Font URL for Thai Sarabun (hosted on CDN)
-const THAI_FONT_URL = "https://cdn.jsdelivr.net/npm/@fontsource/sarabun/files/sarabun-thai-400-normal.woff";
-const THAI_FONT_BOLD_URL = "https://cdn.jsdelivr.net/npm/@fontsource/sarabun/files/sarabun-thai-700-normal.woff";
-
 interface CertificatesViewProps {
   data: AppData;
   user?: User | null;
@@ -33,7 +19,6 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
   // View State
   const [viewLevel, setViewLevel] = useState<'cluster' | 'area'>('cluster');
   const [isGenerating, setIsGenerating] = useState(false);
-  const [generationProgress, setGenerationProgress] = useState('');
   
   // Config & Modals
   const [showConfigModal, setShowConfigModal] = useState(false);
@@ -143,291 +128,292 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
   const totalPages = Math.ceil(filteredTeams.length / itemsPerPage);
   const paginatedTeams = filteredTeams.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
+  const generateCertificateHtmlContent = async (team: Team, template: CertificateTemplate, qrCodeBase64: string) => {
+      const activity = data.activities.find(a => a.id === team.activityId)?.name || team.activityId;
+      const schoolObj = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
+      const schoolName = schoolObj?.SchoolName || team.schoolId;
+      const clusterID = schoolObj?.SchoolCluster;
+      const clusterName = clusterID ? data.clusters.find(c => c.ClusterID === clusterID)?.ClusterName : '';
+
+      let allMembers: any[] = [];
+      let memberSource = team.members;
+      
+      if (viewLevel === 'area' && team.stageInfo) { 
+          try { const info = JSON.parse(team.stageInfo); if (info.members) memberSource = info.members; } catch {} 
+      }
+      
+      try {
+          const raw = typeof memberSource === 'string' ? JSON.parse(memberSource) : memberSource;
+          if (Array.isArray(raw)) allMembers = raw.map(m => ({...m, role: 'Student'}));
+          else if (raw) allMembers = [...(raw.teachers||[]).map((m:any)=>({...m,role:'Teacher'})), ...(raw.students||[]).map((m:any)=>({...m,role:'Student'}))];
+      } catch {}
+
+      let eventNameDisplay = template.eventName || (viewLevel === 'area' ? 'งานศิลปหัตถกรรมนักเรียน ระดับเขตพื้นที่การศึกษา' : `งานศิลปหัตถกรรมนักเรียน ${clusterName}`);
+      const generateSerial = (index: number) => {
+          const runNum = (template.serialStart || 1) + index;
+          return (template.serialFormat || '{activityId}-{year}-{run:4}').replace('{year}', String(new Date().getFullYear())).replace('{th_year}', String(new Date().getFullYear()+543)).replace('{id}', team.teamId).replace('{activityId}', team.activityId).replace(/{run:(\d+)}/, (_, d) => String(runNum).padStart(parseInt(d), '0')).replace('{run}', String(runNum));
+      };
+
+      // Prepare Images (Convert to Base64 if needed for PDF)
+      let bgUrl = template.backgroundUrl;
+      // We will use resolved images from the template logic that handles proxying
+      
+      // Ensure Transparent Background Style
+      const transparentImgStyle = `background-color: transparent !important; mix-blend-mode: normal;`;
+
+      let frameElement = '';
+      if (!template.backgroundUrl) {
+          if (template.frameStyle === 'infinite-wave') frameElement = '<div class="frame-infinite-wave"></div>';
+          else if (template.frameStyle === 'ornamental-corners') frameElement = '<div class="frame-ornamental-corners"></div><div class="frame-ornamental-extra"></div><div class="frame-ornamental-extra2"></div>';
+          else if (template.frameStyle === 'thai-premium') frameElement = '<div class="frame-thai-premium"></div>';
+          else if (template.frameStyle !== 'none') frameElement = '<div class="frame-simple-gold"></div>';
+      }
+
+      const defaultFont = template.fontFamily || 'Sarabun';
+      const fontHeader = template.fontHeader || defaultFont;
+      const fontSubHeader = template.fontSubHeader || defaultFont;
+      const fontName = template.fontName || defaultFont;
+      const fontDesc = template.fontDesc || defaultFont;
+      const fontDate = template.fontDate || defaultFont;
+      const fontSigs = template.fontSignatures || defaultFont;
+
+      const shadowClass = template.enableTextShadow ? 'text-shadow-white' : '';
+
+      // Generate Pages
+      const pagesHtml = allMembers.map((member, idx) => {
+          const roleText = member.role === 'Teacher' ? 'ครูผู้ฝึกสอน' : 'นักเรียน';
+          let awardText = "เข้าร่วมการแข่งขัน";
+          if (template.showRank) {
+              const rank = viewLevel === 'area' ? (JSON.parse(team.stageInfo || '{}').rank || team.rank) : team.rank;
+              const medal = viewLevel === 'area' ? (JSON.parse(team.stageInfo || '{}').medal || team.medalOverride) : team.medalOverride;
+              let medalThai = medal === 'Gold' ? "เหรียญทอง" : medal === 'Silver' ? "เหรียญเงิน" : medal === 'Bronze' ? "เหรียญทองแดง" : medal === 'Participant' ? "เข้าร่วม" : "";
+              if (rank === '1') awardText = `รางวัลชนะเลิศ${medalThai ? ` (ระดับ${medalThai})` : ''}`;
+              else if (rank === '2') awardText = `รางวัลรองชนะเลิศอันดับ 1${medalThai ? ` (ระดับ${medalThai})` : ''}`;
+              else if (rank === '3') awardText = `รางวัลรองชนะเลิศอันดับ 2${medalThai ? ` (ระดับ${medalThai})` : ''}`;
+              else if (medalThai && medalThai !== "เข้าร่วม") awardText = `รางวัลระดับ${medalThai}${rank ? ` (ลำดับที่ ${rank})` : ''}`;
+          }
+          return `
+          <div class="page">
+              ${bgUrl ? `<img src="${bgUrl}" class="bg-img" />` : frameElement}
+              <div class="serial-no">No. ${generateSerial(idx)}</div>
+              <div class="content">
+                  <div class="logos ${!template.logoRightUrl ? 'single' : ''}">
+                      ${template.logoLeftUrl ? `<img src="${template.logoLeftUrl}" class="logo-img" style="${transparentImgStyle}" />` : '<div></div>'}
+                      ${template.logoRightUrl ? `<img src="${template.logoRightUrl}" class="logo-img" style="${transparentImgStyle}" />` : ''}
+                  </div>
+                  <div class="header ${shadowClass}">${template.headerText}</div>
+                  <div class="subheader ${shadowClass}">${template.subHeaderText}</div>
+                  <div class="name ${shadowClass}">${member.prefix||''}${member.name||member.firstname+' '+member.lastname}</div>
+                  <div class="desc ${shadowClass}">
+                      ${roleText}โรงเรียน <span class="highlight">${schoolName}</span><br/>
+                      ได้รับ <span class="highlight">${awardText}</span><br/>
+                      กิจกรรม ${activity}<br/>
+                      ${eventNameDisplay}
+                  </div>
+                  <div class="date ${shadowClass}">${template.dateText}</div>
+                  <div class="signatures">${template.signatories.map(sig => `<div class="sig-block">${sig.signatureUrl ? `<img src="${sig.signatureUrl}" class="sig-img" style="${transparentImgStyle}" />` : '<div style="height:20mm;"></div>'}${template.showSignatureLine!==false?'<div class="sig-line"></div>':''}<div class="sig-name ${shadowClass}">(${sig.name})</div><div class="sig-pos ${shadowClass}">${sig.position}</div></div>`).join('')}</div>
+                  <div class="qr-verify">
+                      <img src="${qrCodeBase64}" class="qr-img" style="${transparentImgStyle}" />
+                      <div class="qr-text">Scan for Verify</div>
+                  </div>
+              </div>
+          </div>`;
+      }).join('');
+
+      return `
+        <html><head><title>Certificates - ${team.teamName}</title>
+        <link href="https://fonts.googleapis.com/css2?family=Bai+Jamjuree:wght@400;600&family=Chakra+Petch:wght@400;600&family=Charmonman:wght@400;700&family=Kanit:wght@300;400;600&family=Kodchasan:wght@400;600&family=Mali:wght@400;600&family=Noto+Serif+Thai:wght@400;600&family=Sarabun:wght@400;600&family=Srisakdi:wght@400;700&family=Thasadith:wght@400;700&display=swap" rel="stylesheet">
+        <style>
+            @page { size: A4 landscape; margin: 0; }
+            body { margin: 0; padding: 0; font-family: '${defaultFont}', sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .page { width: 297mm; height: 210mm; position: relative; overflow: hidden; page-break-after: always; background-color: white; }
+            
+            /* -- Frame Styles -- */
+            .frame-simple-gold { position: absolute; top: 6mm; left: 6mm; right: 6mm; bottom: 6mm; border: 3px solid #D4AF37; border-radius: 8px; z-index: 1; pointer-events: none; }
+            .frame-infinite-wave { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-image: url('data:image/svg+xml;utf8,<svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg"><defs><pattern id="wave" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M0 20 Q 10 0 20 20 T 40 20" fill="none" stroke="%23FDE047" stroke-width="2" stroke-opacity="0.3"/></pattern></defs><rect width="100%" height="100%" fill="url(%23wave)"/></svg>'); z-index: 1; pointer-events: none; border: 10mm solid transparent; }
+            .frame-ornamental-corners { position: absolute; top: 10mm; left: 10mm; right: 10mm; bottom: 10mm; border: 2px solid #666; z-index: 1; pointer-events: none; }
+            .frame-ornamental-corners::before { content: ''; position: absolute; top: -2px; left: -2px; width: 40px; height: 40px; border-top: 5px solid #D4AF37; border-left: 5px solid #D4AF37; }
+            .frame-ornamental-corners::after { content: ''; position: absolute; bottom: -2px; right: -2px; width: 40px; height: 40px; border-bottom: 5px solid #D4AF37; border-right: 5px solid #D4AF37; }
+            .frame-ornamental-extra { content: ''; position: absolute; top: 10mm; right: 10mm; width: 40px; height: 40px; border-top: 5px solid #D4AF37; border-right: 5px solid #D4AF37; }
+            .frame-ornamental-extra2 { content: ''; position: absolute; bottom: 10mm; left: 10mm; width: 40px; height: 40px; border-bottom: 5px solid #D4AF37; border-left: 5px solid #D4AF37; }
+            .frame-thai-premium { position: absolute; top: 10mm; left: 10mm; right: 10mm; bottom: 10mm; border: 8px solid transparent; border-image: linear-gradient(to bottom right, #b88746, #fdf5a6, #b88746) 1; z-index: 1; pointer-events: none; }
+            
+            .bg-img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }
+            .content { position: relative; z-index: 10; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; padding-top: ${template.contentTop || 25}mm; box-sizing: border-box; }
+            
+            /* -- Legibility Enhancements (High Contrast) -- */
+            .text-shadow-white {
+                text-shadow: 
+                    2px 0 0 #fff, -2px 0 0 #fff, 0 2px 0 #fff, 0 -2px 0 #fff, 
+                    1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff;
+            }
+            
+            .logos { display: flex; justify-content: space-between; width: 80%; height: ${template.logoHeight || 35}mm; margin-bottom: 5mm; position: relative; }
+            .logos.single { justify-content: center; }
+            .logo-img { height: 100%; object-fit: contain; background-color: transparent !important; } 
+            
+            .header { font-size: 24pt; font-weight: bold; color: #1e3a8a; margin-bottom: 5mm; text-align: center; line-height: 1.2; font-family: '${fontHeader}', sans-serif; }
+            .subheader { font-size: 16pt; margin-bottom: 8mm; text-align: center; font-family: '${fontSubHeader}', sans-serif; }
+            .name { font-size: 32pt; font-weight: bold; color: #111; margin-bottom: 5mm; font-family: '${fontName}', sans-serif; text-align: center; border-bottom: 2px dotted #ccc; padding: 0 20px; min-width: 50%; }
+            .desc { font-size: 16pt; margin-bottom: 5mm; max-width: 80%; text-align: center; line-height: 1.5; font-family: '${fontDesc}', sans-serif; }
+            .highlight { font-weight: bold; color: #2563eb; }
+            .date { font-size: 14pt; margin-top: auto; margin-bottom: 10mm; font-family: '${fontDate}', sans-serif; }
+            
+            .signatures { display: flex; justify-content: center; gap: 15mm; margin-bottom: ${template.footerBottom || 25}mm; width: 90%; align-items: flex-end; }
+            .sig-block { display: flex; flex-direction: column; align-items: center; text-align: center; min-width: 60mm; }
+            .sig-img { height: 20mm; object-fit: contain; margin-bottom: -5mm; z-index: 1; background-color: transparent !important; }
+            .sig-line { width: 100%; border-bottom: 1px dotted #000; margin-bottom: 2px; }
+            .sig-name { font-size: 12pt; font-weight: bold; padding-top: 2px; width: 100%; margin-top: ${template.signatureSpacing || 3}mm; font-family: '${fontSigs}', sans-serif; }
+            .sig-pos { font-size: 10pt; white-space: pre-line; line-height: 1.3; margin-top: 2px; font-family: '${fontSigs}', sans-serif; }
+            
+            /* -- Protected Boxes for Scan/Read -- */
+            .qr-verify { 
+                position: absolute; 
+                bottom: ${template.qrBottom || 10}mm; 
+                right: ${template.qrRight || 10}mm; 
+                display: flex; 
+                flex-direction: column; 
+                align-items: center; 
+                background: rgba(255, 255, 255, 0.9);
+                padding: 6px;
+                border-radius: 8px;
+                box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            }
+            .qr-img { width: 22mm; height: 22mm; background-color: transparent !important; }
+            .qr-text { font-size: 8pt; margin-top: 2px; color: #333; font-weight: bold; text-transform: uppercase; }
+            
+            .serial-no { 
+                position: absolute; 
+                top: ${template.serialTop || 10}mm; 
+                right: ${template.serialRight || 10}mm; 
+                font-size: 10pt; 
+                font-family: 'Courier New', monospace; 
+                color: #333; 
+                font-weight: bold;
+                background: rgba(255, 255, 255, 0.85);
+                padding: 2px 8px;
+                border-radius: 4px;
+                border: 1px solid #ddd;
+            }
+            
+            .no-print { display: block; position: fixed; bottom: 20px; right: 20px; z-index: 1000; }
+            @media print { .no-print { display: none; } }
+        </style></head><body>
+        <div class="no-print"><button onclick="window.print()" style="padding:10px 20px;background:#2563eb;color:white;border:none;border-radius:8px;cursor:pointer;">Print</button></div>
+        ${pagesHtml}
+        </body></html>`;
+  };
+
   const extractDriveId = (url: string) => {
       const match = url.match(/id=([^&]+)/) || url.match(/\/d\/([^/]+)/);
       return match ? match[1] : null;
   }
 
-  // --- PDF Generation Logic using PDFMake ---
+  const prepareDataAndGetTemplate = async (team: Team) => {
+      const schoolObj = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
+      const clusterID = schoolObj?.SchoolCluster;
+      let template = viewLevel === 'area' ? certificateTemplates['area'] : (clusterID ? certificateTemplates[clusterID] : undefined);
+      
+      if (!template) {
+          alert('ไม่พบรูปแบบเกียรติบัตรสำหรับรายการนี้');
+          return null;
+      }
 
-  const loadFontToBase64 = async (url: string): Promise<string> => {
-      const response = await fetch(url);
-      const blob = await response.blob();
-      return new Promise((resolve) => {
-          const reader = new FileReader();
-          reader.onload = () => {
-              const result = reader.result as string;
-              // Remove data:application/font-woff;base64, prefix
-              resolve(result.split(',')[1]);
-          };
-          reader.readAsDataURL(blob);
-      });
+      // Clone template to update images with proxy base64
+      const processedTemplate = { ...template };
+
+      // Helper to proxy url
+      const processUrl = async (url: string) => {
+          if (!url) return '';
+          const id = extractDriveId(url);
+          if (id) {
+              const base64 = await getProxyImage(id);
+              if (base64) return base64;
+          }
+          return url;
+      };
+
+      // Process Images
+      if (processedTemplate.backgroundUrl) processedTemplate.backgroundUrl = await processUrl(processedTemplate.backgroundUrl);
+      if (processedTemplate.logoLeftUrl) processedTemplate.logoLeftUrl = await processUrl(processedTemplate.logoLeftUrl);
+      if (processedTemplate.logoRightUrl) processedTemplate.logoRightUrl = await processUrl(processedTemplate.logoRightUrl);
+      processedTemplate.signatories = await Promise.all(processedTemplate.signatories.map(async sig => ({
+          ...sig,
+          signatureUrl: await processUrl(sig.signatureUrl)
+      })));
+
+      const verifyUrl = `${window.location.origin}${window.location.pathname}#/verify?id=${team.teamId}`;
+      let qrCodeBase64 = '';
+      try { qrCodeBase64 = await QRCode.toDataURL(verifyUrl, { margin: 1, width: 300 }); } catch (e) {}
+
+      return { template: processedTemplate, qrCodeBase64 };
   };
 
-  const preparePDFMake = async () => {
-      if (!window.pdfMake.vfs || !window.pdfMake.vfs['Sarabun-Regular.ttf']) {
-          setGenerationProgress('Loading Fonts...');
-          try {
-              const regularFont = await loadFontToBase64(THAI_FONT_URL);
-              const boldFont = await loadFontToBase64(THAI_FONT_BOLD_URL);
-              
-              window.pdfMake.vfs = window.pdfMake.vfs || {};
-              window.pdfMake.vfs['Sarabun-Regular.ttf'] = regularFont;
-              window.pdfMake.vfs['Sarabun-Bold.ttf'] = boldFont;
+  const handlePrint = async (team: Team) => {
+      setIsGenerating(true);
+      const prep = await prepareDataAndGetTemplate(team);
+      if (!prep) { setIsGenerating(false); return; }
 
-              window.pdfMake.fonts = {
-                  Sarabun: {
-                      normal: 'Sarabun-Regular.ttf',
-                      bold: 'Sarabun-Bold.ttf',
-                      italics: 'Sarabun-Regular.ttf',
-                      bolditalics: 'Sarabun-Bold.ttf'
-                  },
-                  Roboto: {
-                       normal: 'Sarabun-Regular.ttf', // Fallback
-                       bold: 'Sarabun-Bold.ttf',
-                       italics: 'Sarabun-Regular.ttf',
-                       bolditalics: 'Sarabun-Bold.ttf'
-                  }
-              };
-          } catch (e) {
-              console.error("Font loading error", e);
-              throw new Error("Failed to load Thai fonts");
-          }
-      }
+      // Delay for UI update
+      await new Promise(resolve => setTimeout(resolve, 800));
+
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) { setIsGenerating(false); alert('Pop-up blocked'); return; }
+
+      const htmlContent = await generateCertificateHtmlContent(team, prep.template, prep.qrCodeBase64);
+      printWindow.document.write(htmlContent);
+      printWindow.document.close();
+      setIsGenerating(false);
   };
 
   const handleDownloadPDF = async (team: Team) => {
       setIsGenerating(true);
-      setGenerationProgress('Preparing...');
+      const prep = await prepareDataAndGetTemplate(team);
+      if (!prep) { setIsGenerating(false); return; }
+      
+      // Get global html2pdf from CDN script
+      const html2pdf = (window as any).html2pdf;
+      if (!html2pdf) {
+          alert("PDF library not loaded. Please refresh.");
+          setIsGenerating(false);
+          return;
+      }
+
+      const htmlContent = await generateCertificateHtmlContent(team, prep.template, prep.qrCodeBase64);
+      
+      // Create a temporary container
+      const container = document.createElement('div');
+      container.innerHTML = htmlContent;
+      // Strip the print button
+      const btn = container.querySelector('.no-print');
+      if (btn) btn.remove();
+      
+      // Set width/height explicitly for PDF generator
+      container.style.width = '297mm';
+      
+      // We need to append to body to render fonts correctly, but hide it
+      container.style.position = 'absolute';
+      container.style.left = '-9999px';
+      document.body.appendChild(container);
+
+      const opt = {
+          margin: 0,
+          filename: `certificate_${team.teamId}.pdf`,
+          image: { type: 'jpeg' as const, quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true, logging: false },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
+      };
 
       try {
-          await preparePDFMake();
-
-          const schoolObj = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
-          const clusterID = schoolObj?.SchoolCluster;
-          const template = viewLevel === 'area' ? certificateTemplates['area'] : (clusterID ? certificateTemplates[clusterID] : undefined);
-
-          if (!template) {
-              alert('ไม่พบรูปแบบเกียรติบัตร');
-              setIsGenerating(false);
-              return;
-          }
-
-          // Process Images (Must be Base64 for PDFMake)
-          setGenerationProgress('Processing Images...');
-          const processUrl = async (url: string) => {
-              if (!url) return null;
-              if (url.startsWith('data:')) return url;
-              const id = extractDriveId(url);
-              if (id) {
-                  const base64 = await getProxyImage(id);
-                  return base64;
-              }
-              return null; // Fallback or skip
-          };
-
-          const bgImage = await processUrl(template.backgroundUrl);
-          const logoLeft = await processUrl(template.logoLeftUrl);
-          const logoRight = await processUrl(template.logoRightUrl);
-          
-          const signatures = await Promise.all(template.signatories.map(async (sig) => ({
-              ...sig,
-              image: await processUrl(sig.signatureUrl)
-          })));
-
-          // Prepare Content Data
-          const activity = data.activities.find(a => a.id === team.activityId)?.name || team.activityId;
-          const schoolName = schoolObj?.SchoolName || team.schoolId;
-          const clusterName = clusterID ? data.clusters.find(c => c.ClusterID === clusterID)?.ClusterName : '';
-          
-          let members: any[] = [];
-          let memberSource = team.members;
-          if (viewLevel === 'area' && team.stageInfo) {
-              try { const info = JSON.parse(team.stageInfo); if(info.members) memberSource = info.members; } catch {}
-          }
-          try {
-              const raw = typeof memberSource === 'string' ? JSON.parse(memberSource) : memberSource;
-              if (Array.isArray(raw)) members = raw.map(m => ({...m, role: 'Student'}));
-              else if (raw) members = [...(raw.teachers||[]).map((m:any)=>({...m,role:'Teacher'})), ...(raw.students||[]).map((m:any)=>({...m,role:'Student'}))];
-          } catch {}
-
-          const eventName = template.eventName || (viewLevel === 'area' ? 'งานศิลปหัตถกรรมนักเรียน ระดับเขตพื้นที่การศึกษา' : `งานศิลปหัตถกรรมนักเรียน ${clusterName}`);
-
-          // --- Construct PDF Definition ---
-          const content = [];
-
-          for (let i = 0; i < members.length; i++) {
-              const member = members[i];
-              const roleText = member.role === 'Teacher' ? 'ครูผู้ฝึกสอน' : 'นักเรียน';
-              
-              // Generate Serial
-              const runNum = (template.serialStart || 1) + i;
-              const serialNo = (template.serialFormat || '{activityId}-{year}-{run:4}')
-                  .replace('{year}', String(new Date().getFullYear()))
-                  .replace('{th_year}', String(new Date().getFullYear()+543))
-                  .replace('{id}', team.teamId)
-                  .replace('{activityId}', team.activityId)
-                  .replace(/{run:(\d+)}/, (_, d) => String(runNum).padStart(parseInt(d), '0'))
-                  .replace('{run}', String(runNum));
-
-              // Generate QR
-              const verifyUrl = `${window.location.origin}${window.location.pathname}#/verify?id=${team.teamId}`;
-              const qrCodeBase64 = await QRCode.toDataURL(verifyUrl, { margin: 0, width: 100 });
-
-              // Award Text Logic
-              let awardText = "เข้าร่วมการแข่งขัน";
-              if (template.showRank) {
-                  const rank = viewLevel === 'area' ? (JSON.parse(team.stageInfo || '{}').rank || team.rank) : team.rank;
-                  const medal = viewLevel === 'area' ? (JSON.parse(team.stageInfo || '{}').medal || team.medalOverride) : team.medalOverride;
-                  let medalThai = medal === 'Gold' ? "เหรียญทอง" : medal === 'Silver' ? "เหรียญเงิน" : medal === 'Bronze' ? "เหรียญทองแดง" : medal === 'Participant' ? "เข้าร่วม" : "";
-                  
-                  if (rank === '1') awardText = `รางวัลชนะเลิศ${medalThai ? ` (ระดับ${medalThai})` : ''}`;
-                  else if (rank === '2') awardText = `รางวัลรองชนะเลิศอันดับ 1${medalThai ? ` (ระดับ${medalThai})` : ''}`;
-                  else if (rank === '3') awardText = `รางวัลรองชนะเลิศอันดับ 2${medalThai ? ` (ระดับ${medalThai})` : ''}`;
-                  else if (medalThai && medalThai !== "เข้าร่วม") awardText = `รางวัลระดับ${medalThai}${rank ? ` (ลำดับที่ ${rank})` : ''}`;
-              }
-
-              // Coordinates Conversion (mm to pt)
-              const contentTop = mmToPt(template.contentTop || 25);
-              const logoH = mmToPt(template.logoHeight || 35);
-              const footerBottom = mmToPt(template.footerBottom || 25);
-              
-              const pageContent = [
-                  // Serial No (Absolute)
-                  { text: `No. ${serialNo}`, absolutePosition: { x: 0, y: mmToPt(template.serialTop || 10) }, alignment: 'right', fontSize: 10, bold: true, color: '#444444', margin: [0, 0, mmToPt(template.serialRight || 10), 0] },
-                  
-                  // Main Content Container (Margins handled by spacing)
-                  {
-                      stack: [
-                          // Logos
-                          {
-                              columns: [
-                                  logoLeft ? { image: logoLeft, fit: [200, logoH], alignment: logoRight ? 'left' : 'center' } : { text: '' },
-                                  logoRight ? { image: logoRight, fit: [200, logoH], alignment: 'right' } : { text: '' }
-                              ],
-                              margin: [40, 0, 40, 10] // Side margins for logos
-                          },
-                          // Header
-                          { text: template.headerText, style: 'header', margin: [0, 10, 0, 5] },
-                          { text: template.subHeaderText, style: 'subheader', margin: [0, 0, 0, 15] },
-                          
-                          // Name
-                          { text: `${member.prefix||''}${member.name||member.firstname+' '+member.lastname}`, style: 'name', margin: [0, 0, 0, 5] },
-                          
-                          // Description
-                          { 
-                              text: [
-                                  { text: `${roleText}โรงเรียน `, style: 'desc' },
-                                  { text: schoolName, style: 'highlight' },
-                                  { text: '\nได้รับ ', style: 'desc' },
-                                  { text: awardText, style: 'highlight' },
-                                  { text: `\nกิจกรรม ${activity}\n${eventName}`, style: 'desc' }
-                              ],
-                              alignment: 'center',
-                              margin: [0, 5, 0, 15]
-                          },
-                          
-                          // Date
-                          { text: template.dateText, style: 'date', margin: [0, 0, 0, 20] },
-
-                          // Signatures (Columns)
-                          {
-                              columns: signatures.map(sig => ({
-                                  stack: [
-                                      sig.image ? { image: sig.image, fit: [100, mmToPt(20)], alignment: 'center', margin: [0, 0, 0, -5] } : { text: '', margin: [0, mmToPt(15), 0, 0] },
-                                      template.showSignatureLine !== false ? { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 150, y2: 0, lineWidth: 0.5, dash: { length: 2 } }], alignment: 'center', margin: [0, 0, 0, 2] } : { text: '' },
-                                      { text: `(${sig.name})`, style: 'sigName' },
-                                      { text: sig.position, style: 'sigPos' }
-                                  ],
-                                  alignment: 'center'
-                              })),
-                              columnGap: 20
-                          }
-                      ],
-                      margin: [0, contentTop, 0, 0], // Top margin for content
-                      alignment: 'center'
-                  },
-
-                  // QR Code (Absolute)
-                  {
-                      image: qrCodeBase64,
-                      width: mmToPt(22),
-                      absolutePosition: { x: 842 - mmToPt(template.qrRight || 10) - mmToPt(22), y: 595 - mmToPt(template.qrBottom || 10) - mmToPt(22) - 15 } // A4 Landscape width ~842pt, height ~595pt
-                  },
-                  {
-                      text: 'Scan for Verify',
-                      fontSize: 8,
-                      bold: true,
-                      color: '#555555',
-                      absolutePosition: { x: 842 - mmToPt(template.qrRight || 10) - mmToPt(22), y: 595 - mmToPt(template.qrBottom || 10) },
-                      alignment: 'center',
-                      width: mmToPt(22)
-                  }
-              ];
-              
-              content.push(pageContent);
-              
-              // Page Break for next member
-              if (i < members.length - 1) {
-                  content[content.length - 1].push({ text: '', pageBreak: 'after' });
-              }
-          }
-
-          // Doc Definition
-          const docDefinition = {
-              pageSize: 'A4',
-              pageOrientation: 'landscape',
-              background: bgImage ? function(currentPage: number) {
-                  return {
-                      image: bgImage,
-                      width: 841.89, // A4 Landscape width in pts
-                      height: 595.28, // A4 Landscape height in pts
-                      absolutePosition: { x: 0, y: 0 }
-                  };
-              } : undefined,
-              content: content.flat(),
-              defaultStyle: {
-                  font: 'Sarabun'
-              },
-              styles: {
-                  header: { fontSize: 24, bold: true, color: '#1e3a8a', alignment: 'center' },
-                  subheader: { fontSize: 16, alignment: 'center', color: '#000000' },
-                  name: { fontSize: 32, bold: true, color: '#111111', alignment: 'center' },
-                  desc: { fontSize: 16, alignment: 'center', color: '#000000', lineHeight: 1.3 },
-                  highlight: { fontSize: 16, bold: true, color: '#2563eb' },
-                  date: { fontSize: 14, alignment: 'center', color: '#000000' },
-                  sigName: { fontSize: 12, bold: true, alignment: 'center', marginTop: 5 },
-                  sigPos: { fontSize: 10, alignment: 'center' }
-              },
-              pageMargins: [0, 0, 0, 0] // We handle margins manually in content
-          };
-
-          setGenerationProgress('Generating PDF...');
-          // Generate PDF
-          window.pdfMake.createPdf(docDefinition).download(`certificates_${team.teamId}.pdf`);
-
-      } catch (e) {
-          console.error("PDF Generation Error", e);
-          alert('เกิดข้อผิดพลาดในการสร้าง PDF (อาจเกิดจากไฟล์รูปภาพ หรือ ฟอนต์)');
+          await html2pdf().set(opt).from(container).save();
+      } catch (err) {
+          console.error("PDF Generation Error:", err);
+          alert("เกิดข้อผิดพลาดในการสร้างไฟล์ PDF (อาจเกิดจากรูปภาพติดสิทธิ์การเข้าถึง)");
       } finally {
+          document.body.removeChild(container);
           setIsGenerating(false);
       }
   };
-
-  const handlePrint = async (team: Team) => {
-    // Re-use handleDownloadPDF logic but open in new window (PDFMake supports open())
-    // For simplicity and consistency with modern browsers, downloading PDF is often better, 
-    // but users might expect "Print" to open a dialog.
-    // However, window.print() works best on HTML. Since we switched to PDFMake for PDF file generation,
-    // "Print" button logic in this view was usually just generating HTML and calling window.print().
-    // We will keep the HTML print logic separate if needed, OR redirect "Print" to "Download PDF" 
-    // because PDFMake produces a print-ready file.
-    
-    if (confirm("ต้องการดาวน์โหลด PDF สำหรับพิมพ์ใช่หรือไม่?")) {
-        handleDownloadPDF(team);
-    }
-  };
-
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20 relative">
@@ -437,7 +423,7 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
             <div className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm flex flex-col items-center justify-center text-white">
                 <Loader2 className="w-12 h-12 animate-spin mb-4 text-blue-400" />
                 <h3 className="text-xl font-bold mb-2">กำลังดำเนินการ...</h3>
-                <p className="text-sm opacity-80">{generationProgress}</p>
+                <p className="text-sm opacity-80">ระบบกำลังจัดเตรียมเอกสาร (อาจใช้เวลาสักครู่สำหรับ PDF)</p>
             </div>
         )}
 
@@ -491,15 +477,6 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
                             const { tCount, sCount } = getMemberCounts(team);
                             const score = viewLevel === 'area' ? (JSON.parse(team.stageInfo || '{}').score || 0) : team.score;
                             
-                            // Template Logic Check
-                            const schoolObj = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
-                            const clusterID = schoolObj?.SchoolCluster;
-                            const template = viewLevel === 'area' ? certificateTemplates['area'] : (clusterID ? certificateTemplates[clusterID] : undefined);
-                            
-                            // Check visibility flags
-                            const showPrint = !template?.hidePrintButton;
-                            const showPdf = !template?.hidePdfButton;
-
                             return (
                                 <tr key={team.teamId} className="hover:bg-gray-50">
                                     <td className="px-6 py-4"><div className="font-bold text-gray-900">{team.teamName}</div><div className="text-xs text-gray-500">{team.teamId}</div></td>
@@ -509,17 +486,12 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
                                     <td className="px-6 py-4 text-right">
                                         {score > 0 ? (
                                             <div className="flex justify-end gap-2">
-                                                {showPrint && (
-                                                    <button onClick={() => handlePrint(team)} className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-xs font-bold flex items-center shadow-sm">
-                                                        <Printer className="w-4 h-4 mr-1"/> พิมพ์
-                                                    </button>
-                                                )}
-                                                {showPdf && (
-                                                    <button onClick={() => handleDownloadPDF(team)} className="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 text-xs font-bold flex items-center shadow-sm">
-                                                        <Download className="w-4 h-4 mr-1"/> PDF
-                                                    </button>
-                                                )}
-                                                {!showPrint && !showPdf && <span className="text-xs text-gray-400 italic">ปิดการพิมพ์</span>}
+                                                <button onClick={() => handlePrint(team)} className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-xs font-bold flex items-center shadow-sm">
+                                                    <Printer className="w-4 h-4 mr-1"/> พิมพ์
+                                                </button>
+                                                <button onClick={() => handleDownloadPDF(team)} className="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 text-xs font-bold flex items-center shadow-sm">
+                                                    <Download className="w-4 h-4 mr-1"/> PDF
+                                                </button>
                                             </div>
                                         ) : (
                                             <span className="text-xs text-gray-400 italic">รอผลคะแนน</span>
