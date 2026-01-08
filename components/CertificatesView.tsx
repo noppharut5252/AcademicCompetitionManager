@@ -22,7 +22,6 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
   // View State
   const [viewLevel, setViewLevel] = useState<'cluster' | 'area'>('cluster');
   const [isGenerating, setIsGenerating] = useState(false);
-  const [generationProgress, setGenerationProgress] = useState('');
   
   // Config & Modals
   const [showConfigModal, setShowConfigModal] = useState(false);
@@ -160,6 +159,9 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
 
       // Prepare Images (Convert to Base64 if needed for PDF)
       let bgUrl = template.backgroundUrl;
+      // We will use resolved images from the template logic that handles proxying
+      
+      // Ensure Transparent Background Style
       const transparentImgStyle = `background-color: transparent !important; mix-blend-mode: normal;`;
 
       let frameElement = '';
@@ -227,7 +229,7 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
         <style>
             @page { size: A4 landscape; margin: 0; }
             body { margin: 0; padding: 0; font-family: '${defaultFont}', sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            .page { width: 297mm; height: 210mm; position: relative; overflow: visible; page-break-after: always; background-color: white; }
+            .page { width: 297mm; height: 210mm; position: relative; overflow: hidden; page-break-after: always; background-color: white; }
             
             /* -- Frame Styles -- */
             .frame-simple-gold { position: absolute; top: 6mm; left: 6mm; right: 6mm; bottom: 6mm; border: 3px solid #D4AF37; border-radius: 8px; z-index: 1; pointer-events: none; }
@@ -311,7 +313,6 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
   }
 
   const prepareDataAndGetTemplate = async (team: Team) => {
-      setGenerationProgress('Loading config...');
       const schoolObj = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
       const clusterID = schoolObj?.SchoolCluster;
       let template = viewLevel === 'area' ? certificateTemplates['area'] : (clusterID ? certificateTemplates[clusterID] : undefined);
@@ -321,7 +322,6 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
           return null;
       }
 
-      setGenerationProgress('Processing images...');
       // Clone template to update images with proxy base64
       const processedTemplate = { ...template };
 
@@ -337,23 +337,21 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
               if (base64) return base64;
           }
           
-          // Return transparent pixel if remote fetch fails to prevent CORS error
-          console.warn(`Could not proxy image: ${url}. Returning transparent pixel.`);
+          // CRITICAL FIX: If we can't proxy it, and it's a remote URL, 
+          // returning it will likely cause CORS crash in html2canvas.
+          // Better to return a placeholder or transparent pixel to prevent the PDF generation from failing completely.
+          console.warn(`Could not proxy image: ${url}. Returning transparent pixel to prevent CORS error.`);
           return TRANSPARENT_PIXEL; 
       };
 
-      // Process Images concurrently
-      const promises = [];
-      if (processedTemplate.backgroundUrl) promises.push(processUrl(processedTemplate.backgroundUrl).then(res => processedTemplate.backgroundUrl = res));
-      if (processedTemplate.logoLeftUrl) promises.push(processUrl(processedTemplate.logoLeftUrl).then(res => processedTemplate.logoLeftUrl = res));
-      if (processedTemplate.logoRightUrl) promises.push(processUrl(processedTemplate.logoRightUrl).then(res => processedTemplate.logoRightUrl = res));
-      
-      const sigPromises = processedTemplate.signatories.map(async (sig, idx) => {
-          processedTemplate.signatories[idx].signatureUrl = await processUrl(sig.signatureUrl);
-      });
-      promises.push(...sigPromises);
-      
-      await Promise.all(promises);
+      // Process Images
+      if (processedTemplate.backgroundUrl) processedTemplate.backgroundUrl = await processUrl(processedTemplate.backgroundUrl);
+      if (processedTemplate.logoLeftUrl) processedTemplate.logoLeftUrl = await processUrl(processedTemplate.logoLeftUrl);
+      if (processedTemplate.logoRightUrl) processedTemplate.logoRightUrl = await processUrl(processedTemplate.logoRightUrl);
+      processedTemplate.signatories = await Promise.all(processedTemplate.signatories.map(async sig => ({
+          ...sig,
+          signatureUrl: await processUrl(sig.signatureUrl)
+      })));
 
       const verifyUrl = `${window.location.origin}${window.location.pathname}#/verify?id=${team.teamId}`;
       let qrCodeBase64 = '';
@@ -381,7 +379,6 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
 
   const handleDownloadPDF = async (team: Team) => {
       setIsGenerating(true);
-      setGenerationProgress('Initializing...');
       const prep = await prepareDataAndGetTemplate(team);
       if (!prep) { setIsGenerating(false); return; }
       
@@ -393,86 +390,44 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
           return;
       }
 
-      setGenerationProgress('Rendering HTML...');
       const htmlContent = await generateCertificateHtmlContent(team, prep.template, prep.qrCodeBase64);
       
-      // Parse HTML string to manipulate style for capture
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(htmlContent, 'text/html');
-      
-      // Extract style and body to inject into container
-      const styleElement = doc.querySelector('style');
-      const bodyContent = doc.body.innerHTML;
-      
-      let cssText = styleElement ? styleElement.textContent || '' : '';
-      
-      // Remove interfering styles for capture
-      cssText = cssText.replace(/@page\s*{[^}]*}/g, '')
-                       .replace(/body\s*{[^}]*}/g, '')
-                       .replace(/\.no-print\s*{[^}]*}/g, '');
-
-      // Add override styles ensuring visibility and layout for html2canvas
-      const overrideCss = `
-          .page { 
-              position: relative;
-              width: 297mm;
-              height: 210mm;
-              overflow: hidden; 
-              margin: 0; 
-              padding: 0;
-              background-color: white;
-          }
-          .no-print { display: none !important; }
-      `;
-
-      // Create a temporary container attached to DOM
+      // Create a temporary container attached to DOM to ensure rendering
       const container = document.createElement('div');
-      container.id = 'pdf-gen-container';
+      container.innerHTML = htmlContent;
+      // Strip the print button
+      const btn = container.querySelector('.no-print');
+      if (btn) btn.remove();
       
-      // FIX: Use fixed position at top-left but underneath the loading screen overlay (Z-Index 150 < 200)
-      // This ensures it is "visible" in the viewport for html2canvas but hidden from user view
+      // FIX: Use fixed position at top-left but behind everything (z-index -9999)
+      // This tricks the browser into thinking it's visible while keeping it hidden from user
       container.style.position = 'fixed';
-      container.style.left = '0';
       container.style.top = '0';
-      container.style.width = '297mm'; // Fixed A4 Landscape Width
-      container.style.height = '210mm';
-      container.style.zIndex = '150'; // Below Loading (200) but Above App (0-50)
-      container.style.background = '#ffffff';
-      
-      // Construct inner HTML
-      container.innerHTML = `
-        <style>
-            ${cssText}
-            ${overrideCss}
-        </style>
-        ${bodyContent}
-      `;
-      
+      container.style.left = '0';
+      container.style.width = '297mm'; // A4 Landscape width
+      container.style.height = '210mm'; // A4 Landscape height
+      container.style.zIndex = '-9999'; // Behind other content
+      container.style.background = 'white'; // Ensure visible background for canvas
+      container.style.pointerEvents = 'none'; // Prevent interaction
+
       document.body.appendChild(container);
 
       // Wait for all images inside container to load
-      setGenerationProgress('Loading assets...');
       const images = Array.from(container.querySelectorAll('img'));
       await Promise.all(images.map(img => {
           if (img.complete) return Promise.resolve();
           return new Promise(resolve => {
               img.onload = resolve;
-              img.onerror = resolve; // Resolve even on error
+              img.onerror = resolve; // Resolve even on error to prevent hanging
           });
       }));
       
-      // Wait for fonts
-      if (document.fonts && document.fonts.ready) {
-          await document.fonts.ready;
-      }
+      // Slight delay for fonts/styles rendering
+      await new Promise(resolve => setTimeout(resolve, 500));
       
-      // Slight delay for rendering
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      // Scroll to top to ensure rendering context is clean
+      // Scroll to top to ensure rendering context is clean (helpful for html2canvas)
       window.scrollTo(0, 0);
 
-      setGenerationProgress('Generating PDF...');
       const opt = {
           margin: 0,
           filename: `certificate_${team.teamId}.pdf`,
@@ -480,8 +435,8 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
           html2canvas: { 
               scale: 2, 
               useCORS: true, 
-              logging: false,
-              scrollX: 0,
+              logging: true,
+              windowWidth: 1200, 
               scrollY: 0,
               x: 0,
               y: 0
@@ -495,9 +450,7 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
           console.error("PDF Generation Error:", err);
           alert("เกิดข้อผิดพลาดในการสร้างไฟล์ PDF (อาจเกิดจากรูปภาพติดสิทธิ์การเข้าถึง)");
       } finally {
-          if (document.body.contains(container)) {
-              document.body.removeChild(container);
-          }
+          document.body.removeChild(container);
           setIsGenerating(false);
       }
   };
@@ -505,15 +458,12 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20 relative">
         
-        {/* Loading Overlay - Added Solid Background to Hide PDF Gen Container */}
+        {/* Loading Overlay */}
         {isGenerating && (
-            <div className="fixed inset-0 z-[200] bg-white flex flex-col items-center justify-center text-gray-800">
-                <Loader2 className="w-16 h-16 animate-spin mb-6 text-blue-600" />
-                <h3 className="text-2xl font-bold mb-2">กำลังดำเนินการ...</h3>
-                <p className="text-sm text-gray-500 mb-4">ระบบกำลังจัดเตรียมเอกสาร (อาจใช้เวลาสักครู่สำหรับ PDF)</p>
-                <div className="text-xs font-mono bg-gray-100 px-3 py-1 rounded text-gray-400">
-                    Status: {generationProgress || 'Processing'}
-                </div>
+            <div className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm flex flex-col items-center justify-center text-white">
+                <Loader2 className="w-12 h-12 animate-spin mb-4 text-blue-400" />
+                <h3 className="text-xl font-bold mb-2">กำลังดำเนินการ...</h3>
+                <p className="text-sm opacity-80">ระบบกำลังจัดเตรียมเอกสาร (อาจใช้เวลาสักครู่สำหรับ PDF)</p>
             </div>
         )}
 
