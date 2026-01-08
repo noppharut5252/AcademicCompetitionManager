@@ -6,8 +6,6 @@ import CertificateConfigModal from './CertificateConfigModal';
 import { getCertificateConfig } from '../services/api';
 import QRCode from 'qrcode';
 import SearchableSelect from './SearchableSelect';
-// @ts-ignore
-import html2pdf from 'html2pdf.js';
 
 interface CertificatesViewProps {
   data: AppData;
@@ -347,14 +345,16 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
       setIsGenerating(true);
       const prep = await prepareDataAndGetTemplate(team);
       if (!prep) { setIsGenerating(false); return; }
+      
+      // Get global html2pdf from CDN script
+      const html2pdf = (window as any).html2pdf;
+      if (!html2pdf) {
+          alert("PDF library not loaded. Please refresh.");
+          setIsGenerating(false);
+          return;
+      }
 
-      // For PDF generation to avoid CORS, we should convert images in template to Base64 if possible
-      // This is a simplified attempt. In production, proxying or pre-fetching images is best.
-      const template = prep.template;
-      // Note: html2pdf handles some CORS if useCORS is true, but base64 is safer.
-      // We will proceed with URL and rely on html2pdf configuration.
-
-      const htmlContent = await generateCertificateHtmlContent(team, template, prep.qrCodeBase64);
+      const htmlContent = await generateCertificateHtmlContent(team, prep.template, prep.qrCodeBase64);
       
       // Create a temporary container
       const container = document.createElement('div');
