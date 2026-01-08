@@ -11,7 +11,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['https://raw.githubusercontent.com/noppharut5252/AcademicCompetitionManager/refs/heads/main/favi/graduation-cap.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
+      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
       // กำหนด scope ของ PWA ให้จำกัดอยู่ในโฟลเดอร์นี้
       scope: '/AcademicCompetitionManager/',
       manifest: {
@@ -43,10 +43,7 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
-    emptyOutDir: true,
-    rollupOptions: {
-      external: ['html2pdf.js']
-    }
+    emptyOutDir: true
   },
   resolve: {
     alias: {
