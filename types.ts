@@ -207,6 +207,18 @@ export interface CertificateTemplate {
   serialRight?: number;
   qrBottom?: number;
   qrRight?: number;
+
+  // New Font & Shadow Config
+  fontFamily?: string; // Default font
+  enableTextShadow?: boolean;
+
+  // Granular Font Config (Overrides)
+  fontHeader?: string;
+  fontSubHeader?: string;
+  fontName?: string;
+  fontDesc?: string;
+  fontDate?: string;
+  fontSignatures?: string;
 }
 
 export interface PrintConfig {
