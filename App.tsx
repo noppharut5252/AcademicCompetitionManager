@@ -5,7 +5,8 @@ import Dashboard from './components/Dashboard';
 import TeamList from './components/TeamList';
 import ActivityList from './components/ActivityList';
 import ResultsView from './components/ResultsView';
-import DocumentsView from './components/DocumentsView';
+import IdCardsView from './components/IdCardsView';
+import CertificatesView from './components/CertificatesView';
 import ProfileView from './components/ProfileView'; 
 import ScoreEntry from './components/ScoreEntry'; 
 import ScoreInputView from './components/ScoreInputView';
@@ -362,8 +363,8 @@ const App: React.FC = () => {
                             <Route path="/score" element={<ScoreEntry data={data} user={currentUser} onDataUpdate={() => fetchAppData(true)} />} />
                             <Route path="/judges" element={<JudgesView data={data} user={currentUser} onDataUpdate={() => fetchAppData(true)} />} />
                             <Route path="/results" element={<ResultsView data={data} user={currentUser} />} />
-                            <Route path="/certificates" element={<DocumentsView data={data} type="certificate" user={currentUser} />} />
-                            <Route path="/idcards" element={<DocumentsView data={data} type="idcard" user={currentUser} />} />
+                            <Route path="/certificates" element={<CertificatesView data={data} user={currentUser} />} />
+                            <Route path="/idcards" element={<IdCardsView data={data} user={currentUser} />} />
                             <Route path="/documents" element={<PrintDocumentsView data={data} user={currentUser} />} />
                             <Route path="/announcements" element={<AnnouncementManager data={data} user={currentUser} onDataUpdate={() => fetchAppData(true)} />} />
                             <Route path="/schools" element={<SchoolManagement data={data} user={currentUser} onDataUpdate={() => fetchAppData(true)} />} />
