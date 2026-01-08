@@ -1,6 +1,6 @@
 
 // Utility function to resize and compress images before uploading
-export const resizeImage = (file: File, maxWidth: number = 400, maxHeight: number = 400, quality: number = 0.7): Promise<string> => {
+export const resizeImage = (file: File, maxWidth: number = 400, maxHeight: number = 400, quality: number = 0.7, outputType: string = 'image/jpeg'): Promise<string> => {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.readAsDataURL(file);
@@ -29,9 +29,11 @@ export const resizeImage = (file: File, maxWidth: number = 400, maxHeight: numbe
                 canvas.height = height;
                 const ctx = canvas.getContext('2d');
                 if (ctx) {
+                    // Clear context to ensure transparency for PNGs
+                    ctx.clearRect(0, 0, width, height);
                     ctx.drawImage(img, 0, 0, width, height);
-                    // Convert to base64 JPEG with compression
-                    resolve(canvas.toDataURL('image/jpeg', quality));
+                    // Convert to base64 with specified type (default jpeg)
+                    resolve(canvas.toDataURL(outputType, quality));
                 } else {
                     reject(new Error('Canvas context not available'));
                 }
