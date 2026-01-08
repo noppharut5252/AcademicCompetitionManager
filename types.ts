@@ -219,10 +219,6 @@ export interface CertificateTemplate {
   fontDesc?: string;
   fontDate?: string;
   fontSignatures?: string;
-
-  // Visibility Config
-  hidePrintButton?: boolean;
-  hidePdfButton?: boolean;
 }
 
 export interface PrintConfig {
