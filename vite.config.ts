@@ -11,7 +11,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
+      includeAssets: ['https://raw.githubusercontent.com/noppharut5252/AcademicCompetitionManager/refs/heads/main/favi/graduation-cap.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
       // กำหนด scope ของ PWA ให้จำกัดอยู่ในโฟลเดอร์นี้
       scope: '/AcademicCompetitionManager/',
       manifest: {
