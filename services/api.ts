@@ -40,6 +40,21 @@ export const fetchData = async (): Promise<AppData> => {
   }
 };
 
+export const getProxyImage = async (fileId: string): Promise<string | null> => {
+    try {
+        const response = await fetch(`${API_URL}?action=getImage&id=${encodeURIComponent(fileId)}`, {
+            method: 'GET',
+            mode: 'cors',
+        });
+        if (!response.ok) return null;
+        const data = await response.json();
+        return data.status === 'success' ? data.base64 : null;
+    } catch (e) {
+        console.error("Proxy image failed", e);
+        return null;
+    }
+};
+
 export const checkUserPermission = async (lineUserId: string): Promise<User | null> => {
    try {
     const response = await fetch(`${API_URL}?action=getUser&lineId=${lineUserId}`, {
