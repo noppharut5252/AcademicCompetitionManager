@@ -392,24 +392,57 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
 
       const htmlContent = await generateCertificateHtmlContent(team, prep.template, prep.qrCodeBase64);
       
-      // Create a temporary container attached to DOM to ensure rendering
-      const container = document.createElement('div');
-      container.innerHTML = htmlContent;
-      // Strip the print button
-      const btn = container.querySelector('.no-print');
-      if (btn) btn.remove();
+      // NEW FIX: Parse HTML string to manipulate style for capture
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(htmlContent, 'text/html');
       
-      // FIX: Use fixed position at top-left but behind everything (z-index -9999)
-      // This tricks the browser into thinking it's visible while keeping it hidden from user
-      container.style.position = 'fixed';
-      container.style.top = '0';
-      container.style.left = '0';
-      container.style.width = '297mm'; // A4 Landscape width
-      container.style.height = '210mm'; // A4 Landscape height
-      container.style.zIndex = '-9999'; // Behind other content
-      container.style.background = 'white'; // Ensure visible background for canvas
-      container.style.pointerEvents = 'none'; // Prevent interaction
+      // Extract style and body to inject into container
+      const styleElement = doc.querySelector('style');
+      const bodyContent = doc.body.innerHTML;
+      
+      let cssText = styleElement ? styleElement.textContent || '' : '';
+      
+      // Remove interfering styles for capture
+      cssText = cssText.replace(/@page\s*{[^}]*}/g, '')
+                       .replace(/body\s*{[^}]*}/g, '')
+                       .replace(/\.no-print\s*{[^}]*}/g, '');
 
+      // Add override styles ensuring visibility and layout for html2canvas
+      const overrideCss = `
+          .page { 
+              page-break-after: always; 
+              overflow: visible !important; 
+              margin-bottom: 0; 
+              box-shadow: none !important; 
+              border: none !important;
+              width: 297mm;
+              height: 210mm;
+          }
+          .no-print { display: none !important; }
+      `;
+
+      // Create a temporary container attached to DOM
+      const container = document.createElement('div');
+      container.id = 'pdf-gen-container';
+      
+      // FIX: Use absolute position at top-left to ensure it's "in view" for html2canvas
+      // but hidden behind other content via z-index
+      container.style.position = 'absolute';
+      container.style.left = '0';
+      container.style.top = '0';
+      container.style.width = '297mm'; // Fixed A4 Landscape Width
+      container.style.zIndex = '-1000'; // Behind everything
+      container.style.background = '#ffffff';
+      
+      // Construct inner HTML
+      container.innerHTML = `
+        <style>
+            ${cssText}
+            ${overrideCss}
+        </style>
+        ${bodyContent}
+      `;
+      
       document.body.appendChild(container);
 
       // Wait for all images inside container to load
@@ -418,14 +451,19 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
           if (img.complete) return Promise.resolve();
           return new Promise(resolve => {
               img.onload = resolve;
-              img.onerror = resolve; // Resolve even on error to prevent hanging
+              img.onerror = resolve; // Resolve even on error
           });
       }));
       
-      // Slight delay for fonts/styles rendering
+      // Wait for fonts
+      if (document.fonts && document.fonts.ready) {
+          await document.fonts.ready;
+      }
+      
+      // Slight delay for rendering
       await new Promise(resolve => setTimeout(resolve, 500));
       
-      // Scroll to top to ensure rendering context is clean (helpful for html2canvas)
+      // Scroll to top to ensure rendering context is clean
       window.scrollTo(0, 0);
 
       const opt = {
@@ -435,8 +473,8 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
           html2canvas: { 
               scale: 2, 
               useCORS: true, 
-              logging: true,
-              windowWidth: 1200, 
+              logging: false,
+              scrollX: 0,
               scrollY: 0,
               x: 0,
               y: 0
@@ -450,7 +488,9 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
           console.error("PDF Generation Error:", err);
           alert("เกิดข้อผิดพลาดในการสร้างไฟล์ PDF (อาจเกิดจากรูปภาพติดสิทธิ์การเข้าถึง)");
       } finally {
-          document.body.removeChild(container);
+          if (document.body.contains(container)) {
+              document.body.removeChild(container);
+          }
           setIsGenerating(false);
       }
   };
