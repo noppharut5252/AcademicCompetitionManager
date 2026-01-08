@@ -7,6 +7,9 @@ import { getCertificateConfig, getProxyImage } from '../services/api';
 import QRCode from 'qrcode';
 import SearchableSelect from './SearchableSelect';
 
+// Transparent 1x1 pixel for fallback to prevent CORS errors
+const TRANSPARENT_PIXEL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+
 interface CertificatesViewProps {
   data: AppData;
   user?: User | null;
@@ -325,12 +328,20 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
       // Helper to proxy url
       const processUrl = async (url: string) => {
           if (!url) return '';
+          // If already base64, return as is
+          if (url.startsWith('data:')) return url;
+          
           const id = extractDriveId(url);
           if (id) {
               const base64 = await getProxyImage(id);
               if (base64) return base64;
           }
-          return url;
+          
+          // CRITICAL FIX: If we can't proxy it, and it's a remote URL, 
+          // returning it will likely cause CORS crash in html2canvas.
+          // Better to return a placeholder or transparent pixel to prevent the PDF generation from failing completely.
+          console.warn(`Could not proxy image: ${url}. Returning transparent pixel to prevent CORS error.`);
+          return TRANSPARENT_PIXEL; 
       };
 
       // Process Images
@@ -388,15 +399,17 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
       const btn = container.querySelector('.no-print');
       if (btn) btn.remove();
       
-      // FIX: Use fixed position at top-left but behind everything, with explicit dimensions
+      // FIX: Use fixed position at top-left but behind everything (z-index -9999)
+      // This tricks the browser into thinking it's visible while keeping it hidden from user
       container.style.position = 'fixed';
       container.style.top = '0';
       container.style.left = '0';
       container.style.width = '297mm'; // A4 Landscape width
       container.style.height = '210mm'; // A4 Landscape height
       container.style.zIndex = '-9999'; // Behind other content
-      container.style.background = 'white'; // Ensure visible background
-      
+      container.style.background = 'white'; // Ensure visible background for canvas
+      container.style.pointerEvents = 'none'; // Prevent interaction
+
       document.body.appendChild(container);
 
       // Wait for all images inside container to load
@@ -409,8 +422,11 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
           });
       }));
       
-      // Slight delay for fonts/styles
+      // Slight delay for fonts/styles rendering
       await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Scroll to top to ensure rendering context is clean (helpful for html2canvas)
+      window.scrollTo(0, 0);
 
       const opt = {
           margin: 0,
@@ -419,9 +435,11 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
           html2canvas: { 
               scale: 2, 
               useCORS: true, 
-              logging: false,
-              windowWidth: 1123, // Approx px width for A4 landscape
-              windowHeight: 794 
+              logging: true,
+              windowWidth: 1200, 
+              scrollY: 0,
+              x: 0,
+              y: 0
           },
           jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
       };
