@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { CertificateTemplate, AppData, User } from '../types';
-import { Save, X, Image as ImageIcon, Plus, Trash2, LayoutTemplate, PenTool, CheckCircle, Upload, Loader2, AlertCircle, Hash, Info, Type, BoxSelect, ArrowUpFromLine, ArrowDownToLine, Scaling, MoveVertical, QrCode, Eye, ChevronDown, ChevronUp } from 'lucide-react';
+import { Save, X, Image as ImageIcon, Plus, Trash2, LayoutTemplate, PenTool, CheckCircle, Upload, Loader2, AlertCircle, Hash, Info, Type, BoxSelect, ArrowUpFromLine, ArrowDownToLine, Scaling, MoveVertical, QrCode, Eye, ChevronDown, ChevronUp, EyeOff } from 'lucide-react';
 import { uploadImage, saveCertificateConfig } from '../services/api';
 import { resizeImage, fileToBase64 } from '../services/utils';
 import QRCode from 'qrcode';
@@ -41,7 +42,9 @@ const DEFAULT_TEMPLATE: CertificateTemplate = {
     qrBottom: 10,
     qrRight: 10,
     fontFamily: 'Sarabun',
-    enableTextShadow: true
+    enableTextShadow: true,
+    hidePrintButton: false,
+    hidePdfButton: false
 };
 
 const FONT_OPTIONS = [
@@ -759,6 +762,39 @@ const CertificateConfigModal: React.FC<CertificateConfigModalProps> = ({ isOpen,
                                             value={currentTemplate.qrRight || 10}
                                             onChange={(e) => updateField('qrRight', parseInt(e.target.value))}
                                         />
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            {/* Display Options (NEW) */}
+                            <div className="bg-white p-3 rounded-lg border border-gray-200 shadow-sm">
+                                <h4 className="font-bold text-gray-800 border-b pb-2 mb-2 flex items-center text-sm">
+                                    <Eye className="w-4 h-4 mr-2 text-gray-500" /> การแสดงผลปุ่ม (Display Options)
+                                </h4>
+                                <div className="space-y-2">
+                                    <div className="flex items-center">
+                                        <input 
+                                            type="checkbox" 
+                                            id="hidePrintButton" 
+                                            className="w-4 h-4 text-red-600 rounded border-gray-300 focus:ring-red-500"
+                                            checked={currentTemplate.hidePrintButton === true}
+                                            onChange={(e) => updateField('hidePrintButton', e.target.checked)}
+                                        />
+                                        <label htmlFor="hidePrintButton" className="ml-2 text-xs text-gray-700 cursor-pointer select-none flex items-center">
+                                            <EyeOff className="w-3 h-3 mr-1"/> ซ่อนปุ่มพิมพ์ (Hide Print Button)
+                                        </label>
+                                    </div>
+                                    <div className="flex items-center">
+                                        <input 
+                                            type="checkbox" 
+                                            id="hidePdfButton" 
+                                            className="w-4 h-4 text-red-600 rounded border-gray-300 focus:ring-red-500"
+                                            checked={currentTemplate.hidePdfButton === true}
+                                            onChange={(e) => updateField('hidePdfButton', e.target.checked)}
+                                        />
+                                        <label htmlFor="hidePdfButton" className="ml-2 text-xs text-gray-700 cursor-pointer select-none flex items-center">
+                                            <EyeOff className="w-3 h-3 mr-1"/> ซ่อนปุ่มดาวน์โหลด PDF (Hide PDF Button)
+                                        </label>
                                     </div>
                                 </div>
                             </div>
