@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { AppData, User, Team, CertificateTemplate } from '../types';
 import { Search, FileBadge, Settings, Printer, LayoutGrid, Trophy, School, CheckCircle, ChevronLeft, ChevronRight, X, User as UserIcon, GraduationCap, Filter, Lock, Download, Loader2 } from 'lucide-react';
 import CertificateConfigModal from './CertificateConfigModal';
-import { getCertificateConfig } from '../services/api';
+import { getCertificateConfig, getProxyImage } from '../services/api';
 import QRCode from 'qrcode';
 import SearchableSelect from './SearchableSelect';
 
@@ -156,10 +156,7 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
 
       // Prepare Images (Convert to Base64 if needed for PDF)
       let bgUrl = template.backgroundUrl;
-      if (bgUrl && bgUrl.includes('drive.google.com') && bgUrl.includes('id=')) {
-          if (bgUrl.includes('sz=')) bgUrl = bgUrl.replace(/sz=w\d+/, 'sz=w4000'); 
-          else bgUrl += '&sz=w4000';
-      }
+      // We will use resolved images from the template logic that handles proxying
       
       // Ensure Transparent Background Style
       const transparentImgStyle = `background-color: transparent !important; mix-blend-mode: normal;`;
@@ -307,6 +304,11 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
         </body></html>`;
   };
 
+  const extractDriveId = (url: string) => {
+      const match = url.match(/id=([^&]+)/) || url.match(/\/d\/([^/]+)/);
+      return match ? match[1] : null;
+  }
+
   const prepareDataAndGetTemplate = async (team: Team) => {
       const schoolObj = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
       const clusterID = schoolObj?.SchoolCluster;
@@ -317,11 +319,34 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
           return null;
       }
 
+      // Clone template to update images with proxy base64
+      const processedTemplate = { ...template };
+
+      // Helper to proxy url
+      const processUrl = async (url: string) => {
+          if (!url) return '';
+          const id = extractDriveId(url);
+          if (id) {
+              const base64 = await getProxyImage(id);
+              if (base64) return base64;
+          }
+          return url;
+      };
+
+      // Process Images
+      if (processedTemplate.backgroundUrl) processedTemplate.backgroundUrl = await processUrl(processedTemplate.backgroundUrl);
+      if (processedTemplate.logoLeftUrl) processedTemplate.logoLeftUrl = await processUrl(processedTemplate.logoLeftUrl);
+      if (processedTemplate.logoRightUrl) processedTemplate.logoRightUrl = await processUrl(processedTemplate.logoRightUrl);
+      processedTemplate.signatories = await Promise.all(processedTemplate.signatories.map(async sig => ({
+          ...sig,
+          signatureUrl: await processUrl(sig.signatureUrl)
+      })));
+
       const verifyUrl = `${window.location.origin}${window.location.pathname}#/verify?id=${team.teamId}`;
       let qrCodeBase64 = '';
       try { qrCodeBase64 = await QRCode.toDataURL(verifyUrl, { margin: 1, width: 300 }); } catch (e) {}
 
-      return { template, qrCodeBase64 };
+      return { template: processedTemplate, qrCodeBase64 };
   };
 
   const handlePrint = async (team: Team) => {
