@@ -7,6 +7,9 @@ import { getCertificateConfig, getProxyImage } from '../services/api';
 import QRCode from 'qrcode';
 import SearchableSelect from './SearchableSelect';
 
+// Declare html2pdf from CDN
+declare var html2pdf: any;
+
 interface CertificatesViewProps {
   data: AppData;
   user?: User | null;
@@ -39,7 +42,7 @@ const CertificatesSkeleton = () => (
     </div>
 );
 
-const ProgressOverlay = ({ current, total, isVisible }: { current: number, total: number, isVisible: boolean }) => {
+const ProgressOverlay = ({ current, total, isVisible, mode = 'print' }: { current: number, total: number, isVisible: boolean, mode?: 'print' | 'download' }) => {
     if (!isVisible) return null;
     const percentage = total > 0 ? Math.round((current / total) * 100) : 0;
     
@@ -53,11 +56,11 @@ const ProgressOverlay = ({ current, total, isVisible }: { current: number, total
                 <div className="mb-4 relative">
                     <div className="absolute inset-0 bg-blue-100 rounded-full animate-ping opacity-20"></div>
                     <div className="relative bg-blue-50 p-4 rounded-full">
-                        <Printer className="w-8 h-8 text-blue-600 animate-pulse" />
+                        {mode === 'download' ? <Download className="w-8 h-8 text-green-600 animate-bounce" /> : <Printer className="w-8 h-8 text-blue-600 animate-pulse" />}
                     </div>
                 </div>
                 
-                <h3 className="text-xl font-bold text-gray-800 mb-1 font-kanit">กำลังจัดเตรียมเอกสาร</h3>
+                <h3 className="text-xl font-bold text-gray-800 mb-1 font-kanit">{mode === 'download' ? 'กำลังดาวน์โหลดไฟล์' : 'กำลังจัดเตรียมเอกสาร'}</h3>
                 <p className="text-sm text-gray-500 mb-6 font-kanit">กรุณาอย่าปิดหน้าต่างนี้ (Processing...)</p>
                 
                 <div className="w-full space-y-2">
@@ -67,7 +70,7 @@ const ProgressOverlay = ({ current, total, isVisible }: { current: number, total
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden shadow-inner">
                         <div 
-                            className="bg-gradient-to-r from-blue-500 to-indigo-600 h-full rounded-full transition-all duration-300 ease-out flex items-center justify-center" 
+                            className={`h-full rounded-full transition-all duration-300 ease-out flex items-center justify-center ${mode === 'download' ? 'bg-gradient-to-r from-green-500 to-emerald-600' : 'bg-gradient-to-r from-blue-500 to-indigo-600'}`}
                             style={{ width: `${percentage}%` }}
                         >
                         </div>
@@ -93,6 +96,7 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
   // Bulk Selection & Processing
   const [selectedTeamIds, setSelectedTeamIds] = useState<Set<string>>(new Set());
   const [isGenerating, setIsGenerating] = useState(false);
+  const [generationMode, setGenerationMode] = useState<'print' | 'download'>('print');
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   
   // Config & Modals
@@ -238,9 +242,6 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
       setSelectedTeamIds(newSet);
   };
 
-  // Improved Select All Logic: Check if all VISIBLE items are selected
-  const isAllPageSelected = paginatedTeams.length > 0 && paginatedTeams.every(t => selectedTeamIds.has(t.teamId));
-
   const handleSelectAll = () => {
       const newSet = new Set(selectedTeamIds);
       if (isAllPageSelected) {
@@ -252,6 +253,9 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
       }
       setSelectedTeamIds(newSet);
   };
+  
+  // Improved Select All Logic: Check if all VISIBLE items are selected
+  const isAllPageSelected = paginatedTeams.length > 0 && paginatedTeams.every(t => selectedTeamIds.has(t.teamId));
 
   // --- Print Generation Logic ---
 
@@ -388,15 +392,56 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
       }).join('');
   };
 
+  const getCSSStyles = () => `
+    <link href="https://fonts.googleapis.com/css2?family=Bai+Jamjuree:wght@400;600&family=Chakra+Petch:wght@400;600&family=Charmonman:wght@400;700&family=Kanit:wght@300;400;600&family=Kodchasan:wght@400;600&family=Mali:wght@400;600&family=Noto+Serif+Thai:wght@400;600&family=Sarabun:wght@400;600&family=Srisakdi:wght@400;700&family=Thasadith:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        @page { size: A4 landscape; margin: 0; }
+        body { margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        .page { width: 297mm; height: 210mm; position: relative; overflow: hidden; page-break-after: always; background-color: white; }
+        .frame-simple-gold { position: absolute; top: 6mm; left: 6mm; right: 6mm; bottom: 6mm; border: 3px solid #D4AF37; border-radius: 8px; z-index: 1; pointer-events: none; }
+        .frame-infinite-wave { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-image: url('data:image/svg+xml;utf8,<svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg"><defs><pattern id="wave" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M0 20 Q 10 0 20 20 T 40 20" fill="none" stroke="%23FDE047" stroke-width="2" stroke-opacity="0.3"/></pattern></defs><rect width="100%" height="100%" fill="url(%23wave)"/></svg>'); z-index: 1; pointer-events: none; border: 10mm solid transparent; }
+        .frame-ornamental-corners { position: absolute; top: 10mm; left: 10mm; right: 10mm; bottom: 10mm; border: 2px solid #666; z-index: 1; pointer-events: none; }
+        .frame-ornamental-corners::before { content: ''; position: absolute; top: -2px; left: -2px; width: 40px; height: 40px; border-top: 5px solid #D4AF37; border-left: 5px solid #D4AF37; }
+        .frame-ornamental-corners::after { content: ''; position: absolute; bottom: -2px; right: -2px; width: 40px; height: 40px; border-bottom: 5px solid #D4AF37; border-right: 5px solid #D4AF37; }
+        .frame-ornamental-extra { content: ''; position: absolute; top: 10mm; right: 10mm; width: 40px; height: 40px; border-top: 5px solid #D4AF37; border-right: 5px solid #D4AF37; }
+        .frame-ornamental-extra2 { content: ''; position: absolute; bottom: 10mm; left: 10mm; width: 40px; height: 40px; border-bottom: 5px solid #D4AF37; border-left: 5px solid #D4AF37; }
+        .frame-thai-premium { position: absolute; top: 10mm; left: 10mm; right: 10mm; bottom: 10mm; border: 8px solid transparent; border-image: linear-gradient(to bottom right, #b88746, #fdf5a6, #b88746) 1; z-index: 1; pointer-events: none; }
+        .bg-img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }
+        .content { position: relative; z-index: 10; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; box-sizing: border-box; }
+        .text-shadow-white { text-shadow: 2px 0 0 #fff, -2px 0 0 #fff, 0 2px 0 #fff, 0 -2px 0 #fff, 1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff; }
+        .logos { display: flex; justify-content: space-between; width: 80%; margin-bottom: 5mm; position: relative; }
+        .logos.single { justify-content: center; }
+        .logo-img { height: 100%; object-fit: contain; background-color: transparent !important; } 
+        .header { font-size: 24pt; font-weight: bold; color: #1e3a8a; margin-bottom: 5mm; text-align: center; line-height: 1.2; }
+        .subheader { font-size: 16pt; margin-bottom: 8mm; text-align: center; }
+        .name { font-size: 32pt; font-weight: bold; color: #111; margin-bottom: 5mm; text-align: center; border-bottom: 2px dotted #ccc; padding: 0 20px; min-width: 50%; }
+        .desc { font-size: 16pt; margin-bottom: 5mm; max-width: 80%; text-align: center; line-height: 1.5; }
+        .highlight { font-weight: bold; color: #2563eb; }
+        .date { font-size: 14pt; margin-top: auto; margin-bottom: 10mm; }
+        .signatures { display: flex; justify-content: center; gap: 15mm; width: 90%; align-items: flex-end; }
+        .sig-block { display: flex; flex-direction: column; align-items: center; text-align: center; min-width: 60mm; }
+        .sig-img { height: 20mm; object-fit: contain; margin-bottom: -5mm; z-index: 1; background-color: transparent !important; }
+        .sig-line { width: 100%; border-bottom: 1px dotted #000; margin-bottom: 2px; }
+        .sig-name { font-size: 12pt; font-weight: bold; padding-top: 2px; width: 100%; }
+        .sig-pos { font-size: 10pt; white-space: pre-line; line-height: 1.3; margin-top: 2px; }
+        .qr-verify { position: absolute; display: flex; flex-direction: column; align-items: center; background: rgba(255, 255, 255, 0.9); padding: 6px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .qr-img { width: 22mm; height: 22mm; background-color: transparent !important; }
+        .qr-text { font-size: 8pt; margin-top: 2px; color: #333; font-weight: bold; text-transform: uppercase; }
+        .serial-no { position: absolute; font-size: 10pt; font-family: 'Courier New', monospace; color: #333; font-weight: bold; background: rgba(255, 255, 255, 0.85); padding: 2px 8px; border-radius: 4px; border: 1px solid #ddd; }
+        .no-print { display: block; position: fixed; bottom: 20px; right: 20px; z-index: 1000; }
+        @media print { .no-print { display: none; } }
+    </style>
+  `;
+
+  // --- Print Handler (Popup) ---
   const handleBulkPrint = async (teamsToPrint: Team[]) => {
-      // 1. OPEN WINDOW IMMEDIATELY to bypass blocker
       const printWindow = window.open('', '_blank');
       if (!printWindow) {
           alert('Pop-up ถูกบล็อก กรุณาอนุญาต pop-up สำหรับเว็บไซต์นี้');
           return;
       }
 
-      // 2. Set Loading State inside the new window and in app
+      setGenerationMode('print');
       setIsGenerating(true);
       setProgress({ current: 0, total: teamsToPrint.length });
       
@@ -439,37 +484,30 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
         </html>
       `);
 
-      // Initialize Image Cache (Memory Cache for this batch)
       const imageCache = new Map<string, string>();
-      const BATCH_SIZE = 5; // Parallel requests per batch to speed up
+      const BATCH_SIZE = 5; 
 
       try {
           let fullContent = '';
           const total = teamsToPrint.length;
 
-          // Process in batches
           for (let i = 0; i < total; i += BATCH_SIZE) {
               const batch = teamsToPrint.slice(i, i + BATCH_SIZE);
               
-              // Process batch in parallel
               const batchResults = await Promise.all(
                   batch.map(team => prepareDataAndGetTemplate(team, imageCache))
               );
 
-              // Generate HTML for valid results
               batchResults.forEach((prep, index) => {
                   if (prep) {
-                      // Access original team from batch index
                       const teamHtml = getPageHtml(batch[index], prep.template, prep.qrCodeBase64);
                       fullContent += teamHtml;
                   }
               });
 
-              // Update progress
               const currentCount = Math.min(i + BATCH_SIZE, total);
               setProgress({ current: currentCount, total });
 
-              // Update Pop-up UI
               if (!printWindow.closed) {
                   const percent = Math.round((currentCount / total) * 100);
                   const barEl = printWindow.document.getElementById('progressBar');
@@ -480,50 +518,8 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
               }
           }
 
-          // CSS styles for final print
-          const cssStyles = `
-            <link href="https://fonts.googleapis.com/css2?family=Bai+Jamjuree:wght@400;600&family=Chakra+Petch:wght@400;600&family=Charmonman:wght@400;700&family=Kanit:wght@300;400;600&family=Kodchasan:wght@400;600&family=Mali:wght@400;600&family=Noto+Serif+Thai:wght@400;600&family=Sarabun:wght@400;600&family=Srisakdi:wght@400;700&family=Thasadith:wght@400;700&display=swap" rel="stylesheet">
-            <style>
-                @page { size: A4 landscape; margin: 0; }
-                body { margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-                .page { width: 297mm; height: 210mm; position: relative; overflow: hidden; page-break-after: always; background-color: white; }
-                .frame-simple-gold { position: absolute; top: 6mm; left: 6mm; right: 6mm; bottom: 6mm; border: 3px solid #D4AF37; border-radius: 8px; z-index: 1; pointer-events: none; }
-                .frame-infinite-wave { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-image: url('data:image/svg+xml;utf8,<svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg"><defs><pattern id="wave" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M0 20 Q 10 0 20 20 T 40 20" fill="none" stroke="%23FDE047" stroke-width="2" stroke-opacity="0.3"/></pattern></defs><rect width="100%" height="100%" fill="url(%23wave)"/></svg>'); z-index: 1; pointer-events: none; border: 10mm solid transparent; }
-                .frame-ornamental-corners { position: absolute; top: 10mm; left: 10mm; right: 10mm; bottom: 10mm; border: 2px solid #666; z-index: 1; pointer-events: none; }
-                .frame-ornamental-corners::before { content: ''; position: absolute; top: -2px; left: -2px; width: 40px; height: 40px; border-top: 5px solid #D4AF37; border-left: 5px solid #D4AF37; }
-                .frame-ornamental-corners::after { content: ''; position: absolute; bottom: -2px; right: -2px; width: 40px; height: 40px; border-bottom: 5px solid #D4AF37; border-right: 5px solid #D4AF37; }
-                .frame-ornamental-extra { content: ''; position: absolute; top: 10mm; right: 10mm; width: 40px; height: 40px; border-top: 5px solid #D4AF37; border-right: 5px solid #D4AF37; }
-                .frame-ornamental-extra2 { content: ''; position: absolute; bottom: 10mm; left: 10mm; width: 40px; height: 40px; border-bottom: 5px solid #D4AF37; border-left: 5px solid #D4AF37; }
-                .frame-thai-premium { position: absolute; top: 10mm; left: 10mm; right: 10mm; bottom: 10mm; border: 8px solid transparent; border-image: linear-gradient(to bottom right, #b88746, #fdf5a6, #b88746) 1; z-index: 1; pointer-events: none; }
-                .bg-img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }
-                .content { position: relative; z-index: 10; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; box-sizing: border-box; }
-                .text-shadow-white { text-shadow: 2px 0 0 #fff, -2px 0 0 #fff, 0 2px 0 #fff, 0 -2px 0 #fff, 1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff; }
-                .logos { display: flex; justify-content: space-between; width: 80%; margin-bottom: 5mm; position: relative; }
-                .logos.single { justify-content: center; }
-                .logo-img { height: 100%; object-fit: contain; background-color: transparent !important; } 
-                .header { font-size: 24pt; font-weight: bold; color: #1e3a8a; margin-bottom: 5mm; text-align: center; line-height: 1.2; }
-                .subheader { font-size: 16pt; margin-bottom: 8mm; text-align: center; }
-                .name { font-size: 32pt; font-weight: bold; color: #111; margin-bottom: 5mm; text-align: center; border-bottom: 2px dotted #ccc; padding: 0 20px; min-width: 50%; }
-                .desc { font-size: 16pt; margin-bottom: 5mm; max-width: 80%; text-align: center; line-height: 1.5; }
-                .highlight { font-weight: bold; color: #2563eb; }
-                .date { font-size: 14pt; margin-top: auto; margin-bottom: 10mm; }
-                .signatures { display: flex; justify-content: center; gap: 15mm; width: 90%; align-items: flex-end; }
-                .sig-block { display: flex; flex-direction: column; align-items: center; text-align: center; min-width: 60mm; }
-                .sig-img { height: 20mm; object-fit: contain; margin-bottom: -5mm; z-index: 1; background-color: transparent !important; }
-                .sig-line { width: 100%; border-bottom: 1px dotted #000; margin-bottom: 2px; }
-                .sig-name { font-size: 12pt; font-weight: bold; padding-top: 2px; width: 100%; }
-                .sig-pos { font-size: 10pt; white-space: pre-line; line-height: 1.3; margin-top: 2px; }
-                .qr-verify { position: absolute; display: flex; flex-direction: column; align-items: center; background: rgba(255, 255, 255, 0.9); padding: 6px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-                .qr-img { width: 22mm; height: 22mm; background-color: transparent !important; }
-                .qr-text { font-size: 8pt; margin-top: 2px; color: #333; font-weight: bold; text-transform: uppercase; }
-                .serial-no { position: absolute; font-size: 10pt; font-family: 'Courier New', monospace; color: #333; font-weight: bold; background: rgba(255, 255, 255, 0.85); padding: 2px 8px; border-radius: 4px; border: 1px solid #ddd; }
-                .no-print { display: block; position: fixed; bottom: 20px; right: 20px; z-index: 1000; }
-                @media print { .no-print { display: none; } }
-            </style>
-          `;
-
           printWindow.document.open();
-          printWindow.document.write(`<html><head><title>Print Certificates</title>${cssStyles}</head><body><div class="no-print"><button onclick="window.print()" style="padding:10px 20px;background:#2563eb;color:white;border:none;border-radius:8px;cursor:pointer;font-family:sans-serif;font-weight:bold;">🖨️ พิมพ์ / บันทึก PDF (${total} ทีม)</button></div>${fullContent}</body></html>`);
+          printWindow.document.write(`<html><head><title>Print Certificates</title>${getCSSStyles()}</head><body><div class="no-print"><button onclick="window.print()" style="padding:10px 20px;background:#2563eb;color:white;border:none;border-radius:8px;cursor:pointer;font-family:sans-serif;font-weight:bold;">🖨️ พิมพ์ / บันทึก PDF (${total} ทีม)</button></div>${fullContent}</body></html>`);
           printWindow.document.close();
 
       } catch (e) {
@@ -532,15 +528,83 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
           printWindow.close();
       } finally {
           setIsGenerating(false);
-          // Clear selection after successful generation
+          setSelectedTeamIds(new Set());
+      }
+  };
+
+  // --- File Download Handler (Using html2pdf) ---
+  const handleFileDownload = async (teamsToPrint: Team[]) => {
+      setGenerationMode('download');
+      setIsGenerating(true);
+      setProgress({ current: 0, total: teamsToPrint.length });
+
+      const imageCache = new Map<string, string>();
+      const BATCH_SIZE = 5;
+      
+      // Temporary container
+      const container = document.createElement('div');
+      container.style.position = 'absolute';
+      container.style.top = '-9999px';
+      container.style.width = '297mm'; // A4 Landscape
+      
+      // Inject Styles locally so html2pdf can render
+      container.innerHTML = getCSSStyles();
+      
+      document.body.appendChild(container);
+
+      try {
+          let fullHtml = '';
+          const total = teamsToPrint.length;
+
+          for (let i = 0; i < total; i += BATCH_SIZE) {
+              const batch = teamsToPrint.slice(i, i + BATCH_SIZE);
+              
+              const batchResults = await Promise.all(
+                  batch.map(team => prepareDataAndGetTemplate(team, imageCache))
+              );
+
+              batchResults.forEach((prep, index) => {
+                  if (prep) {
+                      fullHtml += getPageHtml(batch[index], prep.template, prep.qrCodeBase64);
+                  }
+              });
+
+              const currentCount = Math.min(i + BATCH_SIZE, total);
+              setProgress({ current: currentCount, total });
+          }
+          
+          // Append content to container
+          const contentDiv = document.createElement('div');
+          contentDiv.innerHTML = fullHtml;
+          container.appendChild(contentDiv);
+
+          // Configure PDF
+          const opt = {
+            margin: 0,
+            filename: `certificates_${new Date().getTime()}.pdf`,
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2, useCORS: true, logging: false },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
+          };
+          
+          // Generate
+          await html2pdf().set(opt).from(contentDiv).save();
+
+      } catch (e) {
+          console.error(e);
+          alert('เกิดข้อผิดพลาดในการดาวน์โหลด PDF');
+      } finally {
+          document.body.removeChild(container);
+          setIsGenerating(false);
           setSelectedTeamIds(new Set());
       }
   };
 
   const handleDownloadPDF = async (team: Team) => {
-      // Re-use bulk print logic for single item for consistency, 
-      // but if specific PDF file download is needed via html2pdf, keep separate logic.
-      // For now, let's trigger print view for consistency as browsers handle "Save to PDF" well.
+      handleFileDownload([team]);
+  };
+
+  const handlePrintPDF = async (team: Team) => {
       handleBulkPrint([team]);
   };
 
@@ -550,7 +614,7 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
     <div className="space-y-6 animate-in fade-in duration-500 pb-20 relative">
         
         {/* Loading Overlay */}
-        <ProgressOverlay current={progress.current} total={progress.total} isVisible={isGenerating} />
+        <ProgressOverlay current={progress.current} total={progress.total} isVisible={isGenerating} mode={generationMode} />
 
         {showConfigModal && <CertificateConfigModal isOpen={showConfigModal} onClose={() => setShowConfigModal(false)} data={data} onSave={handleSaveTemplates} initialTemplates={certificateTemplates} currentUser={user} />}
         
@@ -603,8 +667,9 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
         
         {/* Bulk Action Bar */}
         {selectedTeamIds.size > 0 && (
-            <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50 bg-white border border-blue-200 shadow-xl rounded-full px-6 py-3 flex items-center gap-4 animate-in slide-in-from-bottom-5">
-                <span className="text-sm font-bold text-gray-700">เลือกแล้ว {selectedTeamIds.size} รายการ</span>
+            <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50 bg-white border border-blue-200 shadow-xl rounded-full px-6 py-3 flex items-center gap-4 animate-in slide-in-from-bottom-5 w-max max-w-[90vw]">
+                <span className="text-sm font-bold text-gray-700 whitespace-nowrap hidden sm:inline">เลือก {selectedTeamIds.size} รายการ</span>
+                
                 <button 
                     onClick={() => {
                         const teamsToPrint = filteredTeams.filter(t => selectedTeamIds.has(t.teamId));
@@ -613,8 +678,22 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
                     disabled={isGenerating}
                     className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-full text-sm font-bold flex items-center shadow-md transition-transform active:scale-95 disabled:opacity-50"
                 >
-                    {isGenerating ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : <Printer className="w-4 h-4 mr-2"/>}
-                    พิมพ์ที่เลือก
+                    {isGenerating && generationMode === 'print' ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : <Printer className="w-4 h-4 mr-2"/>}
+                    <span className="hidden sm:inline">พิมพ์ (Pop-up)</span>
+                    <span className="sm:hidden">พิมพ์</span>
+                </button>
+
+                <button 
+                    onClick={() => {
+                        const teamsToPrint = filteredTeams.filter(t => selectedTeamIds.has(t.teamId));
+                        handleFileDownload(teamsToPrint);
+                    }}
+                    disabled={isGenerating}
+                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-full text-sm font-bold flex items-center shadow-md transition-transform active:scale-95 disabled:opacity-50"
+                >
+                    {isGenerating && generationMode === 'download' ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : <Download className="w-4 h-4 mr-2"/>}
+                    <span className="hidden sm:inline">ดาวน์โหลด PDF</span>
+                    <span className="sm:hidden">โหลด</span>
                 </button>
             </div>
         )}
@@ -645,12 +724,18 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
                             <div className="text-xs text-gray-400 mt-2 truncate">{(data.activities.find(a=>a.id===team.activityId)?.name)}</div>
                         </div>
                         
-                        <div className="mt-3 pt-3 border-t border-gray-50 flex justify-end">
+                        <div className="mt-3 pt-3 border-t border-gray-50 flex justify-end gap-2">
                             <button 
-                                onClick={(e) => { e.stopPropagation(); handleDownloadPDF(team); }}
-                                className="text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg flex items-center"
+                                onClick={(e) => { e.stopPropagation(); handlePrintPDF(team); }}
+                                className="text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg flex items-center hover:bg-blue-100"
                             >
                                 <Printer className="w-3 h-3 mr-1"/> พิมพ์
+                            </button>
+                            <button 
+                                onClick={(e) => { e.stopPropagation(); handleDownloadPDF(team); }}
+                                className="text-xs font-bold text-green-600 bg-green-50 px-3 py-1.5 rounded-lg flex items-center hover:bg-green-100"
+                            >
+                                <Download className="w-3 h-3 mr-1"/> โหลด PDF
                             </button>
                         </div>
                     </div>
@@ -666,7 +751,7 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
                         <tr>
                             <th className="px-4 py-3 w-12 text-center">
                                 <button onClick={handleSelectAll} className="text-gray-400 hover:text-blue-600">
-                                    {paginatedTeams.length > 0 && paginatedTeams.every(t => selectedTeamIds.has(t.teamId)) ? <CheckSquare className="w-5 h-5 text-blue-600"/> : <Square className="w-5 h-5"/>}
+                                    {selectedTeamIds.size === paginatedTeams.length && paginatedTeams.length > 0 ? <CheckSquare className="w-5 h-5 text-blue-600"/> : <Square className="w-5 h-5"/>}
                                 </button>
                             </th>
                             <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">ทีม</th>
@@ -702,8 +787,11 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
                                     <td className="px-6 py-4 text-right">
                                         {score > 0 ? (
                                             <div className="flex justify-end gap-2" onClick={e => e.stopPropagation()}>
+                                                <button onClick={() => handlePrintPDF(team)} className="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-xs font-bold flex items-center shadow-sm">
+                                                    <Printer className="w-4 h-4 mr-1"/> พิมพ์
+                                                </button>
                                                 <button onClick={() => handleDownloadPDF(team)} className="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 text-xs font-bold flex items-center shadow-sm">
-                                                    <Printer className="w-4 h-4 mr-1"/> พิมพ์เดี่ยว
+                                                    <Download className="w-4 h-4 mr-1"/> PDF
                                                 </button>
                                             </div>
                                         ) : (
