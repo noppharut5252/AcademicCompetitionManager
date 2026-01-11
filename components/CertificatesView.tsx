@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { AppData, User, Team, CertificateTemplate } from '../types';
 import { Search, FileBadge, Settings, Printer, LayoutGrid, Trophy, School, CheckCircle, ChevronLeft, ChevronRight, X, User as UserIcon, GraduationCap, Filter, Lock, Download, Loader2, CheckSquare, Square, Medal, AlertCircle } from 'lucide-react';
@@ -56,11 +57,11 @@ const ProgressOverlay = ({ current, total, isVisible }: { current: number, total
                     </div>
                 </div>
                 
-                <h3 className="text-xl font-bold text-gray-800 mb-1">กำลังจัดเตรียมเอกสาร</h3>
-                <p className="text-sm text-gray-500 mb-6">กรุณาอย่าปิดหน้าต่างนี้</p>
+                <h3 className="text-xl font-bold text-gray-800 mb-1 font-kanit">กำลังจัดเตรียมเอกสาร</h3>
+                <p className="text-sm text-gray-500 mb-6 font-kanit">กรุณาอย่าปิดหน้าต่างนี้ (Processing...)</p>
                 
                 <div className="w-full space-y-2">
-                    <div className="flex justify-between text-xs font-bold text-gray-600 px-1">
+                    <div className="flex justify-between text-xs font-bold text-gray-600 px-1 font-kanit">
                         <span>Progress</span>
                         <span>{percentage}%</span>
                     </div>
@@ -71,7 +72,7 @@ const ProgressOverlay = ({ current, total, isVisible }: { current: number, total
                         >
                         </div>
                     </div>
-                    <div className="text-center text-xs text-gray-400 mt-2">
+                    <div className="text-center text-xs text-gray-400 mt-2 font-kanit">
                         กำลังประมวลผลลำดับที่ {current} จาก {total}
                     </div>
                 </div>
@@ -245,7 +246,8 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
       return match ? match[1] : null;
   }
 
-  const prepareDataAndGetTemplate = async (team: Team) => {
+  // Updated: Accept imageCache to prevent re-fetching
+  const prepareDataAndGetTemplate = async (team: Team, imageCache: Map<string, string>) => {
       const schoolObj = data.schools.find(s => s.SchoolID === team.schoolId || s.SchoolName === team.schoolId);
       const clusterID = schoolObj?.SchoolCluster;
       let template = viewLevel === 'area' ? certificateTemplates['area'] : (clusterID ? certificateTemplates[clusterID] : undefined);
@@ -254,16 +256,22 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
 
       const processedTemplate = { ...template };
       
-      // Basic Cache check could be added here if needed, 
-      // but for now we fetch to ensure freshness or rely on browser cache for images
-
+      // Helper to use cache
       const processUrl = async (url: string) => {
           if (!url || url.trim() === '') return '';
+          
+          // Check memory cache first
+          if (imageCache.has(url)) return imageCache.get(url)!;
+
           const id = extractDriveId(url);
           if (id) {
               const base64 = await getProxyImage(id);
-              if (base64) return base64;
+              if (base64) {
+                  imageCache.set(url, base64); // Save to cache
+                  return base64;
+              }
           }
+          // If no ID (public URL) or fetch failed, return original
           return url;
       };
 
@@ -379,43 +387,82 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
       setProgress({ current: 0, total: teamsToPrint.length });
       
       const loadingStyles = `
+        <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;600&family=Sarabun:wght@400;600&display=swap" rel="stylesheet">
         <style>
-            body { font-family: sans-serif; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f8fafc; color: #334155; }
-            .loader { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin-bottom: 20px; }
+            body { font-family: 'Kanit', sans-serif; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f8fafc; color: #334155; }
+            .loader-container { background: white; padding: 40px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); text-align: center; max-width: 400px; width: 90%; border: 1px solid #e2e8f0; }
+            .loader { border: 4px solid #f1f5f9; border-top: 4px solid #2563eb; border-radius: 50%; width: 40px; height: 40px; animation: spin 0.8s linear infinite; margin: 0 auto 20px auto; }
             @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-            h1 { font-size: 24px; margin-bottom: 10px; }
-            p { font-size: 16px; color: #64748b; }
-            .progress { width: 300px; height: 10px; background: #e2e8f0; border-radius: 5px; overflow: hidden; margin-top: 20px; }
-            .bar { height: 100%; background: #3b82f6; width: 0%; transition: width 0.3s ease; }
+            h1 { font-size: 20px; margin-bottom: 8px; color: #1e293b; font-weight: 600; }
+            p { font-size: 14px; color: #64748b; margin-bottom: 24px; }
+            .progress-container { width: 100%; background: #f1f5f9; border-radius: 99px; height: 8px; overflow: hidden; margin-bottom: 10px; }
+            .progress-bar { height: 100%; background: linear-gradient(90deg, #2563eb, #4f46e5); width: 0%; transition: width 0.3s ease; border-radius: 99px; }
+            .status-text { font-size: 12px; color: #94a3b8; font-family: 'Sarabun', sans-serif; }
+            .no-close-warning { margin-top: 20px; font-size: 12px; color: #ef4444; background: #fef2f2; padding: 8px 12px; border-radius: 8px; border: 1px solid #fee2e2; }
         </style>
       `;
-      printWindow.document.write(`<html><head><title>Generating...</title>${loadingStyles}</head><body><div class="loader"></div><h1>กำลังสร้างเอกสาร...</h1><p>กรุณารอสักครู่ (0 / ${teamsToPrint.length})</p><div class="progress"><div class="bar" id="progressBar"></div></div></body></html>`);
+      
+      printWindow.document.write(`
+        <html>
+            <head>
+                <title>Generating Certificates...</title>
+                ${loadingStyles}
+            </head>
+            <body>
+                <div class="loader-container">
+                    <div class="loader"></div>
+                    <h1>กำลังสร้างเอกสาร...</h1>
+                    <p id="statusDesc">ระบบกำลังจัดเตรียมเกียรติบัตร กรุณารอสักครู่</p>
+                    
+                    <div class="progress-container">
+                        <div class="progress-bar" id="progressBar"></div>
+                    </div>
+                    <div class="status-text" id="statusText">Processing 0 / ${teamsToPrint.length}</div>
+                    
+                    <div class="no-close-warning">⚠️ กรุณาอย่าปิดหน้าต่างนี้จนกว่าจะเสร็จสิ้น</div>
+                </div>
+            </body>
+        </html>
+      `);
+
+      // Initialize Image Cache (Memory Cache for this batch)
+      const imageCache = new Map<string, string>();
+      const BATCH_SIZE = 5; // Parallel requests per batch to speed up
 
       try {
           let fullContent = '';
           const total = teamsToPrint.length;
 
-          // Process sequentially
-          for (let i = 0; i < total; i++) {
-              const team = teamsToPrint[i];
-              const count = i + 1;
+          // Process in batches
+          for (let i = 0; i < total; i += BATCH_SIZE) {
+              const batch = teamsToPrint.slice(i, i + BATCH_SIZE);
               
-              // Update states
-              setProgress({ current: count, total });
-              
-              // Try to update pop-up content if still open
+              // Process batch in parallel
+              const batchResults = await Promise.all(
+                  batch.map(team => prepareDataAndGetTemplate(team, imageCache))
+              );
+
+              // Generate HTML for valid results
+              batchResults.forEach((prep, index) => {
+                  if (prep) {
+                      // Access original team from batch index
+                      const teamHtml = getPageHtml(batch[index], prep.template, prep.qrCodeBase64);
+                      fullContent += teamHtml;
+                  }
+              });
+
+              // Update progress
+              const currentCount = Math.min(i + BATCH_SIZE, total);
+              setProgress({ current: currentCount, total });
+
+              // Update Pop-up UI
               if (!printWindow.closed) {
-                  const percent = Math.round((count / total) * 100);
-                  const pEl = printWindow.document.querySelector('p');
+                  const percent = Math.round((currentCount / total) * 100);
                   const barEl = printWindow.document.getElementById('progressBar');
-                  if (pEl) pEl.innerText = `กรุณารอสักครู่ (${count} / ${total})`;
+                  const textEl = printWindow.document.getElementById('statusText');
+                  
                   if (barEl) barEl.style.width = `${percent}%`;
-              }
-              
-              const prep = await prepareDataAndGetTemplate(team);
-              if (prep) {
-                  const teamHtml = getPageHtml(team, prep.template, prep.qrCodeBase64);
-                  fullContent += teamHtml;
+                  if (textEl) textEl.innerText = `Processing ${currentCount} / ${total} (${percent}%)`;
               }
           }
 
