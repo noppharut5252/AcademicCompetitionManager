@@ -33,7 +33,10 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
   const isAdminOrArea = userRole === 'admin' || userRole === 'area';
   const isGroupAdmin = userRole === 'group_admin';
   const isSchoolAdmin = userRole === 'school_admin' || userRole === 'user';
-  const canConfigureCert = isAdminOrArea || isGroupAdmin;
+  
+  // Logic update: Button visibility
+  // Admin/Area can always configure. GroupAdmin can only configure in Cluster view.
+  const canConfigureCert = isAdminOrArea || (isGroupAdmin && viewLevel === 'cluster');
 
   // Context for filters
   const userSchool = data.schools.find(s => s.SchoolID === user?.SchoolID);
@@ -350,20 +353,53 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
   };
 
   const handlePrint = async (team: Team) => {
-      setIsGenerating(true);
-      const prep = await prepareDataAndGetTemplate(team);
-      if (!prep) { setIsGenerating(false); return; }
-
-      // Delay for UI update
-      await new Promise(resolve => setTimeout(resolve, 800));
-
+      // 1. Open window immediately to avoid pop-up blocker
       const printWindow = window.open('', '_blank');
-      if (!printWindow) { setIsGenerating(false); alert('Pop-up blocked'); return; }
+      
+      if (!printWindow) {
+          alert('Pop-up ถูกบล็อก กรุณาอนุญาตให้เปิดหน้าต่างใหม่');
+          return;
+      }
 
-      const htmlContent = await generateCertificateHtmlContent(team, prep.template, prep.qrCodeBase64);
-      printWindow.document.write(htmlContent);
-      printWindow.document.close();
-      setIsGenerating(false);
+      // 2. Show loading message in the new window
+      printWindow.document.write(`
+        <html>
+            <head><title>Generating...</title></head>
+            <body style="display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;background:#f3f4f6;">
+                <div style="text-align:center;">
+                    <div style="width:40px;height:40px;border:4px solid #e5e7eb;border-top:4px solid #3b82f6;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 10px;"></div>
+                    <p style="color:#4b5563;">กำลังจัดเตรียมเอกสาร (Preparing Document)...</p>
+                </div>
+                <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
+            </body>
+        </html>
+      `);
+
+      setIsGenerating(true);
+      
+      try {
+          const prep = await prepareDataAndGetTemplate(team);
+          
+          if (!prep) { 
+              setIsGenerating(false); 
+              printWindow.close(); 
+              return; 
+          }
+
+          // Generate HTML
+          const htmlContent = await generateCertificateHtmlContent(team, prep.template, prep.qrCodeBase64);
+          
+          // 3. Write content to the open window
+          printWindow.document.open();
+          printWindow.document.write(htmlContent);
+          printWindow.document.close();
+      } catch (e) {
+          console.error("Print Error:", e);
+          printWindow.close();
+          alert('เกิดข้อผิดพลาดในการสร้างเอกสาร');
+      } finally {
+          setIsGenerating(false);
+      }
   };
 
   const handleDownloadPDF = async (team: Team) => {
@@ -440,7 +476,7 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
             </div>
         </div>
 
-        {/* Improved Filters */}
+        {/* Filters */}
         <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col md:flex-row gap-4">
             <div className="relative flex-1">
                 <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
