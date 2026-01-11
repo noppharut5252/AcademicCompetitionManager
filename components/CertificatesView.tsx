@@ -1,7 +1,6 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { AppData, User, Team, CertificateTemplate } from '../types';
-import { Search, FileBadge, Settings, Printer, LayoutGrid, Trophy, School, CheckCircle, ChevronLeft, ChevronRight, X, User as UserIcon, GraduationCap, Filter, Lock, Download, Loader2, CheckSquare, Square, Medal } from 'lucide-react';
+import { Search, FileBadge, Settings, Printer, LayoutGrid, Trophy, School, CheckCircle, ChevronLeft, ChevronRight, X, User as UserIcon, GraduationCap, Filter, Lock, Download, Loader2, CheckSquare, Square, Medal, AlertCircle } from 'lucide-react';
 import CertificateConfigModal from './CertificateConfigModal';
 import { getCertificateConfig, getProxyImage } from '../services/api';
 import QRCode from 'qrcode';
@@ -12,7 +11,8 @@ interface CertificatesViewProps {
   user?: User | null;
 }
 
-// --- Skeleton Component ---
+// --- Internal Components ---
+
 const CertificatesSkeleton = () => (
     <div className="space-y-6 animate-pulse">
         <div className="bg-white p-6 rounded-xl border border-gray-100 flex justify-between items-center">
@@ -38,19 +38,61 @@ const CertificatesSkeleton = () => (
     </div>
 );
 
+const ProgressOverlay = ({ current, total, isVisible }: { current: number, total: number, isVisible: boolean }) => {
+    if (!isVisible) return null;
+    const percentage = total > 0 ? Math.round((current / total) * 100) : 0;
+    
+    return (
+        <div className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm flex flex-col items-center justify-center text-white animate-in fade-in duration-200">
+            <div className="bg-white p-8 rounded-3xl shadow-2xl flex flex-col items-center max-w-sm w-full relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-1 bg-gray-100">
+                    <div className="h-full bg-blue-600 transition-all duration-300" style={{ width: `${percentage}%` }}></div>
+                </div>
+                
+                <div className="mb-4 relative">
+                    <div className="absolute inset-0 bg-blue-100 rounded-full animate-ping opacity-20"></div>
+                    <div className="relative bg-blue-50 p-4 rounded-full">
+                        <Printer className="w-8 h-8 text-blue-600 animate-pulse" />
+                    </div>
+                </div>
+                
+                <h3 className="text-xl font-bold text-gray-800 mb-1">กำลังจัดเตรียมเอกสาร</h3>
+                <p className="text-sm text-gray-500 mb-6">กรุณาอย่าปิดหน้าต่างนี้</p>
+                
+                <div className="w-full space-y-2">
+                    <div className="flex justify-between text-xs font-bold text-gray-600 px-1">
+                        <span>Progress</span>
+                        <span>{percentage}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden shadow-inner">
+                        <div 
+                            className="bg-gradient-to-r from-blue-500 to-indigo-600 h-full rounded-full transition-all duration-300 ease-out flex items-center justify-center" 
+                            style={{ width: `${percentage}%` }}
+                        >
+                        </div>
+                    </div>
+                    <div className="text-center text-xs text-gray-400 mt-2">
+                        กำลังประมวลผลลำดับที่ {current} จาก {total}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
-  const [selectedMedal, setSelectedMedal] = useState('All'); // NEW: Medal Filter
+  const [selectedMedal, setSelectedMedal] = useState('All');
   
   // View State
   const [viewLevel, setViewLevel] = useState<'cluster' | 'area'>('cluster');
-  const [isLoading, setIsLoading] = useState(true); // NEW: Loading state
+  const [isLoading, setIsLoading] = useState(true);
   
-  // Bulk Selection
+  // Bulk Selection & Processing
   const [selectedTeamIds, setSelectedTeamIds] = useState<Set<string>>(new Set());
   const [isGenerating, setIsGenerating] = useState(false);
-  const [loadingStatus, setLoadingStatus] = useState<string | null>(null);
+  const [progress, setProgress] = useState({ current: 0, total: 0 });
   
   // Config & Modals
   const [showConfigModal, setShowConfigModal] = useState(false);
@@ -77,7 +119,7 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
           setIsLoading(true);
           const configs = await getCertificateConfig();
           setCertificateTemplates(configs);
-          setTimeout(() => setIsLoading(false), 500); // Simulate fetch delay
+          setTimeout(() => setIsLoading(false), 500);
       };
       loadTemplates();
   }, []);
@@ -87,7 +129,6 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
       else setViewLevel('cluster');
   }, [isAdminOrArea]);
 
-  // Reset pagination and selection when filters change
   useEffect(() => {
       setCurrentPage(1);
       setSelectedTeamIds(new Set());
@@ -99,32 +140,17 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
 
   const categoryOptions = useMemo(() => {
       const cats = Array.from(new Set(data.activities.map(a => a.category))).sort();
-      return [{ label: 'ทุกหมวดหมู่', value: 'All' }, ...cats.map(c => ({ label: c, value: c }))];
+      return [{ label: 'ทุกหมวดหมู่ (All Categories)', value: 'All' }, ...cats.map(c => ({ label: c, value: c }))];
   }, [data.activities]);
 
   const medalOptions = [
-      { label: 'ทุกรางวัล', value: 'All' },
-      { label: 'เหรียญทอง (Gold)', value: 'Gold' },
-      { label: 'เหรียญเงิน (Silver)', value: 'Silver' },
-      { label: 'เหรียญทองแดง (Bronze)', value: 'Bronze' },
-      { label: 'เข้าร่วม (Participant)', value: 'Participant' },
+      { label: 'ทุกรางวัล (All Awards)', value: 'All' },
+      { label: '🥇 เหรียญทอง (Gold)', value: 'Gold' },
+      { label: '🥈 เหรียญเงิน (Silver)', value: 'Silver' },
+      { label: '🥉 เหรียญทองแดง (Bronze)', value: 'Bronze' },
+      { label: '🏅 เข้าร่วม (Participant)', value: 'Participant' },
   ];
 
-  const getMemberCounts = (team: Team) => {
-      let tCount = 0, sCount = 0;
-      let memberSource = team.members;
-      if (viewLevel === 'area' && team.stageInfo) {
-          try { const areaInfo = JSON.parse(team.stageInfo); if (areaInfo.members) memberSource = areaInfo.members; } catch {}
-      }
-      try {
-          const raw = typeof memberSource === 'string' ? JSON.parse(memberSource) : memberSource;
-          if (Array.isArray(raw)) sCount = raw.length;
-          else if (raw) { tCount = (raw.teachers || []).length; sCount = (raw.students || []).length; }
-      } catch {}
-      return { tCount, sCount };
-  };
-
-  // Helper: Calculate Medal
   const getTeamMedal = (team: Team) => {
       let score = 0;
       let medal = '';
@@ -178,7 +204,6 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
           const activity = data.activities.find(a => a.id === team.activityId);
           if (selectedCategory !== 'All' && activity?.category !== selectedCategory) return false;
 
-          // Medal Filter
           if (selectedMedal !== 'All') {
               const currentMedal = getTeamMedal(team);
               if (!currentMedal.includes(selectedMedal)) return false;
@@ -197,7 +222,6 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
   const totalPages = Math.ceil(filteredTeams.length / itemsPerPage);
   const paginatedTeams = filteredTeams.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
-  // --- Bulk Selection Handlers ---
   const handleToggleSelect = (teamId: string) => {
       const newSet = new Set(selectedTeamIds);
       if (newSet.has(teamId)) newSet.delete(teamId);
@@ -229,6 +253,9 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
       if (!template) return null;
 
       const processedTemplate = { ...template };
+      
+      // Basic Cache check could be added here if needed, 
+      // but for now we fetch to ensure freshness or rely on browser cache for images
 
       const processUrl = async (url: string) => {
           if (!url || url.trim() === '') return '';
@@ -340,29 +367,50 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
   };
 
   const handleBulkPrint = async (teamsToPrint: Team[]) => {
-      setIsGenerating(true);
-      setLoadingStatus('กำลังเริ่มต้นกระบวนการพิมพ์...');
-      
-      await new Promise(r => setTimeout(r, 500)); // UI flush
-
+      // 1. OPEN WINDOW IMMEDIATELY to bypass blocker
       const printWindow = window.open('', '_blank');
       if (!printWindow) {
-          setIsGenerating(false);
-          alert('Pop-up ถูกบล็อก');
+          alert('Pop-up ถูกบล็อก กรุณาอนุญาต pop-up สำหรับเว็บไซต์นี้');
           return;
       }
 
-      printWindow.document.write('<html><head><title>Generating...</title><style>body{font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;background:#f0f0f0;} .loader{text-align:center;}</style></head><body><div class="loader"><h1>กำลังสร้างเอกสาร...</h1><p>กรุณารอสักครู่ (ห้ามปิดหน้าต่าง)</p></div></body></html>');
+      // 2. Set Loading State inside the new window and in app
+      setIsGenerating(true);
+      setProgress({ current: 0, total: teamsToPrint.length });
+      
+      const loadingStyles = `
+        <style>
+            body { font-family: sans-serif; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f8fafc; color: #334155; }
+            .loader { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin-bottom: 20px; }
+            @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+            h1 { font-size: 24px; margin-bottom: 10px; }
+            p { font-size: 16px; color: #64748b; }
+            .progress { width: 300px; height: 10px; background: #e2e8f0; border-radius: 5px; overflow: hidden; margin-top: 20px; }
+            .bar { height: 100%; background: #3b82f6; width: 0%; transition: width 0.3s ease; }
+        </style>
+      `;
+      printWindow.document.write(`<html><head><title>Generating...</title>${loadingStyles}</head><body><div class="loader"></div><h1>กำลังสร้างเอกสาร...</h1><p>กรุณารอสักครู่ (0 / ${teamsToPrint.length})</p><div class="progress"><div class="bar" id="progressBar"></div></div></body></html>`);
 
       try {
           let fullContent = '';
-          let count = 0;
           const total = teamsToPrint.length;
 
-          // Process sequentially to manage memory/requests better
-          for (const team of teamsToPrint) {
-              count++;
-              setLoadingStatus(`กำลังประมวลผลทีมที่ ${count} / ${total}`);
+          // Process sequentially
+          for (let i = 0; i < total; i++) {
+              const team = teamsToPrint[i];
+              const count = i + 1;
+              
+              // Update states
+              setProgress({ current: count, total });
+              
+              // Try to update pop-up content if still open
+              if (!printWindow.closed) {
+                  const percent = Math.round((count / total) * 100);
+                  const pEl = printWindow.document.querySelector('p');
+                  const barEl = printWindow.document.getElementById('progressBar');
+                  if (pEl) pEl.innerText = `กรุณารอสักครู่ (${count} / ${total})`;
+                  if (barEl) barEl.style.width = `${percent}%`;
+              }
               
               const prep = await prepareDataAndGetTemplate(team);
               if (prep) {
@@ -371,9 +419,7 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
               }
           }
 
-          setLoadingStatus('กำลังเรนเดอร์เอกสาร...');
-          
-          // CSS styles (copied from config modal logic for consistency)
+          // CSS styles for final print
           const cssStyles = `
             <link href="https://fonts.googleapis.com/css2?family=Bai+Jamjuree:wght@400;600&family=Chakra+Petch:wght@400;600&family=Charmonman:wght@400;700&family=Kanit:wght@300;400;600&family=Kodchasan:wght@400;600&family=Mali:wght@400;600&family=Noto+Serif+Thai:wght@400;600&family=Sarabun:wght@400;600&family=Srisakdi:wght@400;700&family=Thasadith:wght@400;700&display=swap" rel="stylesheet">
             <style>
@@ -425,7 +471,6 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
           printWindow.close();
       } finally {
           setIsGenerating(false);
-          setLoadingStatus(null);
           // Clear selection after successful generation
           setSelectedTeamIds(new Set());
       }
@@ -444,13 +489,7 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
     <div className="space-y-6 animate-in fade-in duration-500 pb-20 relative">
         
         {/* Loading Overlay */}
-        {isGenerating && (
-            <div className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm flex flex-col items-center justify-center text-white">
-                <Loader2 className="w-12 h-12 animate-spin mb-4 text-blue-400" />
-                <h3 className="text-xl font-bold mb-2">กำลังดำเนินการ...</h3>
-                <p className="text-sm opacity-80">{loadingStatus || 'กำลังสร้างเอกสาร'}</p>
-            </div>
-        )}
+        <ProgressOverlay current={progress.current} total={progress.total} isVisible={isGenerating} />
 
         {showConfigModal && <CertificateConfigModal isOpen={showConfigModal} onClose={() => setShowConfigModal(false)} data={data} onSave={handleSaveTemplates} initialTemplates={certificateTemplates} currentUser={user} />}
         
@@ -465,9 +504,9 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
             </div>
         </div>
 
-        {/* Filters */}
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col md:flex-row gap-4">
-            <div className="relative flex-1">
+        {/* Improved Filters Layout */}
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col lg:flex-row gap-4 flex-wrap">
+            <div className="relative flex-1 min-w-[200px]">
                 <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
                 <input 
                     type="text" 
@@ -477,23 +516,27 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
                     onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }} 
                 />
             </div>
-            <div className="w-full md:w-56">
-                <SearchableSelect 
-                    options={categoryOptions}
-                    value={selectedCategory}
-                    onChange={val => { setSelectedCategory(val); setCurrentPage(1); }}
-                    placeholder="ทุกหมวดหมู่"
-                    icon={<Filter className="w-4 h-4" />}
-                />
-            </div>
-            <div className="w-full md:w-48">
-                <SearchableSelect 
-                    options={medalOptions}
-                    value={selectedMedal}
-                    onChange={val => { setSelectedMedal(val); setCurrentPage(1); }}
-                    placeholder="ทุกรางวัล"
-                    icon={<Medal className="w-4 h-4" />}
-                />
+            
+            {/* Wrapping Filter Container */}
+            <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto">
+                <div className="w-full sm:w-auto sm:min-w-[240px] flex-shrink-0">
+                    <SearchableSelect 
+                        options={categoryOptions}
+                        value={selectedCategory}
+                        onChange={val => { setSelectedCategory(val); setCurrentPage(1); }}
+                        placeholder="ทุกหมวดหมู่"
+                        icon={<Filter className="w-4 h-4" />}
+                    />
+                </div>
+                <div className="w-full sm:w-auto sm:min-w-[180px] flex-shrink-0">
+                    <SearchableSelect 
+                        options={medalOptions}
+                        value={selectedMedal}
+                        onChange={val => { setSelectedMedal(val); setCurrentPage(1); }}
+                        placeholder="ทุกรางวัล"
+                        icon={<Medal className="w-4 h-4" />}
+                    />
+                </div>
             </div>
         </div>
         
@@ -507,7 +550,7 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
                         handleBulkPrint(teamsToPrint);
                     }}
                     disabled={isGenerating}
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-full text-sm font-bold flex items-center shadow-md transition-transform active:scale-95"
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-full text-sm font-bold flex items-center shadow-md transition-transform active:scale-95 disabled:opacity-50"
                 >
                     {isGenerating ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : <Printer className="w-4 h-4 mr-2"/>}
                     พิมพ์ที่เลือก
