@@ -130,10 +130,18 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
       else setViewLevel('cluster');
   }, [isAdminOrArea]);
 
+  // RESET LOGIC SPLIT:
+  
+  // 1. When filters change -> Reset Page only (Keep selection)
+  useEffect(() => {
+      setCurrentPage(1);
+  }, [searchTerm, selectedCategory, selectedMedal]);
+
+  // 2. When View Level changes -> Reset Page AND Selection (Different dataset)
   useEffect(() => {
       setCurrentPage(1);
       setSelectedTeamIds(new Set());
-  }, [searchTerm, selectedCategory, selectedMedal, viewLevel]);
+  }, [viewLevel]);
 
   const handleSaveTemplates = (newTemplates: Record<string, CertificateTemplate>) => {
       setCertificateTemplates(newTemplates);
@@ -230,13 +238,19 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
       setSelectedTeamIds(newSet);
   };
 
+  // Improved Select All Logic: Check if all VISIBLE items are selected
+  const isAllPageSelected = paginatedTeams.length > 0 && paginatedTeams.every(t => selectedTeamIds.has(t.teamId));
+
   const handleSelectAll = () => {
-      if (selectedTeamIds.size === paginatedTeams.length) {
-          setSelectedTeamIds(new Set());
+      const newSet = new Set(selectedTeamIds);
+      if (isAllPageSelected) {
+          // Deselect all on current page
+          paginatedTeams.forEach(t => newSet.delete(t.teamId));
       } else {
-          const ids = new Set(paginatedTeams.map(t => t.teamId));
-          setSelectedTeamIds(ids);
+          // Select all on current page
+          paginatedTeams.forEach(t => newSet.add(t.teamId));
       }
+      setSelectedTeamIds(newSet);
   };
 
   // --- Print Generation Logic ---
@@ -566,7 +580,7 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
             
             {/* Wrapping Filter Container */}
             <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto">
-                <div className="w-full sm:w-auto sm:min-w-[240px] flex-shrink-0">
+                <div className="w-full sm:w-auto sm:min-w-[240px] flex-shrink-0 lg:w-64">
                     <SearchableSelect 
                         options={categoryOptions}
                         value={selectedCategory}
@@ -575,7 +589,7 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
                         icon={<Filter className="w-4 h-4" />}
                     />
                 </div>
-                <div className="w-full sm:w-auto sm:min-w-[180px] flex-shrink-0">
+                <div className="w-full sm:w-auto sm:min-w-[180px] flex-shrink-0 lg:w-56">
                     <SearchableSelect 
                         options={medalOptions}
                         value={selectedMedal}
@@ -652,7 +666,7 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
                         <tr>
                             <th className="px-4 py-3 w-12 text-center">
                                 <button onClick={handleSelectAll} className="text-gray-400 hover:text-blue-600">
-                                    {selectedTeamIds.size === paginatedTeams.length && paginatedTeams.length > 0 ? <CheckSquare className="w-5 h-5 text-blue-600"/> : <Square className="w-5 h-5"/>}
+                                    {paginatedTeams.length > 0 && paginatedTeams.every(t => selectedTeamIds.has(t.teamId)) ? <CheckSquare className="w-5 h-5 text-blue-600"/> : <Square className="w-5 h-5"/>}
                                 </button>
                             </th>
                             <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">ทีม</th>
