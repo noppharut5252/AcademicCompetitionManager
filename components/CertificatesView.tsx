@@ -397,7 +397,19 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
     <style>
         @page { size: A4 landscape; margin: 0; }
         body { margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-        .page { width: 297mm; height: 210mm; position: relative; overflow: hidden; page-break-after: always; background-color: white; }
+        .page { 
+            /* Adjusted dimensions to prevent blank pages in PDF generation */
+            width: 296.5mm; 
+            height: 209.5mm; 
+            position: relative; 
+            overflow: hidden; 
+            page-break-after: always; 
+            background-color: white;
+            margin: 0 auto;
+        }
+        /* Last page shouldn't break, though html2pdf handles this differently, keeping it helps browser print */
+        .page:last-child { page-break-after: avoid; }
+        
         .frame-simple-gold { position: absolute; top: 6mm; left: 6mm; right: 6mm; bottom: 6mm; border: 3px solid #D4AF37; border-radius: 8px; z-index: 1; pointer-events: none; }
         .frame-infinite-wave { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-image: url('data:image/svg+xml;utf8,<svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg"><defs><pattern id="wave" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M0 20 Q 10 0 20 20 T 40 20" fill="none" stroke="%23FDE047" stroke-width="2" stroke-opacity="0.3"/></pattern></defs><rect width="100%" height="100%" fill="url(%23wave)"/></svg>'); z-index: 1; pointer-events: none; border: 10mm solid transparent; }
         .frame-ornamental-corners { position: absolute; top: 10mm; left: 10mm; right: 10mm; bottom: 10mm; border: 2px solid #666; z-index: 1; pointer-events: none; }
@@ -519,6 +531,7 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
           }
 
           printWindow.document.open();
+          // Use the modified styles
           printWindow.document.write(`<html><head><title>Print Certificates</title>${getCSSStyles()}</head><body><div class="no-print"><button onclick="window.print()" style="padding:10px 20px;background:#2563eb;color:white;border:none;border-radius:8px;cursor:pointer;font-family:sans-serif;font-weight:bold;">🖨️ พิมพ์ / บันทึก PDF (${total} ทีม)</button></div>${fullContent}</body></html>`);
           printWindow.document.close();
 
@@ -545,7 +558,8 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
       const container = document.createElement('div');
       container.style.position = 'absolute';
       container.style.top = '-9999px';
-      container.style.width = '297mm'; // A4 Landscape
+      container.style.left = '-9999px';
+      container.style.width = '297mm'; // A4 Landscape width
       
       // Inject Styles locally so html2pdf can render
       container.innerHTML = getCSSStyles();
@@ -580,11 +594,12 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
 
           // Configure PDF
           const opt = {
-            margin: 0,
+            margin: 0, // IMPORTANT: No margin to avoid pushing content
             filename: `certificates_${new Date().getTime()}.pdf`,
             image: { type: 'jpeg', quality: 0.98 },
             html2canvas: { scale: 2, useCORS: true, logging: false },
-            jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' },
+            pagebreak: { mode: ['css', 'legacy'] }
           };
           
           // Generate
@@ -594,7 +609,9 @@ const CertificatesView: React.FC<CertificatesViewProps> = ({ data, user }) => {
           console.error(e);
           alert('เกิดข้อผิดพลาดในการดาวน์โหลด PDF');
       } finally {
-          document.body.removeChild(container);
+          if (document.body.contains(container)) {
+             document.body.removeChild(container);
+          }
           setIsGenerating(false);
           setSelectedTeamIds(new Set());
       }
