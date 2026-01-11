@@ -7,6 +7,11 @@
     <meta name="theme-color" content="#2563eb" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <!-- Prevent Caching -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    
     <title>ระบบจัดการการแข่งขันวิชาการ</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
@@ -73,7 +78,7 @@
 </head>
   <body>
     <div id="root"></div>
-    <!-- Changed src from "/index.tsx" to "./index.tsx" for relative path resolution -->
-    <script type="module" src="./index.tsx"></script>
+    <!-- Append version to force reload script -->
+    <script type="module" src="./index.tsx?v=1.1"></script>
   </body>
 </html>
