@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { AppData, User, Judge, CertificateTemplate } from '../types';
-import { Search, FileBadge, Settings, Printer, LayoutGrid, Trophy, CheckCircle, ChevronLeft, ChevronRight, X, User as UserIcon, Filter, Lock, Download, Loader2, CheckSquare, Square, Gavel, School } from 'lucide-react';
+import { Search, FileBadge, Settings, Printer, LayoutGrid, Trophy, CheckCircle, ChevronLeft, ChevronRight, X, User as UserIcon, Filter, Lock, Download, Loader2, CheckSquare, Square, Gavel, School, Briefcase } from 'lucide-react';
 import JudgeCertificateConfigModal from './JudgeCertificateConfigModal';
 import { getCertificateConfig, getProxyImage } from '../services/api';
 import QRCode from 'qrcode';
@@ -13,6 +13,31 @@ interface JudgeCertificatesViewProps {
   data: AppData;
   user?: User | null;
 }
+
+const JudgesSkeleton = () => (
+    <div className="space-y-6 animate-pulse">
+        <div className="bg-white p-6 rounded-xl border border-gray-100 flex justify-between items-center">
+            <div className="h-8 w-48 bg-gray-200 rounded-lg"></div>
+            <div className="h-10 w-32 bg-gray-200 rounded-lg"></div>
+        </div>
+        <div className="bg-white p-4 rounded-xl border border-gray-100 flex gap-4">
+            <div className="h-10 w-full bg-gray-200 rounded-lg"></div>
+            <div className="h-10 w-64 bg-gray-200 rounded-lg"></div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[1, 2, 3, 4, 5, 6].map(i => (
+                <div key={i} className="bg-white p-4 rounded-xl border border-gray-100 h-40 flex flex-col justify-between">
+                    <div className="flex justify-between">
+                        <div className="h-4 w-3/4 bg-gray-200 rounded"></div>
+                        <div className="h-4 w-4 bg-gray-200 rounded"></div>
+                    </div>
+                    <div className="h-3 w-1/2 bg-gray-200 rounded"></div>
+                    <div className="h-8 w-full bg-gray-200 rounded-lg mt-4"></div>
+                </div>
+            ))}
+        </div>
+    </div>
+);
 
 const ProgressOverlay = ({ current, total, isVisible, mode = 'print' }: { current: number, total: number, isVisible: boolean, mode?: 'print' | 'download' }) => {
     if (!isVisible) return null;
@@ -412,6 +437,8 @@ const JudgeCertificatesView: React.FC<JudgeCertificatesViewProps> = ({ data, use
       }
   };
 
+  if (isLoading) return <JudgesSkeleton />;
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20 relative">
         <ProgressOverlay current={progress.current} total={progress.total} isVisible={isGenerating} mode={generationMode} />
@@ -474,7 +501,61 @@ const JudgeCertificatesView: React.FC<JudgeCertificatesViewProps> = ({ data, use
             </div>
         )}
 
-        <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+        {/* Mobile Cards (Visible on small screens) */}
+        <div className="md:hidden grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {paginatedJudges.map(judge => {
+                const isSelected = selectedJudgeIds.has(judge.id);
+                const actName = data.activities.find(a => a.id === judge.activityId)?.name || judge.activityId;
+
+                return (
+                    <div 
+                        key={judge.id} 
+                        className={`bg-white p-4 rounded-xl shadow-sm border transition-all relative overflow-hidden ${isSelected ? 'border-indigo-500 ring-1 ring-indigo-500 bg-indigo-50/10' : 'border-gray-200'}`}
+                        onClick={() => handleToggleSelect(judge.id)}
+                    >
+                         <div className="absolute top-3 right-3 text-gray-300">
+                            {isSelected ? <CheckSquare className="w-6 h-6 text-indigo-600" /> : <Square className="w-6 h-6" />}
+                        </div>
+                        
+                        <div className="pr-8">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase mb-2 inline-block bg-gray-100 text-gray-600">
+                                {judge.role}
+                            </span>
+                            <h3 className="font-bold text-gray-900 line-clamp-1">{judge.judgeName}</h3>
+                            <div className="text-xs text-gray-500 mb-1 flex items-center">
+                                {judge.schoolId === '__EXTERNAL__' ? <Briefcase className="w-3 h-3 mr-1"/> : <School className="w-3 h-3 mr-1"/>}
+                                {judge.schoolName}
+                            </div>
+                            <div className="text-xs text-gray-400 mt-2 truncate">{actName}</div>
+                        </div>
+
+                         <div className="mt-3 pt-3 border-t border-gray-50 flex justify-end gap-2">
+                            <button 
+                                onClick={(e) => { e.stopPropagation(); handleBulkPrint([judge]); }}
+                                className="text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg flex items-center hover:bg-indigo-100"
+                            >
+                                <Printer className="w-3 h-3 mr-1"/> พิมพ์
+                            </button>
+                            <button 
+                                onClick={(e) => { e.stopPropagation(); handleFileDownload([judge]); }}
+                                className="text-xs font-bold text-green-600 bg-green-50 px-3 py-1.5 rounded-lg flex items-center hover:bg-green-100"
+                            >
+                                <Download className="w-3 h-3 mr-1"/> โหลด PDF
+                            </button>
+                        </div>
+                    </div>
+                );
+            })}
+             {paginatedJudges.length === 0 && (
+                <div className="col-span-full py-12 text-center text-gray-400 bg-white rounded-xl border border-dashed border-gray-200">
+                    <FileBadge className="w-12 h-12 mx-auto mb-3 opacity-20"/>
+                    <p>ไม่พบข้อมูล</p>
+                </div>
+             )}
+        </div>
+
+        {/* Desktop Table (Hidden on mobile) */}
+        <div className="hidden md:block bg-white rounded-xl shadow-sm border overflow-hidden">
             <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                     <thead className={viewLevel === 'area' ? 'bg-purple-50' : 'bg-gray-50'}>
