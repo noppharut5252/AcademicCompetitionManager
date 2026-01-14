@@ -275,7 +275,13 @@ const JudgeCertificatesView: React.FC<JudgeCertificatesViewProps> = ({ data, use
       
       const generateSerial = () => {
           const runNum = (template.serialStart || 1) + indexOffset;
-          return (template.serialFormat || 'JUDGE-{year}-{run:4}').replace('{year}', String(new Date().getFullYear())).replace('{th_year}', String(new Date().getFullYear()+543)).replace('{id}', judge.id).replace(/{run:(\d+)}/, (_, d) => String(runNum).padStart(parseInt(d), '0')).replace('{run}', String(runNum));
+          return (template.serialFormat || 'JUDGE-{year}-{run:4}')
+            .replace('{year}', String(new Date().getFullYear()))
+            .replace('{th_year}', String(new Date().getFullYear()+543))
+            .replace('{id}', judge.id)
+            .replace('{activityId}', judge.activityId) // Ensure {activityId} is replaced
+            .replace(/{run:(\d+)}/, (_, d) => String(runNum).padStart(parseInt(d), '0'))
+            .replace('{run}', String(runNum));
       };
 
       const bgUrl = template.backgroundUrl;
