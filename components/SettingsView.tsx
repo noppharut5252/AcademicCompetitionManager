@@ -73,7 +73,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ data, user, onDataUpdate })
       { key: 'menu_score', label: 'บันทึกคะแนน (Score Entry)', icon: Edit3 },
       { key: 'menu_results', label: 'ผลรางวัล (Results)', icon: Award },
       { key: 'menu_documents', label: 'เอกสารการแข่งขัน (Documents)', icon: Printer },
-      { key: 'menu_certificates', label: 'เกียรติบัตรทีมแข่งขัน', icon: FileBadge },
+      { key: 'menu_certificates', label: 'เกียรติบัตรครูและนักเรียน', icon: FileBadge },
       { key: 'menu_judge_certificates', label: 'เกียรติบัตรกรรมการ', icon: GraduationCap },
       { key: 'menu_idcards', label: 'บัตรประจำตัว (ID Cards)', icon: IdCard },
       { key: 'menu_judges', label: 'ทำเนียบกรรมการ (Judges)', icon: Gavel },
