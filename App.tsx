@@ -7,6 +7,7 @@ import ActivityList from './components/ActivityList';
 import ResultsView from './components/ResultsView';
 import IdCardsView from './components/IdCardsView';
 import CertificatesView from './components/CertificatesView';
+import JudgeCertificatesView from './components/JudgeCertificatesView';
 import ProfileView from './components/ProfileView'; 
 import ScoreEntry from './components/ScoreEntry'; 
 import ScoreInputView from './components/ScoreInputView';
@@ -29,7 +30,6 @@ import { Loader2, Link as LinkIcon, CheckCircle, AlertCircle, Sparkles, UserPlus
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 
 const App: React.FC = () => {
-  // 1. Optimistic Load from Cache
   const [data, setData] = useState<AppData | null>(() => {
       try {
           const cached = localStorage.getItem('comp_data');
@@ -37,7 +37,6 @@ const App: React.FC = () => {
       } catch { return null; }
   });
   
-  // 2. Optimistic User Load
   const [currentUser, setCurrentUser] = useState<User | any | null>(() => {
       try {
           const cached = localStorage.getItem('comp_user');
@@ -45,15 +44,12 @@ const App: React.FC = () => {
       } catch { return null; }
   });
 
-  // Only show loading screen if we have ABSOLUTELY NO data to show
   const [loading, setLoading] = useState(!data);
   const [loadingText, setLoadingText] = useState('กำลังโหลด...');
   
-  // Auth State
   const [isAuthenticated, setIsAuthenticated] = useState(!!currentUser);
   const [isRegistering, setIsRegistering] = useState(false);
   
-  // Linking Account State
   const [isLinkingMode, setIsLinkingMode] = useState(false);
   const [pendingLiffProfile, setPendingLiffProfile] = useState<LiffProfile | null>(null);
   const [linkInput, setLinkInput] = useState('');
@@ -62,40 +58,30 @@ const App: React.FC = () => {
 
   const [error, setError] = useState<string | null>(null);
 
-  // Initialize System (Parallel Execution)
   useEffect(() => {
     const initialize = async () => {
-      // A. Trigger Data Fetch in Background
-      const dataPromise = fetchAppData(true); // silent fetch
+      const dataPromise = fetchAppData(true);
 
-      // B. Handle Authentication
       if (currentUser) {
-          // Fast Path: User already cached, just refresh LIFF token silently
           initLiff().catch(e => console.warn("LIFF Lazy Init:", e));
       } else {
-          // Slow Path: Check LIFF or Default to Guest
           try {
-              // Try to initialize LIFF quickly
               const liffProfile = await initLiff();
               if (liffProfile) {
                   const dbUser = await checkUserPermission(liffProfile.userId);
                   if (dbUser) {
-                      // Found User
                       const fullUser = { ...dbUser, pictureUrl: liffProfile.pictureUrl, displayName: liffProfile.displayName };
                       setCurrentUser(fullUser);
                       localStorage.setItem('comp_user', JSON.stringify(fullUser));
                       setIsAuthenticated(true);
                   } else {
-                      // Not linked yet -> Go to Link Mode
                       setPendingLiffProfile(liffProfile);
                       setIsLinkingMode(true);
                   }
               } else {
-                  // No LIFF (Browser) -> Default Guest
                   handleGuestAccess();
               }
           } catch (e) {
-              // Error -> Default Guest
               console.warn("Auth check failed, defaulting to guest", e);
               handleGuestAccess();
           }
@@ -108,7 +94,6 @@ const App: React.FC = () => {
   }, []);
 
   const fetchAppData = async (silent = false) => {
-    // Only block UI if we have absolutely no data and it's not a silent update
     if (!data && !silent) setLoading(true);
     
     try {
@@ -136,7 +121,6 @@ const App: React.FC = () => {
       setIsAuthenticated(true);
   };
 
-  // New: Handle Verify and Link
   const handleVerifyLink = async (e: React.FormEvent) => {
       e.preventDefault();
       if (!linkInput || !pendingLiffProfile) return;
@@ -186,15 +170,13 @@ const App: React.FC = () => {
       setCurrentUser(user);
       localStorage.setItem('comp_user', JSON.stringify(user));
       setIsAuthenticated(true);
-      fetchAppData(true); // Fetch fresh data on login
+      fetchAppData(true);
       
-      // Navigate to dashboard
       if (window.location.hash.includes('/login')) {
           window.location.hash = '#/dashboard';
       }
   };
 
-  // Enhanced Loading Screen
   const LoadingScreen = () => (
       <div className="fixed inset-0 bg-gradient-to-br from-blue-50 to-indigo-50 flex flex-col items-center justify-center z-50">
         <div className="bg-white p-8 rounded-3xl shadow-xl flex flex-col items-center max-w-sm w-full mx-4 relative overflow-hidden">
@@ -222,12 +204,10 @@ const App: React.FC = () => {
       </div>
   );
 
-  // 1. Initial Loading (Only if NO cache and fetch pending)
   if (loading) {
     return <LoadingScreen />;
   }
 
-  // 2. Linking Mode (Found LINE but not in DB)
   if (isLinkingMode && pendingLiffProfile) {
       return (
           <div className="min-h-screen bg-gray-50 flex flex-col justify-center px-4 font-kanit">
@@ -297,7 +277,6 @@ const App: React.FC = () => {
       );
   }
 
-  // 3. Registration Mode
   if (isRegistering) {
       if (!data) return <LoadingScreen />;
       return (
@@ -320,7 +299,6 @@ const App: React.FC = () => {
       )
   }
 
-  // 4. Main App Content (Authenticated or Guest)
   const renderError = () => {
     if (error) {
       return (
@@ -342,7 +320,6 @@ const App: React.FC = () => {
 
   return (
     <HashRouter>
-        {/* Public Routes */}
         <Routes>
             <Route path="/verify" element={data ? <VerifyCertificate data={data} /> : <LoadingScreen />} />
             <Route path="/live" element={data ? <LiveScoreView initialData={data} /> : <LoadingScreen />} />
@@ -350,7 +327,6 @@ const App: React.FC = () => {
             <Route path="/score-input" element={data ? <ScoreInputView data={data} user={currentUser} onDataUpdate={() => fetchAppData(true)} /> : <LoadingScreen />} />
             <Route path="/login" element={<LoginScreen onLoginSuccess={handleLoginSuccess} />} />
             
-            {/* Main App Routes with Layout */}
             <Route path="*" element={
                 <Layout userProfile={currentUser} data={data || undefined}>
                     {renderError() || (data && (
@@ -364,6 +340,7 @@ const App: React.FC = () => {
                             <Route path="/judges" element={<JudgesView data={data} user={currentUser} onDataUpdate={() => fetchAppData(true)} />} />
                             <Route path="/results" element={<ResultsView data={data} user={currentUser} />} />
                             <Route path="/certificates" element={<CertificatesView data={data} user={currentUser} />} />
+                            <Route path="/judge-certificates" element={<JudgeCertificatesView data={data} user={currentUser} />} />
                             <Route path="/idcards" element={<IdCardsView data={data} user={currentUser} />} />
                             <Route path="/documents" element={<PrintDocumentsView data={data} user={currentUser} />} />
                             <Route path="/announcements" element={<AnnouncementManager data={data} user={currentUser} onDataUpdate={() => fetchAppData(true)} />} />
