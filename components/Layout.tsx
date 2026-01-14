@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { LayoutDashboard, Users, Trophy, School, Settings, LogOut, Award, FileBadge, IdCard, LogIn, UserCircle, Edit3, ScanLine, X, Camera, Search, ChevronRight, LayoutGrid, RotateCcw, Loader2, Zap, MapPin, Gavel, Megaphone, Printer, Hash, MonitorPlay, Menu, PanelLeftClose, PanelLeft, UserCog, BrainCircuit } from 'lucide-react';
+import { LayoutDashboard, Users, Trophy, School, Settings, LogOut, Award, FileBadge, IdCard, LogIn, UserCircle, Edit3, ScanLine, X, Camera, Search, ChevronRight, LayoutGrid, RotateCcw, Loader2, Zap, MapPin, Gavel, Megaphone, Printer, Hash, MonitorPlay, Menu, PanelLeftClose, PanelLeft, UserCog, BrainCircuit, GraduationCap } from 'lucide-react';
 import { logoutLiff } from '../services/liff';
 import { User, AppData, AppConfig } from '../types';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
@@ -10,11 +10,10 @@ import jsQR from 'jsqr';
 
 interface LayoutProps {
   children: React.ReactNode;
-  userProfile?: User | any; // Supports both our User type and LIFF profile
+  userProfile?: User | any; 
   data?: AppData;
 }
 
-// ... (Keep ScannerModal Component as is)
 const ScannerModal = ({ 
     isOpen, 
     onClose, 
@@ -28,11 +27,11 @@ const ScannerModal = ({
     data?: AppData;
     user?: User | any;
 }) => {
-    // ... (ScannerModal implementation identical to previous)
+    // ... (ScannerModal code remains unchanged)
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [mode, setMode] = useState<'scan' | 'manual'>('scan');
-    const [manualId, setManualId] = useState(''); // Stores Team ID
+    const [manualId, setManualId] = useState(''); 
     const [viewLevel, setViewLevel] = useState<'cluster' | 'area'>('cluster');
     const [cameraError, setCameraError] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
@@ -120,7 +119,7 @@ const ScannerModal = ({
             console.warn("Back camera access failed, trying fallback...", err);
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: 'user' } // Fallback to front camera if environment fails
+                    video: { facingMode: 'user' } 
                 });
                 handleStream(stream);
             } catch (fallbackErr: any) {
@@ -298,15 +297,13 @@ const ScannerModal = ({
     );
 };
 
-// --- Main Layout ---
-
 const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
   const isGuest = !userProfile || userProfile.isGuest;
   const navigate = useNavigate();
   const location = useLocation();
   const [showScanner, setShowScanner] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true); // Default open on desktop
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   const currentPath = location.pathname.substring(1) || 'dashboard';
   const activeTab = currentPath.split('/')[0] || 'dashboard';
@@ -315,7 +312,6 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
       e.stopPropagation();
       localStorage.removeItem('comp_user'); 
       logoutLiff(); 
-      // Force reload to clear state properly
       window.location.reload();
   };
 
@@ -336,24 +332,20 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
   const canManageAnnouncements = ['admin', 'area', 'group_admin'].includes(userRole);
   const canViewPrintDocs = true; 
   const canManageUsers = ['admin', 'area', 'group_admin', 'school_admin'].includes(userRole);
-  
-  // Updated: Allow Group Admin to view summary
   const canViewSummary = isAdminOrArea || isGroupAdmin;
   
-  // Robust config defaults merging
   const defaults: AppConfig = {
       menu_live: true, menu_teams: true, menu_venues: true, menu_activities: true,
       menu_score: true, menu_results: true, menu_documents: true, menu_certificates: true,
-      menu_idcards: true, menu_judges: true, menu_announcements: true, menu_schools: true, menu_users: true, menu_summary: true
+      menu_idcards: true, menu_judges: true, menu_announcements: true, menu_schools: true, menu_users: true, menu_summary: true,
+      menu_judge_certificates: true
   };
   
-  // Merge loaded config with defaults to ensure keys exist
   const config = { ...defaults, ...(data?.appConfig || {}) };
   
-  // Logic: Show menu if (isAdminOrArea) OR (config allows it AND other role checks pass)
   const showMenu = (key: keyof AppConfig, permission = true) => {
-      if (isAdminOrArea) return true; // Admins see everything
-      return config[key] !== false && permission; // Explicit check for false to handle undefined as true (default)
+      if (isAdminOrArea) return true;
+      return config[key] !== false && permission;
   };
 
   const menuItems = [
@@ -365,7 +357,8 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
     { id: 'score', label: 'บันทึกคะแนน', icon: Edit3, visible: showMenu('menu_score', canScore) },
     { id: 'results', label: 'ผลรางวัล', icon: Award, visible: showMenu('menu_results') },
     { id: 'documents', label: 'เอกสารการแข่งขัน', icon: Printer, visible: showMenu('menu_documents', canViewPrintDocs) },
-    { id: 'certificates', label: 'เกียรติบัตร', icon: FileBadge, visible: showMenu('menu_certificates') },
+    { id: 'certificates', label: 'เกียรติบัตรครูและนักเรียน', icon: FileBadge, visible: showMenu('menu_certificates') },
+    { id: 'judge-certificates', label: 'เกียรติบัตรกรรมการ', icon: GraduationCap, visible: showMenu('menu_judge_certificates', isAdminOrArea || isGroupAdmin) },
     { id: 'idcards', label: 'บัตร', icon: IdCard, visible: showMenu('menu_idcards') },
     { id: 'judges', label: 'ทำเนียบกรรมการ', icon: Gavel, visible: showMenu('menu_judges') },
     { id: 'announcements', label: 'ข่าว/คู่มือ', icon: Megaphone, visible: showMenu('menu_announcements', canManageAnnouncements) },
@@ -422,7 +415,6 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
         }}
       />
 
-      {/* Desktop Sidebar with Transitions */}
       <aside 
         className={`fixed inset-y-0 left-0 z-40 w-64 bg-white border-r border-gray-200 flex-col transition-transform duration-300 ease-in-out hidden md:flex ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
       >
@@ -492,7 +484,6 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
         </div>
       </aside>
 
-      {/* Main Content Area */}
       <div 
         className={`flex-1 flex flex-col mb-20 md:mb-0 h-screen overflow-hidden bg-gray-50 transition-all duration-300 ease-in-out ${isSidebarOpen ? 'md:ml-64' : 'md:ml-0'}`}
       >
@@ -526,7 +517,6 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
         </header>
 
         <main className="flex-1 overflow-y-auto p-4 md:p-8 pb-32 md:pb-8 relative">
-            {/* Desktop Sidebar Toggle (Visible when closed) */}
             {!isSidebarOpen && (
                 <button 
                     onClick={() => setIsSidebarOpen(true)}
@@ -549,16 +539,13 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
         </main>
       </div>
 
-      {/* Updated Mobile Bottom Navigation Bar (Grid 5) */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-white border-t border-gray-200 z-30 pb-safe shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
         <div className="grid grid-cols-5 h-full relative">
-            {/* 1. หน้าหลัก */}
             <button onClick={() => handleNav('dashboard')} className={`flex flex-col items-center justify-center space-y-1 ${activeTab === 'dashboard' ? 'text-blue-600' : 'text-gray-400'}`}>
                 <LayoutDashboard className="w-5 h-5" />
                 <span className="text-[10px] font-medium">หน้าหลัก</span>
             </button>
             
-            {/* 2. ทีม - Only if visible */}
             <button 
                 onClick={() => handleNav(showMenu('menu_teams') ? 'teams' : 'dashboard')} 
                 className={`flex flex-col items-center justify-center space-y-1 ${activeTab === 'teams' ? 'text-blue-600' : 'text-gray-400'} ${!showMenu('menu_teams') ? 'opacity-30 pointer-events-none' : ''}`}
@@ -567,7 +554,6 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
                 <span className="text-[10px] font-medium">ทีม</span>
             </button>
 
-            {/* 3. สแกน (Center Floating) */}
             <div className="relative flex justify-center items-center">
                  <div className="absolute -top-6">
                     <button onClick={() => setShowScanner(true)} className="w-14 h-14 bg-blue-600 rounded-full shadow-lg flex items-center justify-center text-white border-4 border-gray-50 transform transition-transform active:scale-95 group">
@@ -577,7 +563,6 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
                  <span className="text-[10px] font-medium text-gray-400 mt-8">สแกน</span>
             </div>
 
-            {/* 4. ผลรางวัล - Only if visible */}
             <button 
                 onClick={() => handleNav(showMenu('menu_results') ? 'results' : 'dashboard')} 
                 className={`flex flex-col items-center justify-center space-y-1 ${activeTab === 'results' ? 'text-blue-600' : 'text-gray-400'} ${!showMenu('menu_results') ? 'opacity-30 pointer-events-none' : ''}`}
@@ -586,7 +571,6 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
                 <span className="text-[10px] font-medium">ผลรางวัล</span>
             </button>
             
-            {/* 5. เมนูอื่นๆ */}
             <button onClick={() => setIsMobileMenuOpen(true)} className={`flex flex-col items-center justify-center space-y-1 ${!['dashboard', 'teams', 'results'].includes(activeTab) ? 'text-blue-600' : 'text-gray-400'}`}>
                 <Menu className="w-5 h-5" />
                 <span className="text-[10px] font-medium">เมนูอื่นๆ</span>
@@ -594,7 +578,6 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
         </div>
       </div>
 
-      {/* Mobile Menu Overlay */}
       {isMobileMenuOpen && (
         <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm md:hidden flex flex-col justify-end" onClick={() => setIsMobileMenuOpen(false)}>
             <div className="bg-white rounded-t-2xl p-4 animate-in slide-in-from-bottom-10 max-h-[70vh] overflow-y-auto pb-safe" onClick={e => e.stopPropagation()}>
