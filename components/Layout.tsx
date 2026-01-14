@@ -357,7 +357,7 @@ const Layout: React.FC<LayoutProps> = ({ children, userProfile, data }) => {
     { id: 'score', label: 'บันทึกคะแนน', icon: Edit3, visible: showMenu('menu_score', canScore) },
     { id: 'results', label: 'ผลรางวัล', icon: Award, visible: showMenu('menu_results') },
     { id: 'documents', label: 'เอกสารการแข่งขัน', icon: Printer, visible: showMenu('menu_documents', canViewPrintDocs) },
-    { id: 'certificates', label: 'เกียรติบัตรทีมแข่งขัน', icon: FileBadge, visible: showMenu('menu_certificates') },
+    { id: 'certificates', label: 'เกียรติบัตรครูและนักเรียน', icon: FileBadge, visible: showMenu('menu_certificates') },
     { id: 'judge-certificates', label: 'เกียรติบัตรกรรมการ', icon: GraduationCap, visible: showMenu('menu_judge_certificates') },
     { id: 'idcards', label: 'บัตร', icon: IdCard, visible: showMenu('menu_idcards') },
     { id: 'judges', label: 'ทำเนียบกรรมการ', icon: Gavel, visible: showMenu('menu_judges') },
