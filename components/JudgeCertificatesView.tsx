@@ -81,6 +81,12 @@ const ProgressOverlay = ({ current, total, isVisible, mode = 'print' }: { curren
     );
 };
 
+const getRoleBadgeStyle = (role: string) => {
+    if (role.includes('ประธาน')) return 'bg-purple-100 text-purple-700 border border-purple-200';
+    if (role.includes('เลขา')) return 'bg-indigo-100 text-indigo-700 border border-indigo-200';
+    return 'bg-gray-100 text-gray-700 border border-gray-200';
+};
+
 const JudgeCertificatesView: React.FC<JudgeCertificatesViewProps> = ({ data, user }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRole, setSelectedRole] = useState('All');
@@ -102,6 +108,7 @@ const JudgeCertificatesView: React.FC<JudgeCertificatesViewProps> = ({ data, use
   const userRole = user?.level?.toLowerCase();
   const isAdminOrArea = userRole === 'admin' || userRole === 'area';
   const isGroupAdmin = userRole === 'group_admin';
+  const isSchoolAdminOrUser = userRole === 'school_admin' || userRole === 'user';
   
   const canConfigureCert = isAdminOrArea || (isGroupAdmin && viewLevel === 'cluster');
 
@@ -149,7 +156,21 @@ const JudgeCertificatesView: React.FC<JudgeCertificatesViewProps> = ({ data, use
           } else {
               // Cluster Level
               if (judge.stageScope === 'area') return false;
-              if (isGroupAdmin && judge.clusterKey !== userClusterID) return false;
+          }
+          
+          // Role-based filtering
+          if (isGroupAdmin) {
+              if (judge.clusterKey !== userClusterID) return false;
+          } else if (isSchoolAdminOrUser) {
+              if (userSchool) {
+                  // Check ID match or Name match (flexibility)
+                  const idMatch = judge.schoolId === userSchool.SchoolID;
+                  const nameMatch = judge.schoolName === userSchool.SchoolName;
+                  const looseMatch = judge.schoolId === userSchool.SchoolName;
+                  if (!idMatch && !nameMatch && !looseMatch) return false;
+              } else {
+                  if (judge.schoolId !== user?.SchoolID) return false;
+              }
           }
 
           // Template Check
@@ -167,10 +188,11 @@ const JudgeCertificatesView: React.FC<JudgeCertificatesViewProps> = ({ data, use
           return (
               judge.judgeName.toLowerCase().includes(term) || 
               judge.schoolName.toLowerCase().includes(term) ||
-              activityName.toLowerCase().includes(term)
+              activityName.toLowerCase().includes(term) ||
+              judge.activityId.toLowerCase().includes(term)
           );
       });
-  }, [data.judges, searchTerm, viewLevel, user, certificateTemplates, selectedRole, isGroupAdmin, userClusterID, data.activities]);
+  }, [data.judges, searchTerm, viewLevel, user, certificateTemplates, selectedRole, isGroupAdmin, userClusterID, data.activities, isSchoolAdminOrUser, userSchool]);
 
   const totalPages = Math.ceil(filteredJudges.length / itemsPerPage);
   const paginatedJudges = filteredJudges.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -484,6 +506,12 @@ const JudgeCertificatesView: React.FC<JudgeCertificatesViewProps> = ({ data, use
       }
   };
 
+  const getRoleBadgeStyle = (role: string) => {
+    if (role.includes('ประธาน')) return 'bg-purple-100 text-purple-700 border border-purple-200';
+    if (role.includes('เลขา')) return 'bg-indigo-100 text-indigo-700 border border-indigo-200';
+    return 'bg-gray-100 text-gray-700 border border-gray-200';
+  };
+
   if (isLoading) return <JudgesSkeleton />;
 
   return (
@@ -565,7 +593,7 @@ const JudgeCertificatesView: React.FC<JudgeCertificatesViewProps> = ({ data, use
                         </div>
                         
                         <div className="pr-8">
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase mb-2 inline-block bg-gray-100 text-gray-600">
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase mb-2 inline-block ${getRoleBadgeStyle(judge.role)}`}>
                                 {judge.role}
                             </span>
                             <h3 className="font-bold text-gray-900 line-clamp-1">{judge.judgeName}</h3>
@@ -573,7 +601,10 @@ const JudgeCertificatesView: React.FC<JudgeCertificatesViewProps> = ({ data, use
                                 {judge.schoolId === '__EXTERNAL__' ? <Briefcase className="w-3 h-3 mr-1"/> : <School className="w-3 h-3 mr-1"/>}
                                 {judge.schoolName}
                             </div>
-                            <div className="text-xs text-gray-400 mt-2 truncate">{actName}</div>
+                            <div className="text-xs text-gray-500 mt-2">
+                                <div className="font-medium text-gray-900 line-clamp-2">{actName}</div>
+                                <div className="text-[10px] text-gray-400 font-mono mt-0.5">ID: {judge.activityId}</div>
+                            </div>
                         </div>
 
                          <div className="mt-3 pt-3 border-t border-gray-50 flex justify-end gap-2">
@@ -632,9 +663,16 @@ const JudgeCertificatesView: React.FC<JudgeCertificatesViewProps> = ({ data, use
                                         </div>
                                     </td>
                                     <td className="px-6 py-4"><div className="font-bold text-gray-900">{judge.judgeName}</div></td>
-                                    <td className="px-6 py-4 text-sm text-gray-600">{judge.role}</td>
+                                    <td className="px-6 py-4">
+                                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getRoleBadgeStyle(judge.role)}`}>
+                                            {judge.role}
+                                        </span>
+                                    </td>
                                     <td className="px-6 py-4 text-sm text-gray-900 flex items-center">{judge.schoolName}</td>
-                                    <td className="px-6 py-4 text-sm text-gray-600">{actName}</td>
+                                    <td className="px-6 py-4 text-sm text-gray-600">
+                                        <div className="font-medium text-gray-900">{actName}</div>
+                                        <div className="text-[10px] text-gray-400 font-mono mt-0.5">{judge.activityId}</div>
+                                    </td>
                                     <td className="px-6 py-4 text-right">
                                         <div className="flex justify-end gap-2" onClick={e => e.stopPropagation()}>
                                             <button onClick={() => handleBulkPrint([judge])} className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded border border-transparent hover:border-indigo-200 transition-all" title="Print"><Printer className="w-4 h-4" /></button>
