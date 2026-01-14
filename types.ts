@@ -287,6 +287,7 @@ export interface AppConfig {
   menu_schools: boolean;
   menu_users: boolean;
   menu_summary: boolean; // New: AI Summary Menu
+  menu_judge_certificates: boolean; // New: Judge Certificates Menu
 }
 
 export interface AppData {
