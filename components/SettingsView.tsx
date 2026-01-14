@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { AppData, User, AppConfig } from '../types';
-import { Save, Loader2, Lock, Eye, EyeOff, LayoutDashboard, MonitorPlay, Users, MapPin, Trophy, Edit3, Award, Printer, FileBadge, IdCard, Gavel, Megaphone, School, UserCog, BrainCircuit } from 'lucide-react';
+import { Save, Loader2, Lock, Eye, EyeOff, LayoutDashboard, MonitorPlay, Users, MapPin, Trophy, Edit3, Award, Printer, FileBadge, IdCard, Gavel, Megaphone, School, UserCog, BrainCircuit, GraduationCap } from 'lucide-react';
 import { saveAppConfig } from '../services/api';
 
 interface SettingsViewProps {
@@ -15,7 +15,8 @@ const SettingsView: React.FC<SettingsViewProps> = ({ data, user, onDataUpdate })
   const defaults: AppConfig = {
       menu_live: true, menu_teams: true, menu_venues: true, menu_activities: true,
       menu_score: true, menu_results: true, menu_documents: true, menu_certificates: true,
-      menu_idcards: true, menu_judges: true, menu_announcements: true, menu_schools: true, menu_users: true, menu_summary: true
+      menu_idcards: true, menu_judges: true, menu_announcements: true, menu_schools: true, menu_users: true, menu_summary: true,
+      menu_judge_certificates: true
   };
 
   const [config, setConfig] = useState<AppConfig>({ ...defaults, ...(data.appConfig || {}) });
@@ -72,7 +73,8 @@ const SettingsView: React.FC<SettingsViewProps> = ({ data, user, onDataUpdate })
       { key: 'menu_score', label: 'บันทึกคะแนน (Score Entry)', icon: Edit3 },
       { key: 'menu_results', label: 'ผลรางวัล (Results)', icon: Award },
       { key: 'menu_documents', label: 'เอกสารการแข่งขัน (Documents)', icon: Printer },
-      { key: 'menu_certificates', label: 'เกียรติบัตร (Certificates)', icon: FileBadge },
+      { key: 'menu_certificates', label: 'เกียรติบัตรครูและนักเรียน', icon: FileBadge },
+      { key: 'menu_judge_certificates', label: 'เกียรติบัตรกรรมการ', icon: GraduationCap },
       { key: 'menu_idcards', label: 'บัตรประจำตัว (ID Cards)', icon: IdCard },
       { key: 'menu_judges', label: 'ทำเนียบกรรมการ (Judges)', icon: Gavel },
       { key: 'menu_announcements', label: 'ข่าว/คู่มือ (Announcements)', icon: Megaphone },
