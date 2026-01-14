@@ -188,6 +188,55 @@ const JudgeCertificateConfigModal: React.FC<CertificateConfigModalProps> = ({ is
       }
   };
 
+  const toggleIncludeActivityId = (checked: boolean) => {
+      let currentFormat = currentTemplate.serialFormat || 'JUDGE-{year}-{run:4}';
+      if (checked) {
+          if (!currentFormat.includes('{activityId}')) {
+              // Prepend activityId
+              updateField('serialFormat', '{activityId}-' + currentFormat);
+          }
+      } else {
+          // Remove activityId and optional trailing dash
+          updateField('serialFormat', currentFormat.replace('{activityId}-', '').replace('{activityId}', ''));
+      }
+  };
+
+  const toggleIncludeJudgeId = (checked: boolean) => {
+      let currentFormat = currentTemplate.serialFormat || 'JUDGE-{year}-{run:4}';
+      if (checked) {
+          if (!currentFormat.includes('{id}')) {
+              updateField('serialFormat', currentFormat + '-{id}');
+          }
+      } else {
+          updateField('serialFormat', currentFormat.replace(/-?{id}/g, ''));
+      }
+  };
+
+  const getSerialPreview = () => {
+      const fmt = currentTemplate.serialFormat || 'JUDGE-{year}-{run:4}';
+      const start = currentTemplate.serialStart || 1;
+      const year = new Date().getFullYear();
+      const thYear = year + 543;
+      
+      let sample = fmt
+        .replace('{year}', String(year))
+        .replace('{th_year}', String(thYear))
+        .replace('{id}', 'J001')
+        .replace('{activityId}', 'ACT01');
+
+      if (sample.includes('{run:')) {
+          const match = sample.match(/{run:(\d+)}/);
+          if (match) {
+              const digits = parseInt(match[1]);
+              sample = sample.replace(match[0], String(start).padStart(digits, '0'));
+          }
+      } else {
+          sample = sample.replace('{run}', String(start));
+      }
+      
+      return sample;
+  };
+
   const handlePreview = async () => {
       const printWindow = window.open('', '_blank');
       if (!printWindow) {
@@ -214,6 +263,7 @@ const JudgeCertificateConfigModal: React.FC<CertificateConfigModalProps> = ({ is
 
       const defaultFont = template.fontFamily || 'Sarabun';
       const shadowClass = template.enableTextShadow ? 'text-shadow-white' : '';
+      const serialPreview = getSerialPreview();
 
       const htmlContent = `
         <html><head><title>Judge Certificate Preview</title>
@@ -255,7 +305,7 @@ const JudgeCertificateConfigModal: React.FC<CertificateConfigModalProps> = ({ is
         </style></head><body>
           <div class="page">
               ${bgUrl ? `<img src="${bgUrl}" class="bg-img" />` : frameElement}
-              <div class="serial-no">No. JUDGE-2567-0001</div>
+              <div class="serial-no">No. ${serialPreview}</div>
               <div class="content">
                   <div class="logos ${!template.logoRightUrl ? 'single' : ''}">
                       ${template.logoLeftUrl ? `<img src="${template.logoLeftUrl}" class="logo-img" style="${transparentImgStyle}" />` : '<div></div>'}
@@ -445,9 +495,48 @@ const JudgeCertificateConfigModal: React.FC<CertificateConfigModalProps> = ({ is
                                 <div>
                                     <label className="block text-xs font-medium text-gray-600 mb-1">รูปแบบ</label>
                                     <input type="text" className="w-full border rounded px-3 py-2 text-sm font-mono" placeholder="JUDGE-{year}-{run:4}" value={currentTemplate.serialFormat} onChange={(e) => updateField('serialFormat', e.target.value)} />
+                                    
+                                    <div className="flex items-center mt-2">
+                                        <input 
+                                            type="checkbox" 
+                                            id="includeJudgeId" 
+                                            className="w-4 h-4 text-orange-600 rounded border-gray-300 focus:ring-orange-500"
+                                            checked={currentTemplate.serialFormat?.includes('{id}')}
+                                            onChange={(e) => toggleIncludeJudgeId(e.target.checked)}
+                                        />
+                                        <label htmlFor="includeJudgeId" className="ml-2 text-xs text-gray-600 cursor-pointer select-none">
+                                            รวมรหัสกรรมการ (Include Judge ID)
+                                        </label>
+                                    </div>
+                                    <div className="flex items-center mt-2">
+                                        <input 
+                                            type="checkbox" 
+                                            id="includeActivityId" 
+                                            className="w-4 h-4 text-orange-600 rounded border-gray-300 focus:ring-orange-500"
+                                            checked={currentTemplate.serialFormat?.includes('{activityId}')}
+                                            onChange={(e) => toggleIncludeActivityId(e.target.checked)}
+                                        />
+                                        <label htmlFor="includeActivityId" className="ml-2 text-xs text-gray-600 cursor-pointer select-none">
+                                            รวมรหัสกิจกรรม (Include Activity ID)
+                                        </label>
+                                    </div>
+                                    <div className="text-[10px] text-gray-400 mt-1 flex flex-wrap gap-1">
+                                        <span className="bg-gray-100 px-1 rounded">{"{activityId}"}: ACT01</span>
+                                        <span className="bg-gray-100 px-1 rounded">{"{year}"}: 2024</span>
+                                        <span className="bg-gray-100 px-1 rounded">{"{run:4}"}: 0001</span>
+                                    </div>
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
-                                    <div><label className="block text-xs font-medium text-gray-600 mb-1">เลขเริ่มต้น</label><input type="number" className="w-full border rounded px-3 py-2 text-sm" value={currentTemplate.serialStart} onChange={(e) => updateField('serialStart', parseInt(e.target.value))} /></div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-600 mb-1">เลขเริ่มต้น</label>
+                                        <input type="number" className="w-full border rounded px-3 py-2 text-sm" value={currentTemplate.serialStart} onChange={(e) => updateField('serialStart', parseInt(e.target.value))} />
+                                    </div>
+                                    <div className="bg-gray-50 rounded p-2 flex flex-col justify-center">
+                                        <label className="text-[10px] text-gray-500 font-medium">ตัวอย่าง (Preview):</label>
+                                        <div className="text-sm font-bold text-orange-600 font-mono">
+                                            {getSerialPreview()}
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
